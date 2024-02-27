@@ -6,7 +6,7 @@ Scalability and performance are our fundamental design goals. Index size and lat
 
 Development started in 2015, in [production](https://seekstorm.com) since 2020, rust porting in 2023, released as open source in 2024.
 
-SeekStorm is open source licensed under under the Apache License 2.0
+SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
 ### SeekStorm is not only a high-performance search library, but also multi-tenancy search server 
 
@@ -14,6 +14,29 @@ SeekStorm is open source licensed under under the Apache License 2.0
   * multi-tenancy index management
   * API-key management
   * embedded web server and UI
+
+### Why SeekStorm?
+
+**Performance**  
+Lower latency, higher througput, lower cost and energy consumption, especially for multi-field and concurrent queries
+
+**Relevance**  
+Term proximity ranking provides more relevant results compared to BM25
+
+**Real-time**  
+True real-time search, as opposed to NRT: every indexed document is immediately searchable
+
+<img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*7IvVqlClkfHvmywr4hyofw.jpeg" alt="Benchmark">
+<br>
+<br>
+<img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*GQ0wk-MghqXhO3Sa3Hehdw.jpeg" alt="Benchmark">
+<br>
+<br>
+<img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*YpkRW-_bbltmyLgTKkutOA.jpeg" alt="Benchmark">
+
+### Benchmark
+
+https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 
 ### Why latency matters
 
@@ -24,10 +47,6 @@ SeekStorm is open source licensed under under the Apache License 2.0
 * Besides average latencies we also need to reduce tail latencies, which are often overlooked, but can cause loss of customers, and revenue and can cause a bad user experience.
 * It is always advisable to engineer your search infrastructure with enough performance headroom, to keep those tail latencies in check, even on periods of high concurrent load.
 * Also, even if a human user might not notice the latency, it still might make a big difference in autonomous stock market, defense applications or RAG which requires multiple queries.
-
-### Benchmark
-
-https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 
 ### Features
 
@@ -120,4 +139,4 @@ Fast algorithms will shine even more with a performance-conscious programming la
 
 ### Architecture
 
-see ARCHITECTURE.md 
+see [ARCHITECTURE.md](https://github.com/SeekStorm/SeekStorm/blob/main/ARCHITECTURE.md) 
