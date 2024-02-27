@@ -1,4 +1,6 @@
-# SeekStorm
+SeekStorm<br>
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+========
 
 SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server implemented in Rust.
 
