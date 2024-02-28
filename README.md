@@ -10,6 +10,8 @@ Development started in 2015, in [production](https://seekstorm.com) since 2020, 
 
 SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
+Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
+
 ### SeekStorm is not only a high-performance search library, but also multi-tenancy search server 
 
   * with RESTful API
@@ -101,8 +103,9 @@ If you search for exact results like proper names, numbers, license plates, doma
 * high query speed and throughput (for large document numbers)
 * lower infrastructure cost per document and per query, lower energy consumption
 * good scaling (for large document numbers)
+* perfect explainability
 * perfect precision (for exact keyword match)
-* recall: perfect for exact keyword match, low for semantic meaning
+* perfect recall for exact keyword match, low for semantic meaning
 * unable to capture meaning and similarity
 * efficient and lossless for exact keyword and phrase search
 
@@ -118,8 +121,9 @@ It works for similar images, face recognition or finger prints and it enables yo
 * lower query speed and throughput (for large document numbers)
 * higher infrastructure cost per document and per query, higher energy consumption
 * limited scaling (for large document numbers)
+* low explainability makes it difficult to spot manipulations, bias and root cause of retieval/ranking problems
 * lower precision (for exact keyword match)
-* recall: high for semantic meaning (80/90%), medium for exact keyword match
+* high recall for semantic meaning (80/90%), lower recall for exact keyword match
 * able to capture meaning and similarity
 * inefficient and lossy for exact keyword and phrase search
 
