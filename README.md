@@ -110,8 +110,7 @@ If you search for exact results like proper names, numbers, license plates, doma
 * efficient and lossless for exact keyword and phrase search
 
 #### Vector search
-Vector search is perfect if you don’t know the exact query terms, or you are interested in a broader topic, meaning or synonym, no matter what exact query terms are used. But if you are looking for exact terms, e.g. proper names, numbers, license plates, domain names, and phrases then you should always use keyword search. Vector search will but bury the exact result that you are looking for among a myriad results that are only somehow related.
-It has a good recall, but low precision, and higher latency. It is prone to false positives, e.g. in in plagiarism detection as exact words and word order get lost.
+Vector search is perfect if you don’t know the exact query terms, or you are interested in a broader topic, meaning or synonym, no matter what exact query terms are used. But if you are looking for exact terms, e.g. proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then you should always use keyword search. Vector search will but bury the exact result that you are looking for among a myriad results that are only somehow related. It has a good recall, but low precision, and higher latency. It is prone to false positives, e.g. in in plagiarism detection as exact words and word order get lost.
 
 Vector search enables you to search not only for similar text, but everything that can be transformed to a vector: text, images, audio ...
 It works for similar images, face recognition or finger prints and it enables you to do magic things like queen - woman + man = king
