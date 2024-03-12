@@ -4,8 +4,6 @@ SeekStorm<br>
 
 SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server implemented in Rust.
 
-Scalability and performance are our fundamental design goals. Index size and latency grow linearly with the number of indexed documents, while the RAM consumption remains constant, ensuring scalability.
-
 Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, active work in progress.
 
 SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
@@ -22,13 +20,18 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 ### Why SeekStorm?
 
 **Performance**  
-Lower latency, higher througput, lower cost and energy consumption, especially for multi-field and concurrent queries
+Lower latency, higher througput, lower cost and energy consumption, especially for multi-field and concurrent queries.  
+Low tail-latencies ensure smooth user experience, and prevent loss of customers and revenue.
+
+**Scaling**
+Maintains low latency, high througput, low RAM consumption even for billion-scale indices.  
+Unlimited field number, field length & index size.
 
 **Relevance**  
-Term proximity ranking provides more relevant results compared to BM25
+Term proximity ranking provides more relevant results compared to BM25.
 
 **Real-time**  
-True real-time search, as opposed to NRT: every indexed document is immediately searchable
+True real-time search, as opposed to NRT: every indexed document is immediately searchable.
 
 <img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*7IvVqlClkfHvmywr4hyofw.jpeg" alt="Benchmark">
 <br>
@@ -145,3 +148,110 @@ Fast algorithms will shine even more with a performance-conscious programming la
 ### Architecture
 
 see [ARCHITECTURE.md](https://github.com/SeekStorm/SeekStorm/blob/main/ARCHITECTURE.md) 
+
+### Building
+
+```
+cargo build --release
+```
+
+&#x26A0; **WARNING**: make sure to change the SECRET_MASTER_KEY in src\seekstorm_server\main.rs to a secret, otherwise your generated API keys will be compromised.
+
+### Documentation
+
+```
+cargo doc --no-deps
+```
+
+SeekStorm\target\doc\seekstorm\index.html  
+SeekStorm\target\doc\seekstorm_server\index.html  
+
+### Usage
+```
+use seekstorm::{*,search::*};
+```
+
+create index
+```
+let index_path="C:/index/";
+
+let schema_json = r#"
+[{"field_name":"title","field_type":"Text","field_stored":false,"field_indexed":false},
+{"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
+{"field_name":"url","field_type":"Text","field_stored":false,"field_indexed":false}]"#;
+let schema=serde_json::from_str(schema_json).unwrap();
+
+let meta = IndexMetaObject {
+    id: 0,
+    name: "test_index".to_string(),
+    similarity:SimilarityType::Bm25f,
+    tokenizer:TokenizerType::AsciiAlphabetic,
+    access_type: AccessType::Mmap,
+};
+
+let serialize_schema=true;
+let segment_number_bits1=11;
+let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1).unwrap();
+```
+
+open index (alternatively to create index)
+```
+let index_path="C:/index/";
+let index_arc=open_index(index_path).await.unwrap(); 
+```
+index documents
+```
+let documents_json = r#"
+[{"title":"title1 test","body":"body1","url":"url1"},
+{"title":"title2","body":"body2 test","url":"url2"},
+{"title":"title3 test","body":"body3 test","url":"url3"}]"#;
+let documents_vec=serde_json::from_str(documents_json).unwrap();
+
+index_arc.index_documents(documents_vec).await; 
+```
+search index
+```
+let query="test".to_string();
+let offset=0;
+let length=10;
+let query_type=QueryType::Intersection; 
+let result_type=ResultType::TopkCount;
+let include_uncommitted=false;
+let field_filter=Vec::new();
+let result_list = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter).await;
+```
+display results
+```
+let mut index=index_arc.write().await;
+for result in result_list.results.iter() {
+  let doc=index.get_document(result.doc_id,false).unwrap();
+  println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+}
+```
+clear index
+```
+index.clear_index();
+```
+delete index
+```
+index.delete_index();
+```
+close index
+```
+index.close_index();
+```
+seekstorm library version string
+```
+let version=version();
+println!("version {}",version);
+```
+
+### Roadmap
+
+Porting 
+* delete document
+* faceted search
+* autosuggestion, spelling correction, instant search
+* fuzzy search
+* more tokenizer types (stemming, umlauts, apostrophes, CJK)
+
