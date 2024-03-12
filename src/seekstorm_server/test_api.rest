@@ -1,0 +1,180 @@
+
+// use with VSC extension "Rest client" to execute API calls and inspect responses
+
+// howto use benchmark index with server:
+// start server with server.bat
+// create api key with master key and index
+// copy apikey.json und meta.json to index that was generated with benchmark (benchmark doesn't have API and API keys)
+// for query some fields need to be set to "field_stored":true in schema
+
+### individual API key
+@api_key = mHD3vVer1BDNW9bgwAODGfcrqZWgNzWj9sMcdTP8E6Y=
+
+### create api key (use master API key)
+POST http://127.0.0.1:80/api/v1/apikey HTTP/1.1
+apikey: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ=
+content-type: application/json
+
+{
+    "indices_max": 10,
+    "indices_size_max":100000, 
+    "documents_max":10000000, 
+    "operations_max":10000000, 
+    "rate_limit": 100000
+}
+
+### delete api key
+DELETE http://127.0.0.1/api/v1/apikey HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+### create index
+POST http://127.0.0.1:80/api/v1/index HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "schema":[{
+        "field_type": "Text", 
+        "field_stored": true, 
+        "field_name": "title", 
+        "field_indexed": false,
+        "field_boost":10.0
+    },
+        {
+        "field_type": "Text", 
+        "field_stored": true, 
+        "field_name": "body", 
+        "field_indexed": true
+    },
+    {
+        "field_type": "String", 
+        "field_stored": true, 
+        "field_name": "url", 
+        "field_indexed": false
+    }], 
+    "index_name": "test_index",
+    "similarity": "Bm25fProximity",
+    "tokenizer": "Alpha",
+}
+
+### get index
+GET http://127.0.0.1/api/v1/index/0 HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+### get all indexes (per apikey)
+
+### get all indices (per server - requires master apikey)
+
+### delete index
+DELETE http://127.0.0.1/api/v1/index/0 HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+### commit index
+PATCH http://127.0.0.1/api/v1/index/0 HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+### index doc
+POST http://127.0.0.1:80/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "title":"title1 test",
+    "body":"body1",
+    "url":"url1"
+}
+
+### index docs
+POST http://127.0.0.1:80/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+[
+{
+    "title":"title2",
+    "body":"body2 test",
+    "url":"url2"
+},
+{
+    "title":"title3 test",
+    "body":"body3 test",
+    "url":"url3"
+}
+]
+
+### get doc
+
+### get docs
+
+### update doc
+PATCH http://127.0.0.1/api/v1/index/0/doc	HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "title":"title1 test",
+    "body":"body1",
+    "url":"url1"
+}
+
+### update docs
+PATCH http://127.0.0.1/api/v1/index/0/doc	HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+[
+{
+    "title":"title2",
+    "body":"body2 test",
+    "url":"url2"
+},
+{
+    "title":"title3 test",
+    "body":"body3 test",
+    "url":"url3"
+}
+]
+
+### delete doc
+DELETE  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+"4ce8fb8d3b5a3981f27b66c0100325a53a74aacd3d8129b9baf5955190022e28"
+
+### delete docs
+DELETE  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+[
+    "4ce8fb8d3b5a3981f27b66c0100325a53a74aacd3d8129b9baf5955190022e88",
+    "4ce8fb8d3b5a3981f27b66c0100325a53a74aacd3d8129b9baf5955190022e18"
+]
+
+### query index GET
+GET http://127.0.0.1/api/v1/index/0/query 
+?query=test
+&offset=0
+&length=10 
+apikey: {{api_key}}
+content-type: application/json
+
+### query index POST
+POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"+griffith +observatory",
+    "offset":0,
+    "length":10,
+    "field_filter": ["title", "body"]
+}
+
+
+// todo: other API endpoints 

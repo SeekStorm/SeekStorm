@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8 />
+<meta http-equiv=X-UA-Compatible content="IE=edge">
+<title>SeekStorm Search</title>
+<meta name=viewport content="width=device-width, initial-scale=1">
+<link rel=icon type=image/png sizes=32x32 href=favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=favicon-16x16.png>
+<link rel=stylesheet type=text/css media=screen href=css/flexboxgrid.min.css>
+<link rel=stylesheet type=text/css media=screen href=css/master.css />
+<script src=js/jquery-3.3.1.min.js></script>
+<script src=js/master.js></script>
+</head>
+<body>
+<div class=h100 id=landingSearch>
+<div class="row center-xs middle-xs h100">
+<div class="col-xs-10 col-md-8 col-lg-6 content">
+<div class=row>
+<div class="col-xs-12 centerMe">
+<h1>Seek<img src=svg/logo.svg height=58px>Storm</h1>
+</div>
+<div style=color:#898992;font-style:normal;font-size:14px;padding-top:40px;padding-left:20px>
+SeekStorm v<span id=version></span>
+&nbsp;&nbsp;&nbsp;indexed documents:
+<span id=indexedDocs style=color:green></span>
+</div>
+<div class=col-xs-12>
+<div class="row searchBar">
+<div class=col-xs-10>
+<input autocomplete=off autocorrect=off autocapitalize=off spellcheck=false type=text name=search id=searchInput>
+</div>
+<div class="col-xs-2 searchBtn">
+<svg xmlns=http://www.w3.org/2000/svg width=30 height=30 viewBox="0 -4 24 24"><path fill=#fff d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M0 0h24v24H0z" fill="none"/></svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id=footerSecondary>
+<a href=https://github.com/SeekStorm/SeekStorm/blob/master/ARCHITECTURE.md>Technology</a>
+<a href=https://seekstorm.com/blog/sneak-peek-seekstorm-rust/>Benchmark</a>
+<a href=https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest style=color:#00a4f0>API</a>
+<a href=https://seekstorm.com/contact>Contact</a>
+<a href=https://github.com/SeekStorm/SeekStorm>GitHub</a>
+<a href=https://seekstorm.com/blog>Blog</a>
+<a href=https://twitter.com/seekstorm>Twitter</a>
+<a href=https://www.linkedin.com/company/seekstorm>LinkedIn</a>
+<span class="annot hideOnSlim">© 2024 SeekStorm</span>
+</div>
+</div>
+<div class=h100 id=landingMain style=display:none;background-color:white>
+<div class=row id=topBar>
+<div class="col-xs-2 centerOnSlim" id=topLogo>
+<h1><img src=svg/logo.svg height=25px></img> <span class=hideOnSlim>Seek</span><span class=hideOnSlim>Storm</span></h1>
+</div>
+<div class="col-xs-5 expandOnSlim searchBarContainer">
+<div class=box>
+<div class="row searchBar">
+<div class=col-xs-10 style=position:relative;padding:0>
+<input autocomplete=off autocorrect=off autocapitalize=off spellcheck=false type=text id=searchMain name=search>
+<div id=suggestions style=display:none>
+</div>
+</div>
+<div class="col-xs-2 searchBtn">
+<svg xmlns=http://www.w3.org/2000/svg width=24 height=24 viewBox="0 0 24 24"><path fill=#fff d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M0 0h24v24H0z" fill="none"/></svg>
+</div>
+</div>
+</div>
+</div>
+<div class="col-xs-5 hideOnSlim" id=stats>
+<span id=stats><b id=from>#</b>-<b id=to>#</b> of <i id=count>#</i> results</span>
+</div>
+</div>
+<div class=row>
+<div class="col-xs-4 col-xs-offset-2 expandOnSlim">
+<div class="row offsetOnLarge" id=contentBox>
+</div>
+</div>
+<div class="col-xs-1 hideOnSlim">
+<div id=splitter>
+<svg height=100% width=55>
+<line id=l1 x1=50 y1=0 x2=50 y2=100% style=stroke:#252525;stroke-width:0.5 />
+<line id=l2 x1=50 y1=100% x2=30 y2=100% style=stroke:#d1d1d1;stroke-width:2 />
+<line id=l3 x1=30 y1=100% x2=50 y2=100% style=stroke:#d1d1d1;stroke-width:2 />
+<line id=l4 x1=50 y1=100% x2=50 y2=100% style=stroke:#252525;stroke-width:.5 />
+</svg>
+</div>
+</div>
+<div id=preview class="col-xs-4 hideOnSlim">
+<h3 id=prevUrl></h3>
+<h1 id=prevTitle></h1>
+<p id=prevText></p>
+</div>
+</div>
+<div class=centerOnSlim id=footer>
+<div class="action hideOnSlim">
+< Previous</div> <div>1
+</div>
+<div>2</div>
+<div>3</div>
+<div>4</div>
+<div>5</div>
+<div>6</div>
+<div>7</div>
+<div>8</div>
+<div>9</div>
+<div>10</div>
+<div class=action next=1>Next ></div>
+<span class="annot hideOnSlim">© 2024 SeekStorm</span>
+</div>
+</div>
+</body>
+</html>

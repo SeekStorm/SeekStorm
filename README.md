@@ -6,7 +6,7 @@ SeekStorm is an open-source, sub-millisecond full-text search library & multi-te
 
 Scalability and performance are our fundamental design goals. Index size and latency grow linearly with the number of indexed documents, while the RAM consumption remains constant, ensuring scalability.
 
-Development started in 2015, in [production](https://seekstorm.com) since 2020, rust porting in 2023, released as open source in 2024.
+Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, active work in progress.
 
 SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 

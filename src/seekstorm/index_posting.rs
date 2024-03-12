@@ -1,0 +1,557 @@
+use std::cmp;
+
+use crate::{
+    compress_postinglist::compress_positions,
+    index::{
+        Index, PostingListObject0, TermObject, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2,
+        ROARING_BLOCK_SIZE, STOP_BIT,
+    },
+    utils::{block_copy_mut, write_u16_ref, write_u32},
+};
+
+impl Index {
+    pub(crate) fn index_posting(&mut self, term: TermObject, doc_id: usize) {
+        let mut positions_count_sum = 0;
+        let mut field_positions_vec: Vec<Vec<u16>> = Vec::new();
+        for positions_uncompressed in term.field_positions_vec.iter() {
+            positions_count_sum += positions_uncompressed.len();
+            let mut positions: Vec<u16> = Vec::new();
+            let mut previous_position: u16 = 0;
+            for pos in positions_uncompressed.iter() {
+                if positions.is_empty() {
+                    positions.push(*pos);
+                } else {
+                    positions.push(*pos - previous_position - 1);
+                }
+                previous_position = *pos;
+            }
+            field_positions_vec.push(positions);
+        }
+
+        if positions_count_sum == 0 {
+            println!("empty posting {} docid {}", term.term, doc_id);
+            return;
+        }
+
+        let strip_object0 = self.segments_level0.get_mut(term.key0 as usize).unwrap();
+
+        let value = strip_object0
+            .segment
+            .entry(term.key_hash)
+            .or_insert(PostingListObject0 {
+                ..Default::default()
+            });
+        let exists: bool = value.posting_count > 0;
+
+        let mut posting_pointer_size = if value.size_compressed_positions_key < 32_768 {
+            value.pointer_pivot_p_docid = value.posting_count as u16 + 1;
+            2u8
+        } else {
+            3u8
+        };
+
+        let mut nonempty_field_count = 0;
+        let mut only_longest_field = true;
+        for (field_id, item) in field_positions_vec.iter().enumerate() {
+            if !item.is_empty() {
+                nonempty_field_count += 1;
+
+                if !self.indexed_field_vec[field_id].is_longest_field {
+                    only_longest_field = false;
+                }
+            }
+        }
+
+        let mut positions_meta_compressed_nonembedded_size = 0;
+
+        if term.is_bigram {
+            for field in term.field_vec_bigram1.iter() {
+                if field_positions_vec.len() == 1 {
+                    positions_meta_compressed_nonembedded_size += if field.1 < 128 { 1 } else { 2 };
+                } else if term.field_vec_bigram1.len() == 1
+                    && term.field_vec_bigram1[0].0 == self.longest_field_id
+                {
+                    positions_meta_compressed_nonembedded_size += if field.1 < 64 { 1 } else { 2 };
+                } else {
+                    positions_meta_compressed_nonembedded_size +=
+                        if field.1 < (128 >> (self.indexed_field_id_bits + 1)) {
+                            1
+                        } else {
+                            2
+                        };
+                }
+            }
+            for field in term.field_vec_bigram2.iter() {
+                if field_positions_vec.len() == 1 {
+                    positions_meta_compressed_nonembedded_size += if field.1 < 128 { 1 } else { 2 };
+                } else if term.field_vec_bigram2.len() == 1
+                    && term.field_vec_bigram2[0].0 == self.longest_field_id
+                {
+                    positions_meta_compressed_nonembedded_size += if field.1 < 64 { 1 } else { 2 };
+                } else {
+                    positions_meta_compressed_nonembedded_size +=
+                        if field.1 < (128 >> (self.indexed_field_id_bits + 1)) {
+                            1
+                        } else {
+                            2
+                        };
+                }
+            }
+        }
+
+        let mut positions_sum = 0;
+        let mut positions_vec: Vec<u16> = Vec::new();
+        let mut field_vec: Vec<(usize, u32)> = Vec::new();
+        for field_id in 0..field_positions_vec.len() {
+            if !field_positions_vec[field_id].is_empty() {
+                if field_positions_vec.len() == 1 {
+                    positions_meta_compressed_nonembedded_size +=
+                        if field_positions_vec[field_id].len() < 128 {
+                            1
+                        } else {
+                            2
+                        };
+                } else if only_longest_field {
+                    positions_meta_compressed_nonembedded_size +=
+                        if field_positions_vec[field_id].len() < 64 {
+                            1
+                        } else {
+                            2
+                        };
+                } else {
+                    positions_meta_compressed_nonembedded_size += if field_positions_vec[field_id]
+                        .len()
+                        < (128 >> (self.indexed_field_id_bits + 1))
+                    {
+                        1
+                    } else {
+                        2
+                    };
+                }
+
+                positions_sum += field_positions_vec[field_id].len();
+                if self.indexed_field_vec.len() > 1 && field_positions_vec[field_id].len() <= 4 {
+                    positions_vec.append(&mut field_positions_vec[field_id].clone())
+                };
+
+                field_vec.push((field_id, field_positions_vec[field_id].len() as u32));
+            }
+        }
+
+        let mut embed_flag = !term.is_bigram;
+
+        if self.indexed_field_vec.len() == 1 {
+            if posting_pointer_size == 2 {
+                embed_flag &= positions_sum <= 2
+                    && ((positions_sum == 1
+                        && u16::BITS - field_positions_vec[0][0].leading_zeros() <= 14)
+                        || (positions_sum == 2
+                            && u16::BITS - field_positions_vec[0][0].leading_zeros() <= 7
+                            && u16::BITS - field_positions_vec[0][1].leading_zeros() <= 7));
+            } else {
+                embed_flag &= positions_sum <= 4
+                    && ((positions_sum == 1
+                        && u16::BITS - field_positions_vec[0][0].leading_zeros() <= 21)
+                        || (positions_sum == 2
+                            && u16::BITS - field_positions_vec[0][0].leading_zeros() <= 10
+                            && u16::BITS - field_positions_vec[0][1].leading_zeros() <= 11)
+                        || (positions_sum == 3
+                            && u16::BITS - field_positions_vec[0][0].leading_zeros() <= 7
+                            && u16::BITS - field_positions_vec[0][1].leading_zeros() <= 7
+                            && u16::BITS - field_positions_vec[0][2].leading_zeros() <= 7)
+                        || (positions_sum == 4
+                            && u16::BITS - field_positions_vec[0][0].leading_zeros() <= 5
+                            && u16::BITS - field_positions_vec[0][1].leading_zeros() <= 5
+                            && u16::BITS - field_positions_vec[0][2].leading_zeros() <= 5
+                            && u16::BITS - field_positions_vec[0][3].leading_zeros() <= 6));
+            }
+        } else if only_longest_field {
+            if posting_pointer_size == 2 {
+                embed_flag &= positions_sum <= 2
+                    && ((positions_sum == 1 && u16::BITS - positions_vec[0].leading_zeros() <= 13)
+                        || (positions_sum == 2
+                            && u16::BITS - positions_vec[0].leading_zeros() <= 6
+                            && u16::BITS - positions_vec[1].leading_zeros() <= 7));
+            } else {
+                embed_flag &= positions_sum <= 4
+                    && ((positions_sum == 1 && u16::BITS - positions_vec[0].leading_zeros() <= 20)
+                        || (positions_sum == 2
+                            && u16::BITS - positions_vec[0].leading_zeros() <= 10
+                            && u16::BITS - positions_vec[1].leading_zeros() <= 10)
+                        || (positions_sum == 3
+                            && u16::BITS - positions_vec[0].leading_zeros() <= 6
+                            && u16::BITS - positions_vec[1].leading_zeros() <= 7
+                            && u16::BITS - positions_vec[2].leading_zeros() <= 7)
+                        || (positions_sum == 4
+                            && u16::BITS - positions_vec[0].leading_zeros() <= 5
+                            && u16::BITS - positions_vec[1].leading_zeros() <= 5
+                            && u16::BITS - positions_vec[2].leading_zeros() <= 5
+                            && u16::BITS - positions_vec[3].leading_zeros() <= 5));
+            }
+        } else {
+            let used_bits = nonempty_field_count * self.indexed_field_id_bits as u32;
+            let bits = if posting_pointer_size == 2 { 12 } else { 19 };
+            let remaining_bits_new = if used_bits < bits {
+                bits - used_bits
+            } else {
+                embed_flag = false;
+                0
+            };
+
+            if posting_pointer_size == 2 {
+                embed_flag &= positions_sum <= 3
+                    && ((positions_sum == 1
+                        && u16::BITS - positions_vec[0].leading_zeros() <= remaining_bits_new)
+                        || (positions_sum == 2
+                            && u16::BITS - positions_vec[0].leading_zeros()
+                                <= remaining_bits_new / 2
+                            && u16::BITS - positions_vec[1].leading_zeros()
+                                <= remaining_bits_new - remaining_bits_new / 2)
+                        || (positions_sum == 3
+                            && nonempty_field_count == 1
+                            && u16::BITS - positions_vec[0].leading_zeros()
+                                <= remaining_bits_new / 3
+                            && u16::BITS - positions_vec[1].leading_zeros()
+                                <= (remaining_bits_new - remaining_bits_new / 3) / 2
+                            && u16::BITS - positions_vec[2].leading_zeros()
+                                <= remaining_bits_new
+                                    - (remaining_bits_new - remaining_bits_new / 3) / 2
+                                    - (remaining_bits_new / 3)));
+            } else {
+                embed_flag &= positions_sum <= 4
+                    && ((positions_sum == 1
+                        && u16::BITS - positions_vec[0].leading_zeros() <= remaining_bits_new)
+                        || (positions_sum == 2
+                            && u16::BITS - positions_vec[0].leading_zeros()
+                                <= remaining_bits_new / 2
+                            && u16::BITS - positions_vec[1].leading_zeros()
+                                <= remaining_bits_new - remaining_bits_new / 2)
+                        || (positions_sum == 3
+                            && u16::BITS - positions_vec[0].leading_zeros()
+                                <= remaining_bits_new / 3
+                            && u16::BITS - positions_vec[1].leading_zeros()
+                                <= (remaining_bits_new - remaining_bits_new / 3) / 2
+                            && u16::BITS - positions_vec[2].leading_zeros()
+                                <= remaining_bits_new
+                                    - (remaining_bits_new - remaining_bits_new / 3) / 2
+                                    - (remaining_bits_new / 3))
+                        || (positions_sum == 4
+                            && nonempty_field_count == 1
+                            && u16::BITS - positions_vec[0].leading_zeros()
+                                <= remaining_bits_new / 4
+                            && u16::BITS - positions_vec[1].leading_zeros()
+                                <= (remaining_bits_new - remaining_bits_new / 4) / 3
+                            && u16::BITS - positions_vec[2].leading_zeros()
+                                <= (remaining_bits_new
+                                    - (remaining_bits_new - remaining_bits_new / 4) / 3
+                                    - (remaining_bits_new / 4))
+                                    / 2
+                            && u16::BITS - positions_vec[3].leading_zeros()
+                                <= remaining_bits_new
+                                    - remaining_bits_new / 4
+                                    - (remaining_bits_new - remaining_bits_new / 4) / 3
+                                    - (remaining_bits_new
+                                        - (remaining_bits_new - remaining_bits_new / 4) / 3
+                                        - (remaining_bits_new / 4))
+                                        / 2));
+            }
+        };
+
+        let mut write_pointer_base = self.postings_buffer_pointer;
+        let mut write_pointer = self.postings_buffer_pointer + 8;
+
+        let mut positions_compressed_pointer = 0usize;
+        let positions_stack = if embed_flag {
+            0
+        } else {
+            for field_positions in field_positions_vec.iter() {
+                compress_positions(
+                    field_positions,
+                    &mut strip_object0.positions_compressed,
+                    &mut positions_compressed_pointer,
+                );
+            }
+
+            let exceeded = posting_pointer_size == 2
+                && (value.size_compressed_positions_key
+                    + positions_meta_compressed_nonembedded_size
+                    + positions_compressed_pointer
+                    >= 32_768);
+            if exceeded {
+                posting_pointer_size = 3;
+                value.pointer_pivot_p_docid = value.posting_count as u16;
+            }
+
+            positions_meta_compressed_nonembedded_size + positions_compressed_pointer
+        };
+
+        let compressed_position_size = if embed_flag {
+            let mut positions_vec: Vec<u16> = Vec::new();
+            let mut data: u32 = 0;
+            for field in field_vec.iter() {
+                for pos in field_positions_vec[field.0].iter() {
+                    positions_vec.push(*pos);
+                }
+                if self.indexed_field_vec.len() > 1 && !only_longest_field {
+                    data <<= self.indexed_field_id_bits;
+                    data |= field.0 as u32;
+                }
+            }
+
+            let mut remaining_bits = posting_pointer_size as usize * 8
+                - if posting_pointer_size == 2 { 0 } else { 1 }
+                - if self.indexed_field_vec.len() == 1 {
+                    2
+                } else if only_longest_field {
+                    3
+                } else {
+                    4 + nonempty_field_count as usize * self.indexed_field_id_bits
+                };
+            for (i, position) in positions_vec.iter().enumerate() {
+                let position_bits = remaining_bits / (positions_vec.len() - i);
+                remaining_bits -= position_bits;
+                data <<= position_bits;
+                data |= *position as u32;
+            }
+
+            if posting_pointer_size == 2 {
+                self.postings_buffer[write_pointer] = (data & 0b11111111) as u8;
+                if self.indexed_field_vec.len() == 1 {
+                    self.postings_buffer[write_pointer + 1] =
+                        (data >> 8) as u8 | 0b10000000 | ((positions_vec.len() - 1) << 6) as u8;
+                } else if only_longest_field {
+                    self.postings_buffer[write_pointer + 1] =
+                        (data >> 8) as u8 | 0b11000000 | ((positions_vec.len() - 1) << 5) as u8;
+                } else if nonempty_field_count == 1 {
+                    self.postings_buffer[write_pointer + 1] =
+                        (data >> 8) as u8 | 0b10000000 | ((positions_vec.len() - 1) << 4) as u8;
+                } else {
+                    self.postings_buffer[write_pointer + 1] = (data >> 8) as u8 | 0b10110000;
+                };
+            } else {
+                self.postings_buffer[write_pointer] = (data & 0b11111111) as u8;
+                self.postings_buffer[write_pointer + 1] = ((data >> 8) & 0b11111111) as u8;
+                if self.indexed_field_vec.len() == 1 {
+                    self.postings_buffer[write_pointer + 2] =
+                        (data >> 16) as u8 | 0b10000000 | ((positions_vec.len() - 1) << 5) as u8;
+                } else if only_longest_field {
+                    self.postings_buffer[write_pointer + 2] =
+                        (data >> 16) as u8 | 0b11000000 | ((positions_vec.len() - 1) << 4) as u8;
+                } else {
+                    self.postings_buffer[write_pointer + 2] = (data >> 16) as u8
+                        | 0b10000000
+                        | if nonempty_field_count == 1 {
+                            ((positions_vec.len() - 1) << 3) as u8
+                        } else if nonempty_field_count == 3 {
+                            0b00111000
+                        } else if field_vec[0].1 == 1 && field_vec[1].1 == 1 {
+                            0b00100000
+                        } else if field_vec[0].1 == 1 && field_vec[1].1 == 2 {
+                            0b00101000
+                        } else {
+                            0b00110000
+                        };
+                }
+            }
+
+            write_pointer += posting_pointer_size as usize;
+            posting_pointer_size as usize
+        } else {
+            let write_pointer_start = write_pointer;
+
+            if term.is_bigram {
+                write_field_vec(
+                    &mut self.postings_buffer,
+                    &mut write_pointer,
+                    &term.field_vec_bigram1,
+                    self.indexed_field_vec.len(),
+                    term.field_vec_bigram1.len() == 1
+                        && term.field_vec_bigram1[0].0 == self.longest_field_id,
+                    term.field_vec_bigram1.len() as u32,
+                    self.indexed_field_id_bits as u32,
+                );
+                write_field_vec(
+                    &mut self.postings_buffer,
+                    &mut write_pointer,
+                    &term.field_vec_bigram2,
+                    self.indexed_field_vec.len(),
+                    term.field_vec_bigram2.len() == 1
+                        && term.field_vec_bigram2[0].0 == self.longest_field_id,
+                    term.field_vec_bigram2.len() as u32,
+                    self.indexed_field_id_bits as u32,
+                );
+            }
+            write_field_vec(
+                &mut self.postings_buffer,
+                &mut write_pointer,
+                &field_vec,
+                self.indexed_field_vec.len(),
+                only_longest_field,
+                nonempty_field_count,
+                self.indexed_field_id_bits as u32,
+            );
+
+            block_copy_mut(
+                &mut strip_object0.positions_compressed,
+                0,
+                &mut self.postings_buffer,
+                write_pointer,
+                positions_compressed_pointer,
+            );
+
+            write_pointer += positions_compressed_pointer;
+            write_pointer - write_pointer_start
+        };
+
+        let docid_lsb = (doc_id & 0xFFFF) as u16;
+        if exists {
+            value.posting_count += 1;
+            value.position_count += positions_count_sum;
+            value.size_compressed_positions_key += positions_stack;
+            value.docid_delta_max =
+                cmp::max(value.docid_delta_max, docid_lsb - value.docid_old - 1);
+            value.docid_old = docid_lsb;
+
+            write_u32(
+                write_pointer_base as u32,
+                &mut self.postings_buffer,
+                value.pointer_last,
+            );
+
+            value.pointer_last = write_pointer_base;
+        } else {
+            *value = PostingListObject0 {
+                pointer_first: write_pointer_base,
+                pointer_last: write_pointer_base,
+                posting_count: 1,
+                position_count: positions_count_sum,
+                is_bigram: term.is_bigram,
+                term_bigram1: term.term_bigram1,
+                term_bigram2: term.term_bigram2,
+                size_compressed_positions_key: positions_stack,
+                docid_delta_max: docid_lsb,
+                docid_old: docid_lsb,
+                ..*value
+            };
+        }
+
+        write_pointer_base += 4;
+
+        write_u16_ref(
+            docid_lsb,
+            &mut self.postings_buffer,
+            &mut write_pointer_base,
+        );
+
+        if positions_compressed_pointer + 2 > ROARING_BLOCK_SIZE {
+            println!(
+                "compressed positions size exceeded: {}",
+                positions_compressed_pointer + 2
+            )
+        };
+
+        if !embed_flag && positions_stack != compressed_position_size {
+            println!("size conflict: term {} bigram {} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {}",term.term,term.is_bigram, only_longest_field,positions_count_sum, positions_stack, compressed_position_size,positions_compressed_pointer);
+        }
+
+        write_u16_ref(
+            if embed_flag {
+                compressed_position_size | 0b10000000_00000000
+            } else {
+                compressed_position_size & 0b01111111_11111111
+            } as u16,
+            &mut self.postings_buffer,
+            &mut write_pointer_base,
+        );
+
+        self.postings_buffer_pointer = write_pointer;
+    }
+}
+
+pub(crate) fn write_field_vec(
+    postings_buffer: &mut [u8],
+    write_pointer: &mut usize,
+    field_vec: &[(usize, u32)],
+    indexed_field_vec_len: usize,
+    only_longest_field: bool,
+    nonempty_field_count: u32,
+    indexed_field_id_bits: u32,
+) {
+    for (i, field) in field_vec.iter().enumerate() {
+        if indexed_field_vec_len == 1 {
+            if field.1 < 128 {
+                postings_buffer[*write_pointer] = field.1 as u8 | STOP_BIT;
+                *write_pointer += 1;
+            } else if field.1 < 16_384 {
+                postings_buffer[*write_pointer] = (field.1 >> 7) as u8;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] = (field.1 & 0b01111111) as u8 | STOP_BIT;
+                *write_pointer += 1;
+            } else {
+                println!("positionCount exceeded: {}", field.1);
+            }
+        } else if only_longest_field {
+            if field.1 < 64 {
+                postings_buffer[*write_pointer] = field.1 as u8 | 0b11000000;
+                *write_pointer += 1;
+            } else if field.1 < 8_192 {
+                postings_buffer[*write_pointer] = (field.1 >> 7) as u8 | 0b01000000;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] = (field.1 & 0b01111111) as u8 | STOP_BIT;
+                *write_pointer += 1;
+            } else {
+                println!("positionCount exceeded: {}", field.1);
+            }
+        } else {
+            postings_buffer[*write_pointer] = if i == nonempty_field_count as usize - 1 {
+                if i == 0 {
+                    FIELD_STOP_BIT_1
+                } else {
+                    FIELD_STOP_BIT_2
+                }
+            } else {
+                0b00000000
+            };
+
+            let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+
+            let field_id_position_count = ((field.1 as usize) << indexed_field_id_bits) | field.0;
+
+            let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+
+            if only_longest_field_bit + 2 + required_position_count_bits + indexed_field_id_bits
+                <= 8
+            {
+                postings_buffer[*write_pointer] |= field_id_position_count as u8 | STOP_BIT;
+                *write_pointer += 1;
+            } else if only_longest_field_bit
+                + 3
+                + required_position_count_bits
+                + indexed_field_id_bits
+                <= 16
+            {
+                postings_buffer[*write_pointer] |= (field_id_position_count >> 7) as u8;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] =
+                    (field_id_position_count & 0b01111111) as u8 | STOP_BIT;
+                *write_pointer += 1;
+            } else if only_longest_field_bit
+                + 4
+                + required_position_count_bits
+                + indexed_field_id_bits
+                <= 24
+            {
+                postings_buffer[*write_pointer] |= (field_id_position_count >> 14) as u8;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] |=
+                    ((field_id_position_count >> 7) & 0b01111111) as u8;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] =
+                    (field_id_position_count & 0b01111111) as u8 | STOP_BIT;
+                *write_pointer += 1;
+            } else {
+                println!("positionCount exceeded: {} ", field_id_position_count);
+            }
+        }
+    }
+}
