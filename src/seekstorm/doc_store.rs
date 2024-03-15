@@ -41,10 +41,12 @@ impl Index {
         let size = self.compressed_docstore_segment_block_buffer.len();
 
         let level = self.level_index.len() - 1;
+
+        let _ = self.docstore_file.write(&(size as u32).to_le_bytes());
+
         self.level_index[level].docstore_pointer_docs_pointer =
             self.docstore_file.stream_position().unwrap() as usize;
 
-        let _ = self.docstore_file.write(&(size as u32).to_le_bytes());
         let _ = self
             .docstore_file
             .write(&self.compressed_docstore_segment_block_buffer);

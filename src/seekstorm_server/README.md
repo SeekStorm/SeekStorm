@@ -12,11 +12,19 @@
 * local_ip     (default = 0.0.0.0)
 * local_port   (default = 80)
 
-e.g. seekstorm_server.exe local_ip="127.0.0.1" local_port=80 index_path="c:/seekstorm_index"
+```
+seekstorm_server.exe local_ip="127.0.0.1" local_port=80 index_path="c:/seekstorm_index"
+```
 
 ## Console commands
 
 * quit to exit
+
+## Open embedded Web UI in browser
+[http://127.0.0.1](http://127.0.0.1)
+
+To use the embedded Web UI for a selected index you need to change the API_KEY and index_id (in QUERY_URL) in master.js
+**before** building the seekstorm_server (html/css/js are embedded ressources). 
 
 ## REST API endpoints
 

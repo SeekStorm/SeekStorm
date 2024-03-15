@@ -174,9 +174,7 @@ pub(crate) async fn open_all_indices(
         let path = result.unwrap();
         if path.path().is_dir() {
             let single_index_path = path.path();
-            let index_arc = open_index(single_index_path.to_str().unwrap())
-                .await
-                .unwrap();
+            let index_arc = open_index(&single_index_path).await.unwrap();
             let index_id = index_arc.read().await.meta.id;
             index_list.insert(index_id, index_arc);
         }
@@ -215,9 +213,6 @@ pub(crate) async fn open_all_apikeys(
     let mut test_index_flag = false;
     if !Path::exists(index_path) {
         println!("index path not found: {} ", index_path.to_string_lossy());
-        if DEBUG {
-            println!("index path not found: {} ", index_path.to_string_lossy());
-        }
         fs::create_dir_all(index_path).unwrap();
     }
 
@@ -261,7 +256,7 @@ pub(crate) fn create_index_api<'a>(
         access_type: AccessType::Mmap,
     };
 
-    let index = create_index(index_id_path.to_str().unwrap(), meta, &schema, true, 11).unwrap();
+    let index = create_index(&index_id_path, meta, &schema, true, 11).unwrap();
 
     let index_arc = Arc::new(RwLock::new(index));
     apikey_object.index_list.insert(index_id, index_arc);

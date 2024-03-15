@@ -1,9 +1,14 @@
+use base64::{engine::general_purpose, Engine};
 use crossbeam_channel::{bounded, select, Receiver};
-use std::{collections::HashMap, fs, io, path::Path, sync::Arc};
+use seekstorm::index::{SimilarityType, TokenizerType};
+use std::{collections::HashMap, env::current_exe, fs, io, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 
 use crate::{
-    api_endpoints::open_all_apikeys, http_server::http_server, multi_tenancy::ApikeyObject,
+    api_endpoints::{create_apikey_api, create_index_api, delete_apikey_api, open_all_apikeys},
+    http_server::{calculate_hash, http_server},
+    ingest::ingest_ndjson,
+    multi_tenancy::{ApikeyObject, ApikeyQuotaObject},
 };
 
 pub(crate) const DEBUG: bool = false;
@@ -24,7 +29,6 @@ async fn commandline(sender: crossbeam_channel::Sender<String>) {
             Ok(_n) => {
                 let input_string = input.trim().to_lowercase().to_owned();
                 let _ = sender.send(input_string.to_string());
-                println!("{} detected", input_string);
                 if input_string == "quit" {
                     break;
                 }
@@ -35,27 +39,30 @@ async fn commandline(sender: crossbeam_channel::Sender<String>) {
 }
 
 pub(crate) async fn initialize(params: HashMap<String, String>) {
-    let mut index_path = "/seekstorm_index".to_string();
+    let mut index_path_str = "seekstorm_index";
     if params.contains_key("index_path") {
-        index_path = params.get("index_path").unwrap().to_string();
+        index_path_str = params.get("index_path").unwrap();
     }
-    let abs_path_buf = fs::canonicalize(&index_path);
-    match abs_path_buf {
-        Ok(v) => {
-            let abs_path = v.as_path();
-            if !Path::new(&abs_path).exists() {
-                fs::create_dir_all(abs_path).unwrap();
-                println!(
-                    "index_path did not exists, new directory created: {}",
-                    abs_path.to_string_lossy()
-                );
-                return;
+    let mut index_path = Path::new(&index_path_str);
+    let mut absolute_path = current_exe().unwrap();
+    if !index_path.is_absolute() {
+        absolute_path.pop();
+        absolute_path.push(index_path_str);
+        index_path = &absolute_path;
+    }
+
+    if !index_path.exists() {
+        match fs::create_dir_all(index_path) {
+            Ok(_v) => {}
+            Err(_e) => {
+                println!("index_path could not be created: {}", index_path.display());
             }
         }
-        Err(_e) => {
-            println!("index_path not found: {}", index_path);
-            return;
-        }
+
+        println!(
+            "index_path did not exists, new directory created: {}",
+            index_path.display()
+        );
     }
 
     let apikey_list_map: HashMap<u128, ApikeyObject> = HashMap::new();
@@ -86,6 +93,9 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
         http_server(&index_path_local, apikey_list, &local_ip, &local_port).await
     });
 
+    let demo_api_key = [0u8; 32];
+    let demo_api_key_base64 = general_purpose::STANDARD.encode(demo_api_key);
+
     loop {
         select! {
 
@@ -97,10 +107,67 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
             recv(receiver_commandline) -> message => {
 
-                let command=message.unwrap();
 
-                match command.as_str()
+                let m=message.unwrap();
+                let parameter:Vec<&str>=m.split_whitespace().collect();
+                let command=if parameter.is_empty() {""} else {parameter[0]};
+
+                match command
                 {
+                    "ingest" =>
+                    {
+
+                        let apikey_quota_object=ApikeyQuotaObject {..Default::default()};
+
+                        let mut apikey_list_mut = apikey_list_clone.write().await;
+                        let apikey_object=create_apikey_api(
+                            &index_path,
+                            apikey_quota_object,
+                            &demo_api_key,
+                            &mut apikey_list_mut,
+                        );
+
+                        let wikipedia_schema_json = r#"
+                        [{"field_name":"title","field_type":"Text","field_stored":true,"field_indexed":true,"field_boost":10.0},
+                        {"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
+                        {"field_name":"url","field_type":"Text","field_stored":false,"field_indexed":false}]"#;
+                        let schema = serde_json::from_str(wikipedia_schema_json).unwrap();
+
+                        let index_id = create_index_api(
+                            &index_path,
+                            "wikipedia".to_string(),
+                            schema,
+                            SimilarityType::Bm25fProximity,
+                            TokenizerType::UnicodeAlphanumeric,
+                            apikey_object,
+                        );
+
+                        let apikey_hash = calculate_hash(&demo_api_key) as u128;
+                        let apikey_object=apikey_list_mut.get(&apikey_hash).unwrap();
+                        let index_arc=apikey_object.index_list.get(&index_id).unwrap();
+                        let index_arc_clone=index_arc.clone();
+
+                        drop(apikey_list_mut);
+
+                        let data_path=if parameter.len()>1 {parameter[1]} else {"wiki-articles.json"};
+                        ingest_ndjson(index_arc_clone,data_path).await;
+
+                        println!("Set the 'individual API key' in test_api.rest to '{}' when testing the REST API endpoints",demo_api_key_base64);
+                    },
+
+                    "delete" =>
+                    {
+                        println!("delete api_key");
+                        let apikey_hash = calculate_hash(&demo_api_key) as u128;
+                        let mut apikey_list_mut = apikey_list_clone.write().await;
+                        let _ = delete_apikey_api(&index_path, &mut apikey_list_mut, apikey_hash);
+                        drop(apikey_list_mut);
+                    },
+
+                    "list" =>
+                    {
+                        println!("delete indices");
+                    },
 
                     "quit" =>
                     {

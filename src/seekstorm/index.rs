@@ -448,15 +448,17 @@ pub fn version() -> &'static str {
 /// Create index in RAM.
 /// Inner data structures for create index and open_index
 pub fn create_index(
-    index_path_string: &str,
+    index_path: &Path,
     meta: IndexMetaObject,
     schema: &Vec<SchemaField>,
     serialize_schema: bool,
     segment_number_bits1: usize,
 ) -> Result<Index, String> {
-    let index_path = Path::new(index_path_string);
+    let index_path_buf = index_path.to_path_buf();
+    let index_path_string = index_path_buf.to_str().unwrap();
+
     if !index_path.exists() {
-        println!("index path created: {} ", index_path.to_string_lossy());
+        println!("index path created: {} ", index_path_string);
         fs::create_dir_all(index_path).unwrap();
     }
 
@@ -908,7 +910,7 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
 }
 
 /// Loads the index from disk into RAM.
-pub async fn open_index(index_path: &str) -> Result<IndexArc, String> {
+pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
     println!("opening index ...");
 
     let start_time = Instant::now();

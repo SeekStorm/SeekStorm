@@ -1,14 +1,7 @@
-
 // use with VSC extension "Rest client" to execute API calls and inspect responses
 
-// howto use benchmark index with server:
-// start server with server.bat
-// create api key with master key and index
-// copy apikey.json und meta.json to index that was generated with benchmark (benchmark doesn't have API and API keys)
-// for query some fields need to be set to "field_stored":true in schema
-
 ### individual API key
-@api_key = mHD3vVer1BDNW9bgwAODGfcrqZWgNzWj9sMcdTP8E6Y=
+@api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
 ### create api key (use master API key)
 POST http://127.0.0.1:80/api/v1/apikey HTTP/1.1

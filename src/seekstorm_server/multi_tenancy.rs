@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::http_server::calculate_hash;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct ApikeyQuotaObject {
     pub indices_max: u64,
     pub indices_size_max: u64,

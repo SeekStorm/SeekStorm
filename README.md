@@ -23,7 +23,7 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 Lower latency, higher througput, lower cost and energy consumption, especially for multi-field and concurrent queries.  
 Low tail-latencies ensure smooth user experience, and prevent loss of customers and revenue.
 
-**Scaling**
+**Scaling**  
 Maintains low latency, high througput, low RAM consumption even for billion-scale indices.  
 Unlimited field number, field length & index size.
 
@@ -173,7 +173,7 @@ use seekstorm::{*,search::*};
 
 create index
 ```
-let index_path="C:/index/";
+let index_path=Path::new("C:/index/");
 
 let schema_json = r#"
 [{"field_name":"title","field_type":"Text","field_stored":false,"field_indexed":false},
@@ -196,7 +196,7 @@ let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_b
 
 open index (alternatively to create index)
 ```
-let index_path="C:/index/";
+let index_path=Path::new("C:/index/");
 let index_arc=open_index(index_path).await.unwrap(); 
 ```
 index documents
@@ -245,6 +245,82 @@ seekstorm library version string
 let version=version();
 println!("version {}",version);
 ```
+---
+
+### Demo time: Build a Wikipedia search engine
+
+**Download SeekStorm**
+
+[Download SeekStorm from the GitHub repository](https://github.com/SeekStorm/SeekStorm/archive/refs/heads/main.zip)
+
+
+Unzip in directory of your choice, open in Visual Studio code.
+
+**Build SeekStorm**
+
+In the terminal of Visual Studio Code type:
+```
+cargo build --release
+```
+
+**Start SeekStorm server**
+```
+cd target\release
+seekstorm_server.exe local_ip="127.0.0.1" local_port=80
+```
+**Get Wikipedia corpus**
+
+Preprocessed English Wikipedia corpus (5,032,105 documents, 8,28 GB decompressed). 
+Although wiki-articles.json has a .JSON extension, it is not a valid JSON file. 
+It is a text file, where every line contains a JSON object with url, title and body attributes. 
+The format is called ndjson, also referred to as "Newline delimited JSON".
+
+[Download Wikipedia corpus](https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2?dl=0)
+
+Decompresss Wikipedia corpus. 
+
+https://gnuwin32.sourceforge.net/packages/bzip2.htm
+```
+bunzip2 wiki-articles.json.bz2
+```
+
+Move the decompressed wiki-articles.json to the release directory
+
+**Indexing** 
+
+Type 'ingest' into the command line of the running SeekStorm server: 
+```
+ingest
+```
+
+This creates the demo index  and indexes the local wikipedia file.
+
+**Start searching within the embedded WebUI**
+
+Open embedded Web UI in browser: [http://127.0.0.1](http://127.0.0.1)
+
+Enter a query into the search box 
+
+**Testing the REST API endpoints**
+
+Open src/seekstorm_server/test_api.rest in VSC together with the VSC extension "Rest client" to execute API calls and inspect responses
+
+[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
+
+Set the 'individual API key' in test_api.rest to the api key displayed in the server console when you typed 'index' above.
+
+**Remove demo index**
+
+Type 'delete' into the command line of the running SeekStorm server: 
+```
+delete
+```
+
+**Shutdown server**
+
+Type 'quit' into the commandline of the running SeekStorm server.
+
+---
 
 ### Roadmap
 

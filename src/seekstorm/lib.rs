@@ -1,6 +1,7 @@
 #![crate_type = "lib"]
 #![crate_name = "seekstorm"]
 #![doc(html_logo_url = "http://seekstorm.com/assets/logo.svg")]
+#![doc(html_favicon_url = "http://seekstorm.com/favicon.ico")]
 
 //! # `seekstorm`
 //! SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server written in Rust.
@@ -10,7 +11,7 @@
 //! ```
 //! ### create index
 //! ```rust
-//! let index_path="C:/index/";
+//! let index_path=Path::new("C:/index/");
 //! let schema_json = r#"
 //! [{"field_name":"title","field_type":"Text","field_stored":false,"field_indexed":false},
 //! {"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
@@ -29,7 +30,7 @@
 //! ```
 //! ### open index (alternatively to create index)
 //! ```rust
-//! let index_path="C:/index/";
+//!let index_path=Path::new("C:/index/");
 //! let index_arc=open_index(index_path).await.unwrap();
 //! ```
 //! ### index documents
@@ -85,7 +86,7 @@ pub(crate) mod doc_store;
 /// Extracts the most relevant fragments (snippets, summaries) from specified fields of the document to provide a "keyword in context" (KWIC) functionality.
 /// With highlight_markup the matching query terms within the fragments can be highlighted with HTML markup.
 pub mod highlighter;
-/// Operate the index: create_index, open_index, clear_index, close_index, delete_index, index_document(s)
+/// Operate the index: reate_index, open_index, clear_index, close_index, delete_index, index_document(s)
 pub mod index;
 pub(crate) mod index_posting;
 pub(crate) mod intersection;

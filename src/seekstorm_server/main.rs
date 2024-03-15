@@ -13,7 +13,7 @@
 //! * index_path   (default = "/seekstorm_index" in current directory)
 //! * local_ip     (default = 0.0.0.0)
 //! * local_port   (default = 80)
-//! e.g. seekstorm_server.exe local_ip="127.0.0.1" local_port=80 index_path="c:/seekstorm_index"
+//! seekstorm_server.exe local_ip="127.0.0.1" local_port=80 index_path="c:/seekstorm_index"
 //! ```
 //! ### Console commands
 //! ```
@@ -24,6 +24,8 @@
 //! [interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
 //! ## Open embedded Web UI in browser
 //! <a href="http://127.0.0.1">http://127.0.0.1</a>
+//! To use the embedded Web UI for a selected index you need to change the API_KEY and index_id (in QUERY_URL) in master.js
+//! **before** building the seekstorm_server (html/css/js are embedded ressources).
 
 use std::collections::HashMap;
 use std::env;
@@ -39,6 +41,8 @@ const SECRET_MASTER_KEY: &str = "1234";
 mod api_endpoints;
 #[doc(hidden)]
 mod http_server;
+#[doc(hidden)]
+mod ingest;
 #[doc(hidden)]
 mod multi_tenancy;
 #[doc(hidden)]
