@@ -130,8 +130,18 @@ fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i32 {
             std::cmp::Ordering::Equal => {
                 return mid as i32;
             }
-            std::cmp::Ordering::Less => left = mid + 1,
-            std::cmp::Ordering::Greater => right = mid - 1,
+            std::cmp::Ordering::Less => {
+                if mid == right {
+                    return -1;
+                };
+                left = mid + 1
+            }
+            std::cmp::Ordering::Greater => {
+                if left == mid {
+                    return -1;
+                };
+                right = mid - 1
+            }
         }
     }
 

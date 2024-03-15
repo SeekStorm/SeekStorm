@@ -38,7 +38,10 @@ pub(crate) async fn single_docid<'a>(
     let block_score = blo.max_block_score;
     let filtered = !not_query_list.is_empty() || field_filter_set.len() > 0;
     if SPEEDUP_FLAG
-        && topk_candidates.current_heap_size == top_k && block_score <= topk_candidates._elements[0].score && (!filtered || result_type == &ResultType::Topk) {
+        && topk_candidates.current_heap_size == top_k
+        && block_score <= topk_candidates._elements[0].score
+        && (!filtered || result_type == &ResultType::Topk)
+    {
         return;
     }
 
@@ -337,7 +340,7 @@ pub(crate) async fn single_blockid<'a>(
                 )
                 .await;
             }
-        } 
+        }
     }
 
     if SORT_FLAG && SPEEDUP_FLAG {
