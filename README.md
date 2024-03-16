@@ -20,11 +20,11 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 ### Why SeekStorm?
 
 **Performance**  
-Lower latency, higher througput, lower cost and energy consumption, especially for multi-field and concurrent queries.  
-Low tail-latencies ensure smooth user experience, and prevent loss of customers and revenue.
+Lower latency, higher throughput, lower cost, and energy consumption, especially for multi-field and concurrent queries.  
+Low tail latencies ensure a smooth user experience and prevent loss of customers and revenue.
 
 **Scaling**  
-Maintains low latency, high througput, low RAM consumption even for billion-scale indices.  
+Maintains low latency, high throughput, and low RAM consumption even for billion-scale indices.  
 Unlimited field number, field length & index size.
 
 **Relevance**  
@@ -71,6 +71,7 @@ https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * Language independent
 * API keys
 * RESTful API with CORS
+* Cross-platform: runs on Linux and Windows (other OS untested)
 
 Query types
 + OR  disjunction  union
