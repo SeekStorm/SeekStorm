@@ -252,23 +252,24 @@ println!("version {}",version);
 
 **Download SeekStorm**
 
-[Download SeekStorm from the GitHub repository](https://github.com/SeekStorm/SeekStorm/archive/refs/heads/main.zip)
-
-
+[Download SeekStorm from the GitHub repository](https://github.com/SeekStorm/SeekStorm/archive/refs/heads/main.zip)  
 Unzip in directory of your choice, open in Visual Studio code.
 
+or alternatively
+
+```
+git clone https://github.com/SeekStorm/SeekStorm.git
+```
+
 **Build SeekStorm**
+
+Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
 
 In the terminal of Visual Studio Code type:
 ```
 cargo build --release
 ```
 
-**Start SeekStorm server**
-```
-cd target\release
-seekstorm_server.exe local_ip="127.0.0.1" local_port=80
-```
 **Get Wikipedia corpus**
 
 Preprocessed English Wikipedia corpus (5,032,105 documents, 8,28 GB decompressed). 
@@ -286,6 +287,14 @@ bunzip2 wiki-articles.json.bz2
 ```
 
 Move the decompressed wiki-articles.json to the release directory
+
+**Start SeekStorm server**
+```
+cd target/release
+```
+```
+./seekstorm_server local_ip="0.0.0.0" local_port=80
+```
 
 **Indexing** 
 
