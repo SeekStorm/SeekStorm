@@ -2,7 +2,7 @@ SeekStorm<br>
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 ========
 
-SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server implemented in Rust.
+**SeekStorm** is an **open-source, sub-millisecond full-text search library** & **multi-tenancy server** implemented in **Rust**.
 
 Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, active work in progress.
 
@@ -10,14 +10,45 @@ SeekStorm is open source licensed under under the [Apache License 2.0](https://g
 
 Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 
-### SeekStorm is not only a high-performance search library, but also multi-tenancy search server 
+### SeekStorm high-performance search library
+
+* Full-text search
+* true real-time search, with negligible performance impact
+* incremental indexing
+* multithreaded indexing & search
+* unlimited field number, field length & index size
+* compressed document store: ZStandard
+* boolean queries: AND, OR, PHRASE, NOT
+* field filtering
+* BM25F and BM25F_Proximity ranking
+* KWIC snippets, highlighting
+* billion-scale index
+* Language independent
+* API keys
+* RESTful API with CORS
+
+Query types
++ OR  disjunction  union
++ AND conjunction intersection
++ ""  phrase
++ \-   NOT
+
+Result types
++ TopK
++ Count
++ TopKCount
+
+### SeekStorm multi-tenancy search server 
 
   * with RESTful API
   * multi-tenancy index management
   * API-key management
   * embedded web server and UI
+  * Cross-platform: runs on Linux and Windows (other OS untested)
 
-### Why SeekStorm?
+---
+
+## Why SeekStorm?
 
 **Performance**  
 Lower latency, higher throughput, lower cost, and energy consumption, especially for multi-field and concurrent queries.  
@@ -55,37 +86,9 @@ https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * It is always advisable to engineer your search infrastructure with enough performance headroom, to keep those tail latencies in check, even on periods of high concurrent load.
 * Also, even if a human user might not notice the latency, it still might make a big difference in autonomous stock market, defense applications or RAG which requires multiple queries.
 
-### Features
+---
 
-* Full-text search
-* true real-time search, with negligible performance impact
-* incremental indexing
-* multithreaded indexing & search
-* unlimited field number, field length & index size
-* compressed document store: ZStandard
-* boolean queries: AND, OR, PHRASE, NOT
-* field filtering
-* BM25F and BM25F_Proximity ranking
-* KWIC snippets, highlighting
-* billion-scale index
-* Language independent
-* API keys
-* RESTful API with CORS
-* Cross-platform: runs on Linux and Windows (other OS untested)
-
-Query types
-+ OR  disjunction  union
-+ AND conjunction intersection
-+ ""  phrase
-+ \-   NOT
-
-Result types
-+ TopK
-+ Count
-+ TopKCount
-
-
-### Why keyword search remains a core building block in the advent of vector search and LLMs
+## Keyword search remains a core building block in the advent of vector search and LLMs
 
 Despite what the hype-cycles https://www.bitecode.dev/p/hype-cycles want you to believe, keyword search is not dead, as NoSQL wasn't the death of SQL.
 
@@ -99,7 +102,7 @@ There are uses cases which can be solved better today with vector search and LLM
 Keyword search is exact, lossless, and it is very fast, with better scaling, better latency, lower cost and energy consumption.
 Vector search works with semantic similarity, returning results within with a given proximity and probability. 
 
-#### Keyword search (lexical search)
+### Keyword search (lexical search)
 If you search for exact results like proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then keyword search is your friend. Vector search on the other hand will bury the exact result that you are looking for among a myriad results that are only somehow semantically related. At the same time, if you don’t know the exact terms, or you are interested in a broader topic, meaning or synonym, no matter what exact terms are used, then keyword search will fail you.
 
 * high indexing speed (for large document numbers)
@@ -113,7 +116,7 @@ If you search for exact results like proper names, numbers, license plates, doma
 * unable to capture meaning and similarity
 * efficient and lossless for exact keyword and phrase search
 
-#### Vector search
+### Vector search
 Vector search is perfect if you don’t know the exact query terms, or you are interested in a broader topic, meaning or synonym, no matter what exact query terms are used. But if you are looking for exact terms, e.g. proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then you should always use keyword search. Vector search will but bury the exact result that you are looking for among a myriad results that are only somehow related. It has a good recall, but low precision, and higher latency. It is prone to false positives, e.g. in in plagiarism detection as exact words and word order get lost.
 
 Vector search enables you to search not only for similar text, but everything that can be transformed to a vector: text, images, audio ...
@@ -130,11 +133,12 @@ It works for similar images, face recognition or finger prints and it enables yo
 * able to capture meaning and similarity
 * inefficient and lossy for exact keyword and phrase search
 
+---
 
-### Why Rust
+## Why Rust
 
 We have (partially) ported the SeekStorm codebase from C# to Rust
-+ Factor 2..4x performance gain (latency and throughput)
++ Factor 2..4x performance gain vs. C# (latency and throughput)
 + No slow first run (no cold start costs due to just-in-time compilation)
 + Stable latencies (no garbage collection delays)
 + Less memory consumption (no ramping up until the next garbage collection)
@@ -146,9 +150,13 @@ We have (partially) ported the SeekStorm codebase from C# to Rust
 Rust is great for performance-critical applications 🚀 that deal with big data and/or many concurrent users. 
 Fast algorithms will shine even more with a performance-conscious programming language 🙂
 
-### Architecture
+---
+
+## Architecture
 
 see [ARCHITECTURE.md](https://github.com/SeekStorm/SeekStorm/blob/main/ARCHITECTURE.md) 
+
+---
 
 ### Building
 
@@ -167,7 +175,7 @@ cargo doc --no-deps
 SeekStorm\target\doc\seekstorm\index.html  
 SeekStorm\target\doc\seekstorm_server\index.html  
 
-### Usage
+### Usage of the library
 ```
 use seekstorm::{*,search::*};
 ```
@@ -246,9 +254,12 @@ seekstorm library version string
 let version=version();
 println!("version {}",version);
 ```
+
 ---
 
-### Demo time: Build a Wikipedia search engine
+## Demo time: Build a Wikipedia search engine with the SeekStorm server
+
+A quick step-by-step tutorial on how to build a Wikipedia search engine from a Wikipedia corpus using the SeekStorm server in 5 easy steps.
 
 **Download SeekStorm**
 
@@ -332,9 +343,11 @@ Type 'quit' into the commandline of the running SeekStorm server.
 
 ---
 
-### Roadmap
+## Roadmap
 
-Porting 
+The Rust port is not yet feature complete. The following features are currently ported.
+
+**Porting** 
 * delete document
 * faceted search
 * autosuggestion, spelling correction, instant search
