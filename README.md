@@ -257,9 +257,13 @@ println!("version {}",version);
 
 ---
 
-## Demo time: Build a Wikipedia search engine with the SeekStorm server
+## Demo time 
+
+### Build a Wikipedia search engine with the SeekStorm server
 
 A quick step-by-step tutorial on how to build a Wikipedia search engine from a Wikipedia corpus using the SeekStorm server in 5 easy steps.
+
+<img src="assets/wikipedia_demo.png" width="600">
 
 **Download SeekStorm**
 
@@ -340,6 +344,18 @@ delete
 **Shutdown server**
 
 Type 'quit' into the commandline of the running SeekStorm server.
+
+### Online Demo: DeepHN Hacker News search
+
+Full-text search 30M Hacker News posts AND linked web pages
+
+[DeepHN.org](https://deephn.org/)
+
+<img src="assets/deephn_demo.png" width="600">
+
+The DeepHN demo is still based on the SeekStorm C# codebase.  
+We are currently porting all required missing features.  
+See roadmap below.  
 
 ---
 
