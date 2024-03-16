@@ -120,28 +120,19 @@ pub trait Search {
 
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
 #[inline(never)]
-fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i32 {
-    let mut left = 0;
-    let mut right = len - 1;
+fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i64 {
+    let mut left = 0i64;
+    let mut right = len as i64 - 1;
     while left <= right {
         let mid = (left + right) / 2;
-        let pivot = read_u64(byte_array, mid * KEY_HEAD_SIZE);
+
+        let pivot = read_u64(byte_array, mid as usize * KEY_HEAD_SIZE);
         match pivot.cmp(&key_hash) {
             std::cmp::Ordering::Equal => {
-                return mid as i32;
+                return mid;
             }
-            std::cmp::Ordering::Less => {
-                if mid == right {
-                    return -1;
-                };
-                left = mid + 1
-            }
-            std::cmp::Ordering::Greater => {
-                if left == mid {
-                    return -1;
-                };
-                right = mid - 1
-            }
+            std::cmp::Ordering::Less => left = mid + 1,
+            std::cmp::Ordering::Greater => right = mid - 1,
         }
     }
 
