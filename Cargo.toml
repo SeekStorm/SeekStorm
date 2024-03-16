@@ -11,6 +11,8 @@ repository = "https://github.com/SeekStorm/SeekStorm"
 readme = "README.md"
 keywords = ["search", "information", "retrieval"]
 edition = "2021"
+exclude = ["src/seekstorm_server/*","assets/*",]
+
 
 # https://stackoverflow.com/questions/26946646/package-with-both-a-library-and-a-binary 
 
