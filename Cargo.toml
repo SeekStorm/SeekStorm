@@ -11,10 +11,6 @@ repository = "https://github.com/SeekStorm/SeekStorm"
 readme = "README.md"
 keywords = ["search", "information", "retrieval"]
 edition = "2021"
-exclude = ["src/seekstorm_server/*","assets/*",]
-
-
-# https://stackoverflow.com/questions/26946646/package-with-both-a-library-and-a-binary 
 
 [lib]
 name = "seekstorm"
@@ -23,8 +19,6 @@ path = "src/seekstorm/lib.rs"
 [[bin]]
 name = "seekstorm_server"
 path = "src/seekstorm_server/main.rs"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html 
 
 [dependencies]
 crossbeam-channel = "0.5.12"
