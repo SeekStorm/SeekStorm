@@ -11,6 +11,7 @@ repository = "https://github.com/SeekStorm/SeekStorm"
 readme = "README.md"
 keywords = ["search", "information", "retrieval"]
 edition = "2021"
+exclude = ["assets/*",]
 
 [lib]
 name = "seekstorm"
