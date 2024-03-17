@@ -6,9 +6,24 @@
 //! # `seekstorm`
 //! SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server written in Rust.
 //! The **SeekStorm library** can be embedded into your program, while the **SeekStorm server** is a standalone search server to be accessed via HTTP.
-//! ```rust
-//! use seekstorm::{*,search::*};
+//! ### Add required crates to your project
+//! ```text
+//! cargo add seekstorm
+//! cargo add tokio
+//! cargo add serde_json
 //! ```
+//!
+//! ```
+//! use std::{error::Error, path::Path};
+//! use seekstorm::{index::*,search::*};
+//! ```
+//!
+//! ### use an asynchronous Rust runtime
+//! ```text
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+//! ```
+//!
 //! ### create index
 //! ```rust
 //! let index_path=Path::new("C:/index/");
@@ -77,6 +92,11 @@
 //! ```rust
 //! let version=version();
 //! println!("version {}",version);
+//! ```
+//! ### end of main function
+//! ```text
+//!    Ok(())
+//! }
 //! ```
 
 pub(crate) mod add_result;

@@ -183,8 +183,23 @@ SeekStorm\target\doc\seekstorm\index.html
 SeekStorm\target\doc\seekstorm_server\index.html  
 
 ### Usage of the library
+
+Add required crates to your project
 ```
-use seekstorm::{*,search::*};
+cargo add seekstorm
+cargo add tokio
+cargo add serde_json
+```
+
+```
+use std::{error::Error, path::Path};
+use seekstorm::{index::*,search::*};
+```
+
+use an asynchronous Rust runtime
+```
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 ```
 
 create index
@@ -260,6 +275,11 @@ seekstorm library version string
 ```
 let version=version();
 println!("version {}",version);
+```
+end of main function
+```
+   Ok(())
+}
 ```
 
 ---
