@@ -170,9 +170,14 @@ cargo build --release
 
 ### Documentation
 
+[https://docs.rs/seekstorm](https://docs.rs/seekstorm)
+
+**Build documentation**
+
 ```
 cargo doc --no-deps
 ```
+**Access documentation locally**
 
 SeekStorm\target\doc\seekstorm\index.html  
 SeekStorm\target\doc\seekstorm_server\index.html  
