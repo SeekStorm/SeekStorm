@@ -36,4 +36,4 @@ To use the embedded Web UI for a selected index you need to change the API_KEY a
 cargo build --release
 ```
 
-&#x26A0; **WARNING**: make sure to change the SECRET_MASTER_KEY in src\seekstorm_server\main.rs to a secret, otherwise your generated API keys will be compromised.
+&#x26A0; **WARNING**: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.

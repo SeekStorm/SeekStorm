@@ -8,7 +8,6 @@ use num_derive::FromPrimitive;
 use get_size::GetSize;
 use num_format::{Locale, ToFormattedString};
 
-use regex::Regex;
 use search::{decode_posting_list_object, QueryType, Search};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -1315,12 +1314,6 @@ pub struct NonUniqueTermObject {
 }
 
 lazy_static! {
-    pub(crate) static ref RE_ASCII_ALPHA_TEXT: Regex = Regex::new(r#"[^a-z]+"#).unwrap();
-    pub(crate) static ref RE_ASCII_ALPHA_QUERY: Regex = Regex::new(r#"[^a-z"+-]+"#).unwrap();
-    pub(crate) static ref RE_UNICODE_ALPHA_NUMERIC_TEXT: Regex = Regex::new(r#"[^\w]+"#).unwrap();
-    pub(crate) static ref RE_UNICODE_ALPHA_NUMERIC_QUERY: Regex =
-        Regex::new(r#"[^\w"+-]+"#).unwrap();
-    pub(crate) static ref RE_SENTENCE: Regex = Regex::new(r#"([^?.!])*[?.!]"#).unwrap();
     pub(crate) static ref HASHER_32: RandomState =
         RandomState::with_seeds(805272099, 242851902, 646123436, 591410655);
     pub(crate) static ref HASHER_64: RandomState =

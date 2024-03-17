@@ -44,7 +44,7 @@ use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
 use crate::multi_tenancy::ApikeyQuotaObject;
 use crate::server::DEBUG;
-use crate::{SECRET_MASTER_KEY, VERSION};
+use crate::{MASTER_KEY_SECRET, VERSION};
 
 const INDEX_HTML: &str = include_str!("web/index.html");
 const FLEXBOX_CSS: &str = include_str!("web/css/flexboxgrid.min.css");
@@ -493,7 +493,7 @@ pub(crate) async fn http_request_handler(
         ("api", "v1", "apikey", "", "", "", &Method::POST) => {
             if let Some(apikey_header) = headers.get("apikey") {
                 let mut hasher = Sha256::new();
-                hasher.update(SECRET_MASTER_KEY);
+                hasher.update(MASTER_KEY_SECRET.to_string());
                 let peer_master_apikey = hasher.finalize();
                 let peer_master_apikey_base64 =
                     general_purpose::STANDARD.encode(peer_master_apikey);
@@ -532,7 +532,7 @@ pub(crate) async fn http_request_handler(
         ("api", "v1", "apikey", "", "", "", &Method::DELETE) => {
             if let Some(apikey_header) = headers.get("apikey") {
                 let mut hasher = Sha256::new();
-                hasher.update(SECRET_MASTER_KEY);
+                hasher.update(MASTER_KEY_SECRET.to_string());
                 let master_apikey = hasher.finalize();
                 let master_apikey_base64 = general_purpose::STANDARD.encode(master_apikey);
 
@@ -636,7 +636,7 @@ pub(crate) async fn http_server(
             let server = s.serve(make_svc);
 
             let mut hasher = Sha256::new();
-            hasher.update(SECRET_MASTER_KEY);
+            hasher.update(MASTER_KEY_SECRET.to_string());
             let peer_master_apikey = hasher.finalize();
             let peer_master_apikey_base64 = general_purpose::STANDARD.encode(peer_master_apikey);
 

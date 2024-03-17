@@ -230,6 +230,7 @@ pub(crate) async fn single_docid<'a>(
                         not_query_list,
                         block_score,
                     );
+
                     plo.p_docid += 1;
                 }
             }

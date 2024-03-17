@@ -3,7 +3,9 @@
 ### individual API key
 @api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
-### create api key (use master API key)
+// WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, 
+// otherwise your generated API keys will be compromised.
+### create api key (use master API key displayed in the server console at startup)
 POST http://127.0.0.1:80/api/v1/apikey HTTP/1.1
 apikey: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ=
 content-type: application/json

@@ -15,6 +15,9 @@
 //! * local_port   (default = 80)
 //! seekstorm_server.exe local_ip="127.0.0.1" local_port=80 index_path="c:/seekstorm_index"
 //! ```
+//! &#x26A0; **WARNING**: make sure to set the MASTER_KEY_SECRET environment variable to a secret,
+//! otherwise your generated API keys will be compromised.
+//!
 //! ### Console commands
 //! ```
 //! quit to exit
@@ -27,6 +30,7 @@
 //! To use the embedded Web UI for a selected index you need to change the API_KEY and index_id (in QUERY_URL) in master.js
 //! **before** building the seekstorm_server (html/css/js are embedded ressources).
 
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -34,8 +38,10 @@ use std::str;
 
 use crate::server::initialize;
 
-/// &#x26A0; **WARNING**: make sure to change the SECRET_MASTER_KEY in src\seekstorm_server\main.rs to a secret, otherwise your generated API keys will be compromised.
-const SECRET_MASTER_KEY: &str = "1234";
+lazy_static! {
+    #[doc(hidden)]
+    pub(crate) static ref MASTER_KEY_SECRET: String = env::var("MASTER_KEY_SECRET").unwrap_or("1234".to_string());
+}
 
 #[doc(hidden)]
 mod api_endpoints;
