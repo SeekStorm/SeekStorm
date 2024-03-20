@@ -17,7 +17,6 @@
 //! ```
 //! &#x26A0; **WARNING**: make sure to set the MASTER_KEY_SECRET environment variable to a secret,
 //! otherwise your generated API keys will be compromised.
-//!
 //! ### Console commands
 //! ```
 //! quit to exit

@@ -11,8 +11,6 @@ use crate::{
     multi_tenancy::{ApikeyObject, ApikeyQuotaObject},
 };
 
-pub(crate) const DEBUG: bool = false;
-
 fn ctrl_channel() -> Result<Receiver<()>, ctrlc::Error> {
     let (sender, receiver) = bounded(20);
     ctrlc::set_handler(move || {
@@ -130,7 +128,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         let wikipedia_schema_json = r#"
                         [{"field_name":"title","field_type":"Text","field_stored":true,"field_indexed":true,"field_boost":10.0},
                         {"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
-                        {"field_name":"url","field_type":"Text","field_stored":false,"field_indexed":false}]"#;
+                        {"field_name":"url","field_type":"Text","field_stored":true,"field_indexed":false}]"#;
                         let schema = serde_json::from_str(wikipedia_schema_json).unwrap();
 
                         let index_id = create_index_api(

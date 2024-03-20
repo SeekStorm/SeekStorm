@@ -1,4 +1,3 @@
-use seekstorm::index::Document;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -39,11 +38,9 @@ use crate::api_endpoints::update_documents_api;
 use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
-use crate::api_endpoints::{create_index_api, QueryObjectPost};
+use crate::api_endpoints::{create_index_api, SearchRequestObject};
 use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
-use crate::multi_tenancy::ApikeyQuotaObject;
-use crate::server::DEBUG;
 use crate::{MASTER_KEY_SECRET, VERSION};
 
 const INDEX_HTML: &str = include_str!("web/index.html");
@@ -61,24 +58,10 @@ pub(crate) fn calculate_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-pub(crate) fn not_found() -> Response<Body> {
+pub(crate) fn status(status: StatusCode, error_message: String) -> Response<Body> {
     Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(Body::empty())
-        .unwrap()
-}
-
-pub(crate) fn unauthorized() -> Response<Body> {
-    Response::builder()
-        .status(StatusCode::UNAUTHORIZED)
-        .body(Body::empty())
-        .unwrap()
-}
-
-pub(crate) fn not_implemented() -> Response<Body> {
-    Response::builder()
-        .status(StatusCode::NOT_IMPLEMENTED)
-        .body(Body::empty())
+        .status(status)
+        .body(error_message.into())
         .unwrap()
 }
 
@@ -86,7 +69,7 @@ pub(crate) async fn http_request_handler(
     index_path: PathBuf,
     apikey_list: Arc<tokio::sync::RwLock<HashMap<u128, ApikeyObject>>>,
     req: Request<Body>,
-    remote_addr: SocketAddr,
+    _remote_addr: SocketAddr,
 ) -> Result<Response<Body>, Infallible> {
     let headers = req.headers();
 
@@ -120,10 +103,6 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    if DEBUG {
-                        println!("search API POST request: {}", req.uri());
-                    }
-
                     let index_id: u64 = parts[3].parse().unwrap();
 
                     let apikey_list_ref = apikey_list.read().await;
@@ -132,42 +111,24 @@ pub(crate) async fn http_request_handler(
                     drop(apikey_list_ref);
 
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let request_json =
-                        serde_json::from_slice::<QueryObjectPost>(&request_bytes).unwrap();
+                    let search_request =
+                        match serde_json::from_slice::<SearchRequestObject>(&request_bytes) {
+                            Ok(search_request) => search_request,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
 
-                    let query_string = request_json.query_string;
-                    let api_offset = request_json.offset;
-                    let api_length = request_json.length;
-
-                    let search_result_local = query_index_api(
-                        &index_arc_clone,
-                        &query_string,
-                        api_offset,
-                        api_length,
-                        request_json.highlights,
-                        request_json.realtime,
-                        request_json.field_filter,
-                    )
-                    .await;
-
-                    if DEBUG {
-                        println!(
-                            "search result object {} {} : {} {} {} ",
-                            api_offset,
-                            api_length,
-                            search_result_local.offset,
-                            search_result_local.length,
-                            search_result_local.results.len()
-                        );
-                    }
+                    let search_result_local =
+                        query_index_api(&index_arc_clone, search_request).await;
 
                     let search_result_json = serde_json::to_string(&search_result_local).unwrap();
                     Ok(Response::new(search_result_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -176,10 +137,6 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    if DEBUG {
-                        println!("search API GET request: {}", req.uri());
-                    }
-
                     let index_id: u64 = parts[3].parse().unwrap();
 
                     let apikey_list_ref = apikey_list.read().await;
@@ -210,38 +167,26 @@ pub(crate) async fn http_request_handler(
                         api_length = value.parse::<usize>().unwrap();
                     }
 
-                    let highlights = Vec::new();
+                    let search_request = SearchRequestObject {
+                        query_string: query_string.to_string(),
+                        offset: api_offset,
+                        length: api_length,
+                        highlights: Vec::new(),
+                        realtime: false,
+                        field_filter: Vec::new(),
+                        fields: Vec::new(),
+                    };
 
-                    let search_result_local = query_index_api(
-                        &index_arc_clone,
-                        query_string,
-                        api_offset,
-                        api_length,
-                        highlights,
-                        false,
-                        Vec::new(),
-                    )
-                    .await;
+                    let search_result_local =
+                        query_index_api(&index_arc_clone, search_request).await;
                     let search_result_json = serde_json::to_string(&search_result_local).unwrap();
-
-                    if DEBUG {
-                        println!(
-                            "search result object {} {} : {} {} {} : {}",
-                            api_offset,
-                            api_length,
-                            search_result_local.offset,
-                            search_result_local.length,
-                            search_result_local.results.len(),
-                            search_result_json
-                        );
-                    }
 
                     Ok(Response::new(search_result_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -251,9 +196,13 @@ pub(crate) async fn http_request_handler(
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let request_string = str::from_utf8(&request_bytes).unwrap();
-                    let create_index_request_object: CreateIndexRequest =
-                        serde_json::from_str(request_string).unwrap();
+                    let create_index_request_object =
+                        match serde_json::from_slice::<CreateIndexRequest>(&request_bytes) {
+                            Ok(create_index_request_object) => create_index_request_object,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
 
                     let mut apikey_list_mut = apikey_list.write().await;
                     let apikey_object = apikey_list_mut.get_mut(&apikey_hash).unwrap();
@@ -268,10 +217,10 @@ pub(crate) async fn http_request_handler(
                     drop(apikey_list_mut);
                     Ok(Response::new(index_id.to_string().into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -291,10 +240,10 @@ pub(crate) async fn http_request_handler(
 
                     Ok(Response::new(index_count.to_string().into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -313,10 +262,10 @@ pub(crate) async fn http_request_handler(
 
                     Ok(Response::new(result.unwrap().to_string().into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -334,10 +283,10 @@ pub(crate) async fn http_request_handler(
 
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -359,10 +308,10 @@ pub(crate) async fn http_request_handler(
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -382,21 +331,31 @@ pub(crate) async fn http_request_handler(
 
                     let is_doc_vector = request_string.trim().starts_with('[');
                     let status_object = if !is_doc_vector {
-                        let document_object: Document =
-                            serde_json::from_str(request_string).unwrap();
+                        let document_object = match serde_json::from_str(request_string) {
+                            Ok(document_object) => document_object,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
+
                         index_document_api(&index_arc_clone, document_object).await
                     } else {
-                        let document_object_vec: Vec<Document> =
-                            serde_json::from_str(request_string).unwrap();
+                        let document_object_vec = match serde_json::from_str(request_string) {
+                            Ok(document_object_vec) => document_object_vec,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
+
                         index_documents_api(&index_arc_clone, document_object_vec).await
                     };
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -416,22 +375,32 @@ pub(crate) async fn http_request_handler(
 
                     let is_doc_vector = request_string.trim().starts_with('[');
                     let status_object = if !is_doc_vector {
-                        let document_object: Document =
-                            serde_json::from_str(request_string).unwrap();
+                        let document_object = match serde_json::from_str(request_string) {
+                            Ok(document_object) => document_object,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
+
                         update_document_api(&index_arc_clone, document_object).await
                     } else {
-                        let document_object_vec: Vec<Document> =
-                            serde_json::from_str(request_string).unwrap();
+                        let document_object_vec = match serde_json::from_str(request_string) {
+                            Ok(document_object_vec) => document_object_vec,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
+
                         update_documents_api(&index_arc_clone, document_object_vec).await
                     };
 
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -450,10 +419,10 @@ pub(crate) async fn http_request_handler(
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -473,20 +442,31 @@ pub(crate) async fn http_request_handler(
 
                     let is_doc_vector = request_string.trim().starts_with('[');
                     let status_object = if !is_doc_vector {
-                        let document_id: String = serde_json::from_str(request_string).unwrap();
+                        let document_id = match serde_json::from_str(request_string) {
+                            Ok(document_id) => document_id,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
+
                         delete_document_api(&index_arc_clone, document_id).await
                     } else {
-                        let document_id_vec: Vec<String> =
-                            serde_json::from_str(request_string).unwrap();
+                        let document_id_vec = match serde_json::from_str(request_string) {
+                            Ok(document_id_vec) => document_id_vec,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
+
                         delete_documents_api(&index_arc_clone, document_id_vec).await
                     };
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -501,8 +481,12 @@ pub(crate) async fn http_request_handler(
                 if apikey_header.to_str().unwrap() == peer_master_apikey_base64 {
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
                     let request_string = str::from_utf8(&request_bytes).unwrap();
-                    let apikey_quota_object: ApikeyQuotaObject =
-                        serde_json::from_str(request_string).unwrap();
+                    let apikey_quota_object = match serde_json::from_str(request_string) {
+                        Ok(apikey_quota_object) => apikey_quota_object,
+                        Err(e) => {
+                            return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                        }
+                    };
 
                     let mut apikey = [0u8; 32];
                     OsRng.fill_bytes(&mut apikey);
@@ -517,15 +501,12 @@ pub(crate) async fn http_request_handler(
                     );
                     drop(apikey_list_mut);
 
-                    if DEBUG {
-                        println!("user_key: {}", api_key_base64);
-                    }
                     Ok(Response::new(api_key_base64.into()))
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
@@ -540,7 +521,12 @@ pub(crate) async fn http_request_handler(
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
                     let request_string = str::from_utf8(&request_bytes).unwrap();
                     let request_object: DeleteApikeyRequest =
-                        serde_json::from_str(request_string).unwrap();
+                        match serde_json::from_str(request_string) {
+                            Ok(request_object) => request_object,
+                            Err(e) => {
+                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                            }
+                        };
 
                     let apikey = general_purpose::STANDARD
                         .decode(&request_object.apikey_base64)
@@ -554,58 +540,43 @@ pub(crate) async fn http_request_handler(
 
                     match result {
                         Ok(count) => Ok(Response::new(count.to_string().into())),
-                        Err(_) => Ok(not_found()),
+                        Err(_) => Ok(status(StatusCode::NOT_FOUND, String::new())),
                     }
                 } else {
-                    Ok(unauthorized())
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
             } else {
-                Ok(unauthorized())
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
             }
         }
 
-        ("api", "v1", "status", "", "", "", &Method::GET) => Ok(not_implemented()),
-
-        (_, _, _, _, _, _, &Method::GET) => {
-            if DEBUG {
-                println!(
-                    "search UI GET request: {} from {} {}",
-                    path,
-                    remote_addr.ip(),
-                    remote_addr.port()
-                );
-            }
-
-            match path {
-                "/" => Ok(Response::new(INDEX_HTML.into())),
-                "/css/flexboxgrid.min.css" => Ok(Response::new(FLEXBOX_CSS.into())),
-                "/css/master.css" => Ok(Response::new(MASTER_CSS.into())),
-                "/js/master.js" => Ok(Response::new(MASTER_JS.into())),
-                "/js/jquery-3.3.1.min.js" => Ok(Response::new(JQUERY_JS.into())),
-
-                "/svg/logo.svg" => {
-                    let body: Body = LOGO_SVG.into();
-                    let response = Response::builder()
-                        .header("Content-Type", "image/svg+xml")
-                        .header("content-length", LOGO_SVG.len())
-                        .body(body)
-                        .unwrap();
-                    Ok(response)
-                }
-
-                "/favicon-16x16.png" => Ok(Response::new(FAVICON_16.into())),
-                "/favicon-32x32.png" => Ok(Response::new(FAVICON_32.into())),
-                "/version" => Ok(Response::new(VERSION.into())),
-                _ => Ok(not_implemented()),
-            }
+        ("api", "v1", "status", "", "", "", &Method::GET) => {
+            Ok(status(StatusCode::NOT_IMPLEMENTED, String::new()))
         }
-        _ => {
-            if DEBUG {
-                println!("invalid request received: {}", req.uri());
+
+        (_, _, _, _, _, _, &Method::GET) => match path {
+            "/" => Ok(Response::new(INDEX_HTML.into())),
+            "/css/flexboxgrid.min.css" => Ok(Response::new(FLEXBOX_CSS.into())),
+            "/css/master.css" => Ok(Response::new(MASTER_CSS.into())),
+            "/js/master.js" => Ok(Response::new(MASTER_JS.into())),
+            "/js/jquery-3.3.1.min.js" => Ok(Response::new(JQUERY_JS.into())),
+
+            "/svg/logo.svg" => {
+                let body: Body = LOGO_SVG.into();
+                let response = Response::builder()
+                    .header("Content-Type", "image/svg+xml")
+                    .header("content-length", LOGO_SVG.len())
+                    .body(body)
+                    .unwrap();
+                Ok(response)
             }
 
-            Ok(not_implemented())
-        }
+            "/favicon-16x16.png" => Ok(Response::new(FAVICON_16.into())),
+            "/favicon-32x32.png" => Ok(Response::new(FAVICON_32.into())),
+            "/version" => Ok(Response::new(VERSION.into())),
+            _ => Ok(status(StatusCode::NOT_IMPLEMENTED, String::new())),
+        },
+        _ => Ok(status(StatusCode::NOT_IMPLEMENTED, String::new())),
     }
 }
 
@@ -640,20 +611,14 @@ pub(crate) async fn http_server(
             let peer_master_apikey = hasher.finalize();
             let peer_master_apikey_base64 = general_purpose::STANDARD.encode(peer_master_apikey);
 
-            if DEBUG {
-                println!(
-                    "server listening on: {} {} master key {}\n\n",
-                    local_ip, local_port, peer_master_apikey_base64
-                );
-            } else {
-                println!(
-                    "Listening on: {} {} index dir {} master key {}\n\n",
-                    local_ip,
-                    local_port,
-                    index_path.display(),
-                    peer_master_apikey_base64
-                );
-            }
+            println!(
+                "Listening on: {} {} index dir {} master key {}\n\n",
+                local_ip,
+                local_port,
+                index_path.display(),
+                peer_master_apikey_base64
+            );
+
             io::stdout().flush().unwrap();
 
             if let Err(e) = server.await {

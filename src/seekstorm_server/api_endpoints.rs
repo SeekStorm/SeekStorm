@@ -6,12 +6,12 @@ use std::{
     time::Instant,
 };
 
-use aho_corasick::AhoCorasick;
 use derivative::Derivative;
 use itertools::Itertools;
+use std::collections::HashSet;
 
 use seekstorm::{
-    highlighter::{top_fragments_from_field, Highlight},
+    highlighter::{highlighter, Highlight},
     index::{
         create_index, open_index, AccessType, Document, IndexArc, IndexDocument, IndexDocuments,
         IndexMetaObject, SchemaField, SimilarityType, TokenizerType,
@@ -24,14 +24,13 @@ use tokio::sync::RwLock;
 use crate::{
     http_server::calculate_hash,
     multi_tenancy::{ApikeyObject, ApikeyQuotaObject},
-    server::DEBUG,
     VERSION,
 };
 
 const APIKEY_PATH: &str = "apikey.json";
 
 #[derive(Debug, Deserialize, Serialize, Clone, Derivative)]
-pub struct QueryObjectPost {
+pub struct SearchRequestObject {
     #[serde(rename = "query")]
     pub query_string: String,
     pub offset: usize,
@@ -43,6 +42,8 @@ pub struct QueryObjectPost {
     pub highlights: Vec<Highlight>,
     #[serde(default)]
     pub field_filter: Vec<String>,
+    #[serde(default)]
+    pub fields: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -96,9 +97,6 @@ pub(crate) fn save_file_atomically(path: &PathBuf, content: String) {
 
 pub(crate) fn save_apikey_data(apikey: &ApikeyObject, index_path: &PathBuf) {
     let apikey_id: u64 = apikey.id;
-    if DEBUG {
-        println!("save_apikey_data {}", apikey_id);
-    }
 
     let apikey_id_path = Path::new(&index_path).join(apikey_id.to_string());
     let apikey_persistence_json = serde_json::to_string(&apikey).unwrap();
@@ -164,9 +162,6 @@ pub(crate) async fn open_all_indices(
     index_list: &mut HashMap<u64, IndexArc>,
 ) {
     if !Path::exists(index_path) {
-        if DEBUG {
-            println!("index path not found: {} ", index_path.to_string_lossy());
-        }
         fs::create_dir_all(index_path).unwrap();
     }
 
@@ -196,12 +191,7 @@ pub(crate) async fn open_apikey(
 
             true
         }
-        Err(e) => {
-            if DEBUG {
-                println!("open_apikey exception: {}", e);
-            }
-            false
-        }
+        Err(_) => false,
     }
 }
 
@@ -362,68 +352,44 @@ pub(crate) async fn delete_documents_api(
 
 pub(crate) async fn query_index_api(
     index_arc: &IndexArc,
-    query_string: &str,
-    api_offset: usize,
-    api_length: usize,
-    highlights: Vec<Highlight>,
-    include_uncommitted: bool,
-    field_filter: Vec<String>,
+    search_request: SearchRequestObject,
 ) -> ResultObject {
     let start_time = Instant::now();
 
     let rlo = index_arc
         .search(
-            query_string.to_owned(),
+            search_request.query_string.to_owned(),
             QueryType::Intersection,
-            api_offset,
-            api_length,
+            search_request.offset,
+            search_request.length,
             ResultType::TopkCount,
-            include_uncommitted,
-            field_filter,
+            search_request.realtime,
+            search_request.field_filter,
         )
         .await;
 
-    let mut query_terms_vec: Vec<String> = Vec::new();
-    for term in rlo.query_terms {
-        if term.is_bigram {
-            query_terms_vec.push(term.term_bigram1);
-            query_terms_vec.push(term.term_bigram2);
-        }
-        {
-            query_terms_vec.push(term.term);
-        }
-    }
+    let fields_hashset = HashSet::from_iter(search_request.fields);
 
     let mut results: Vec<Document> = Vec::new();
-    if index_arc.read().await.field_store_flag {
-        let query_terms_ac = AhoCorasick::builder()
-            .ascii_case_insensitive(true)
-            .build(&query_terms_vec)
-            .unwrap();
+
+    if !index_arc.read().await.stored_field_names.is_empty() {
+        let highlighter_option = if search_request.highlights.is_empty() {
+            None
+        } else {
+            Some(highlighter(
+                search_request.highlights,
+                rlo.query_term_strings,
+            ))
+        };
 
         for result in rlo.results.iter() {
-            match index_arc
-                .read()
-                .await
-                .get_document(result.doc_id, include_uncommitted)
-            {
-                Ok(mut doc) => {
-                    for highlight in highlights.iter() {
-                        let kwic = top_fragments_from_field(
-                            &doc,
-                            &query_terms_ac,
-                            &highlight.field,
-                            highlight.fragment_number,
-                            highlight.highlight_markup,
-                            highlight.fragment_size,
-                        )
-                        .unwrap();
-                        doc.insert(
-                            "_".to_string() + &highlight.field,
-                            serde_json::Value::String(kwic),
-                        );
-                    }
-
+            match index_arc.read().await.get_document(
+                result.doc_id,
+                search_request.realtime,
+                &highlighter_option,
+                &fields_hashset,
+            ) {
+                Ok(doc) => {
                     results.push(doc);
                 }
                 Err(_e) => {}
@@ -432,10 +398,10 @@ pub(crate) async fn query_index_api(
     }
 
     ResultObject {
-        query: query_string.to_owned(),
+        query: search_request.query_string.to_owned(),
         time: start_time.elapsed().as_nanos(),
-        offset: api_offset,
-        length: api_length,
+        offset: search_request.offset,
+        length: search_request.length,
         count: rlo.results.len(),
         count_evaluated: rlo.result_count_total as usize,
         results,

@@ -12,18 +12,16 @@
 //! cargo add tokio
 //! cargo add serde_json
 //! ```
-//!
 //! ```
-//! use std::{error::Error, path::Path};
-//! use seekstorm::{index::*,search::*};
+//! use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
+//! use seekstorm::{index::*,search::*,highlighter::*};
+//! use tokio::sync::RwLock;
 //! ```
-//!
 //! ### use an asynchronous Rust runtime
 //! ```text
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 //! ```
-//!
 //! ### create index
 //! ```rust
 //! let index_path=Path::new("C:/index/");
@@ -42,6 +40,7 @@
 //! let segment_number_bits1=11;
 //! let serialize_schema=true;
 //! let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1).unwrap();
+//! let _index_arc = Arc::new(RwLock::new(index));
 //! ```
 //! ### open index (alternatively to create index)
 //! ```rust
@@ -70,9 +69,20 @@
 //! ```
 //! ### display results
 //! ```rust
+//! let highlights:Vec<Highlight>= vec![
+//! Highlight {
+//!     field: "body".to_string(),
+//!     name:String::new(),
+//!     fragment_number: 2,
+//!     fragment_size: 160,
+//!     highlight_markup: true,
+//! },
+//! ];    
+//! let highlighter=Some(highlighter(highlights, result_list.query_term_strings));
+//! let fields_hashset= HashSet::new();
 //! let mut index=index_arc.write().await;
 //! for result in result_list.results.iter() {
-//!   let doc=index.get_document(result.doc_id,false).unwrap();
+//!   let doc=index.get_document(result.doc_id,false,&highlighter,&fields_hashset).unwrap();
 //!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 //! }
 //! ```

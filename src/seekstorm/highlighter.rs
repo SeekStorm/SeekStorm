@@ -7,11 +7,21 @@ use serde::{Deserialize, Serialize};
 /// With highlight_markup the matching query terms within the fragments can be highlighted with HTML markup.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Highlight {
+    /// Specifies the field from which the fragments  (snippets, summaries) are created.
     pub field: String,
+    /// Allows to specifiy multiple highlight result fields from the same source field, leaving the original field intact,
+    /// Default: if name is empty then field is used instead, i.e the original field is overwritten with the highlight.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// If 0/default then return the full original text without fragmenting.
     #[serde(default)]
     pub fragment_number: usize,
+    /// Specifies the length of a highlight fragment.
+    /// The default 0 returns the full original text without truncating, but still with highlighting if highlight_markup is enabled.
     #[serde(default)]
     pub fragment_size: usize,
+    /// if true, the matching query terms within the fragments are highlighted with HTML markup **\<b\>term\<\/b\>**.
     #[serde(default)]
     pub highlight_markup: bool,
 }
@@ -20,10 +30,30 @@ impl Default for Highlight {
     fn default() -> Self {
         Highlight {
             field: String::new(),
+            name: String::new(),
             fragment_number: 1,
             fragment_size: usize::MAX,
             highlight_markup: true,
         }
+    }
+}
+
+/// Highlighter object used as get_document parameter for extracting keyword-in-context (KWIC) fragments from fields in documents, and highlighting the query terms within.
+pub struct Highlighter {
+    pub(crate) highlights: Vec<Highlight>,
+    pub(crate) query_terms_ac: AhoCorasick,
+}
+
+/// Returns the Highlighter object used as get_document parameter for highlighting fields in documents
+pub fn highlighter(highlights: Vec<Highlight>, query_terms_vec: Vec<String>) -> Highlighter {
+    let query_terms_ac = AhoCorasick::builder()
+        .ascii_case_insensitive(true)
+        .build(query_terms_vec)
+        .unwrap();
+
+    Highlighter {
+        highlights,
+        query_terms_ac,
     }
 }
 
@@ -129,21 +159,22 @@ pub(crate) struct Fragment<'a> {
 /// The field is fragmented into sentences, using punctuation marks '.?!' as sentence boundaries.
 /// If the fragment length exceeds the specified fragment_size, then the fragment is truncated at the right or left side, so that the query term higlight positions are kept within the remaining fragment window.
 /// Selecting the right fragment and the right fragment window is fundamental for the users perceived relevancy of the search results.
-pub fn top_fragments_from_field(
+pub(crate) fn top_fragments_from_field(
     document: &Document,
     query_terms_ac: &AhoCorasick,
-    field_name: &str,
-    fragment_number: usize,
-    highlight_markup: bool,
-    fragment_size: usize,
+    highlight: &Highlight,
 ) -> Result<String, String> {
-    match document.get(field_name) {
+    match document.get(&highlight.field) {
         None => Ok("".to_string()),
         Some(value) => {
             let no_score_no_highlight =
                 query_terms_ac.patterns_len() == 1 && query_terms_ac.max_pattern_len() == 1;
-            let no_fragmentation = fragment_number == 0;
-            let fragment_number = if no_fragmentation { 1 } else { fragment_number };
+            let no_fragmentation = highlight.fragment_number == 0;
+            let fragment_number = if no_fragmentation {
+                1
+            } else {
+                highlight.fragment_number
+            };
             let mut topk_candidates = MinHeap::new(fragment_number);
 
             let text: String = serde_json::from_str(&value.to_string()).unwrap();
@@ -167,7 +198,7 @@ pub fn top_fragments_from_field(
                             &mut fragments,
                             &mut topk_candidates,
                             fragment_number,
-                            fragment_size,
+                            highlight.fragment_size,
                         );
 
                         if no_score_no_highlight
@@ -194,7 +225,7 @@ pub fn top_fragments_from_field(
                     &mut fragments,
                     &mut topk_candidates,
                     fragment_number,
-                    fragment_size,
+                    highlight.fragment_size,
                 );
             }
 
@@ -235,7 +266,7 @@ pub fn top_fragments_from_field(
                 }
             }
 
-            if highlight_markup && !no_score_no_highlight {
+            if highlight.highlight_markup && !no_score_no_highlight {
                 highlight_terms(&mut combined_string, query_terms_ac);
             }
 

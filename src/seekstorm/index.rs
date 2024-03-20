@@ -372,8 +372,9 @@ pub struct Index {
     pub index_format_version_major: u16,
     /// Backward compatible format change: new library can open old format, but old library can't open new format
     pub index_format_version_minor: u16,
-    /// Index contains stored fields: get_document and highlighter work only with stored fields
-    pub field_store_flag: bool,
+    /// List of stored fields in the index: get_document and highlighter work only with stored fields
+    pub stored_field_names: Vec<String>,
+
     /// Number of indexed documents
     pub indexed_doc_count: usize,
     /// Number of allowed parallel indexed documents (default=available_parallelism). Can be used to detect wehen all indexing processes are finished.
@@ -479,7 +480,8 @@ pub fn create_index(
             let mut indexed_field_vec: Vec<IndexedField> = Vec::new();
             let mut schema_map: HashMap<String, SchemaField> = HashMap::new();
             let mut indexed_schema_vec: Vec<SchemaField> = Vec::new();
-            let mut field_store_flag = false;
+            let mut stored_fields_flag = false;
+            let mut stored_field_names = Vec::new();
             for schema_field in schema.iter() {
                 let mut schema_field_clone = schema_field.clone();
                 schema_field_clone.indexed_field_id = indexed_field_vec.len();
@@ -497,7 +499,8 @@ pub fn create_index(
                 }
 
                 if schema_field.field_stored {
-                    field_store_flag = true;
+                    stored_fields_flag = true;
+                    stored_field_names.push(schema_field.field_name.clone());
                 }
             }
 
@@ -539,9 +542,9 @@ pub fn create_index(
                 index_path_string: index_path_string.to_owned(),
                 index_file_mmap,
                 docstore_file_mmap,
-                field_store_flag,
+                stored_field_names,
                 compressed_index_segment_block_buffer: vec![0; 10_000_000],
-                compressed_docstore_segment_block_buffer: if field_store_flag {
+                compressed_docstore_segment_block_buffer: if stored_fields_flag {
                     vec![0; ROARING_BLOCK_SIZE * 4]
                 } else {
                     Vec::new()
@@ -926,9 +929,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                     let schema = serde_json::from_reader(BufReader::new(file)).unwrap();
 
                     match create_index(index_path, meta, &schema, false, 11) {
-                        Ok(idx) => {
-                            let mut index = idx;
-
+                        Ok(mut index) => {
                             let mut block_count_sum = 0;
 
                             let is_mmap = index.meta.access_type == AccessType::Mmap;
@@ -1006,8 +1007,9 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                         }
 
                                         let mut docstore_pointer_docs: Vec<u8> = Vec::new();
+
                                         let mut docstore_pointer_docs_pointer = 0;
-                                        if index.field_store_flag {
+                                        if !index.stored_field_names.is_empty() {
                                             if is_mmap {
                                                 let docstore_pointer_docs_size = read_u32_ref(
                                                     &index.docstore_file_mmap,
@@ -1303,9 +1305,8 @@ pub(crate) struct TermObject {
     pub field_positions_vec: Vec<Vec<u16>>,
 }
 
-#[doc(hidden)]
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct NonUniqueTermObject {
+pub(crate) struct NonUniqueTermObject {
     pub term: String,
     pub term_bigram1: String,
     pub term_bigram2: String,
@@ -1363,7 +1364,7 @@ impl Index {
         let _ = self.docstore_file.rewind();
         let _ = self.docstore_file.set_len(0);
 
-        if self.field_store_flag && self.meta.access_type == AccessType::Mmap {
+        if !self.stored_field_names.is_empty() && self.meta.access_type == AccessType::Mmap {
             self.docstore_file_mmap =
                 unsafe { Mmap::map(&self.docstore_file).expect("Unable to create Mmap") };
         }
@@ -1398,8 +1399,7 @@ impl Index {
         let _ = fs::remove_dir(index_path);
     }
 
-    /// Remove index from ram
-    /// Reverse of open_index
+    /// Remove index from RAM (Reverse of open_index)
     pub fn close_index(&mut self) {}
 }
 
@@ -1579,7 +1579,7 @@ impl IndexDocument2 for IndexArc {
             index_mut.index_posting(term.1, doc_id);
         }
 
-        if index_mut.field_store_flag {
+        if !index_mut.stored_field_names.is_empty() {
             index_mut.store_document(doc_id, document_item.document);
         }
     }

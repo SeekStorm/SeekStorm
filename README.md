@@ -1,5 +1,6 @@
 SeekStorm<br>
 [![Crates.io](https://img.shields.io/crates/v/seekstorm.svg)](https://crates.io/crates/seekstorm)
+[![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
 [![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 ========
@@ -28,6 +29,7 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * Language independent
 * API keys
 * RESTful API with CORS
+* Index either in RAM or memory mapped files
 
 Query types
 + OR  disjunction  union
@@ -192,8 +194,9 @@ cargo add serde_json
 ```
 
 ```
-use std::{error::Error, path::Path};
-use seekstorm::{index::*,search::*};
+use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
+use seekstorm::{index::*,search::*,highlighter::*};
+use tokio::sync::RwLock;
 ```
 
 use an asynchronous Rust runtime
@@ -223,6 +226,7 @@ let meta = IndexMetaObject {
 let serialize_schema=true;
 let segment_number_bits1=11;
 let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1).unwrap();
+let _index_arc = Arc::new(RwLock::new(index));
 ```
 
 open index (alternatively to create index)
@@ -253,9 +257,21 @@ let result_list = index_arc.search(query, query_type, offset, length, result_typ
 ```
 display results
 ```
+let highlights:Vec<Highlight>= vec![
+    Highlight {
+        field: "body".to_string(),
+        name:String::new(),
+        fragment_number: 2,
+        fragment_size: 160,
+        highlight_markup: true,
+    },
+];    
+
+let highlighter=Some(highlighter(highlights, result_list.query_term_strings));
+let fields_hashset= HashSet::new();
 let mut index=index_arc.write().await;
 for result in result_list.results.iter() {
-  let doc=index.get_document(result.doc_id,false).unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter,&fields_hashset).unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 ```

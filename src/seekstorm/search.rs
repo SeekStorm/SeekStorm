@@ -71,8 +71,7 @@ pub struct ResultListObject {
     pub suggestions: Vec<String>,
 
     pub results: Vec<CandidateObject>,
-
-    pub query_terms: Vec<NonUniqueTermObject>,
+    pub query_term_strings: Vec<String>,
 }
 
 /// Create query_list and non_unique_query_list
@@ -224,7 +223,17 @@ pub(crate) fn decode_posting_list_object(
 }
 
 impl Search for IndexArc {
-    /// Search index, with true real-time search if include_uncommited=true
+    /// Search the index for all indexed documents, both for committed and uncommitted documents.
+    /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
+    /// Arguments:
+    /// * `query_string`: query string + - "" search operators are recognized.
+    /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
+    ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+    /// * `offset`: offset of search results to return.
+    /// * `length`: number of search results to return.
+    /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
+    /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
+    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. Search in all indexed fields if empty (default).
     async fn search(
         &self,
         query_string: String,
@@ -576,7 +585,15 @@ impl Search for IndexArc {
             let query_list_len = query_list.len();
             let non_unique_query_list_len = non_unique_query_list.len();
 
-            rl.query_terms = non_unique_terms;
+            for term in non_unique_terms.iter() {
+                if term.is_bigram {
+                    rl.query_term_strings.push(term.term_bigram1.to_string());
+                    rl.query_term_strings.push(term.term_bigram2.to_string());
+                }
+                {
+                    rl.query_term_strings.push(term.term.to_string());
+                }
+            }
 
             let mut matching_blocks: i32 = 0;
             if query_list_len == 0 {

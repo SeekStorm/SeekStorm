@@ -1,8 +1,9 @@
 use memmap2::Mmap;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Seek, Write};
 
+use crate::highlighter::{top_fragments_from_field, Highlighter};
 use crate::index::{AccessType, Document, Index, ROARING_BLOCK_SIZE};
 use crate::utils::{read_u32, write_u32};
 
@@ -66,10 +67,17 @@ impl Index {
     }
 
     /// Get document for document id
+    /// Arguments:
+    /// * `doc_id`: Specifies which document to load from the document store of the index.
+    /// * `include_uncommited`: Return also documents which have not yet been committed.
+    /// * `highlighter_option`: Specifies the extraction of keyword-in-context (KWIC) fragments from fields in documents, and the highlighting of the query terms within.
+    /// * `fields`: Specifies which of the stored fields to return with each document. Default: If empty return all stoed fields
     pub fn get_document(
         &self,
         doc_id: usize,
         include_uncommited: bool,
+        highlighter_option: &Option<Highlighter>,
+        fields: &HashSet<String>,
     ) -> Result<Document, String> {
         if doc_id >= self.indexed_doc_count {
             return Err("not found".to_owned());
@@ -79,7 +87,7 @@ impl Index {
             return Err("not found".to_owned());
         }
 
-        if !self.field_store_flag {
+        if self.stored_field_names.is_empty() {
             return Err("not found".to_owned());
         }
 
@@ -135,7 +143,39 @@ impl Index {
                 ..(self.level_index[level].docstore_pointer_docs_pointer + pointer)];
 
             let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
-            let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+            let mut doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+
+            if let Some(highlighter) = highlighter_option {
+                let mut kwic_vec: VecDeque<String> = VecDeque::new();
+                for highlight in highlighter.highlights.iter() {
+                    let kwic =
+                        top_fragments_from_field(&doc, &highlighter.query_terms_ac, highlight)
+                            .unwrap();
+                    kwic_vec.push_back(kwic);
+                }
+
+                for highlight in highlighter.highlights.iter() {
+                    let kwic = kwic_vec.pop_front().unwrap();
+                    doc.insert(
+                        (if highlight.name.is_empty() {
+                            &highlight.field
+                        } else {
+                            &highlight.name
+                        })
+                        .to_string(),
+                        serde_json::Value::String(kwic),
+                    );
+                }
+            }
+
+            if !fields.is_empty() {
+                for key in self.stored_field_names.iter() {
+                    if !fields.contains(key) {
+                        doc.remove(key);
+                    }
+                }
+            }
+
             Ok(doc)
         }
     }

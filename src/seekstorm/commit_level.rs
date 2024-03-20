@@ -101,7 +101,7 @@ impl Index {
             .seek(SeekFrom::Start(segment_head_position2 as u64))
             .unwrap();
 
-        if self.field_store_flag {
+        if !self.stored_field_names.is_empty() {
             self.commit_level_docstore();
         }
 
@@ -109,8 +109,6 @@ impl Index {
             unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
 
         update_list_max_impact_score(self);
-
-        println!("roundcount: {}", self.level_index.len());
 
         self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
         self.postings_buffer = vec![0; 400_000_000];
