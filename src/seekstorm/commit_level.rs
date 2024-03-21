@@ -14,7 +14,9 @@ use crate::{
 pub(crate) const KEY_HEAD_SIZE: usize = 22;
 
 impl Index {
-    /// Flush level (64K documents) from HashMap to roaring bitmap compressed structure on RAM and disk
+    /// Flush level (64K documents) from HashMap in RAM to roaring bitmap compressed structure on Mmap or disk.
+    /// commit_level is invoked automatically each time 64K documents are indexed as well as on server exit.
+    /// It can also be invoked manually at any time.
     pub fn commit_level(&mut self, indexed_doc_count: usize) {
         if !self.level0_uncommitted {
             return;

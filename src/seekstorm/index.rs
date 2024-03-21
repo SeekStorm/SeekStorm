@@ -466,6 +466,7 @@ pub fn create_index(
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(Path::new(index_path).join(INDEX_FILENAME))
     {
         Ok(index_file) => {
@@ -473,6 +474,7 @@ pub fn create_index(
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(false)
                 .open(Path::new(index_path).join(DOCSTORE_FILENAME))
                 .unwrap();
 

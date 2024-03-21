@@ -93,90 +93,92 @@ impl Index {
 
         let doc_id_local = doc_id & 0b11111111_11111111;
 
-        if self.meta.access_type == AccessType::Ram {
-            let docstore_pointer_docs = if block_id == self.level_index.len() {
-                &self.compressed_docstore_segment_block_buffer
-            } else {
-                &self.level_index[block_id].docstore_pointer_docs
-            };
+        let mut doc =
+            if self.meta.access_type == AccessType::Ram || block_id == self.level_index.len() {
+                let docstore_pointer_docs = if block_id == self.level_index.len() {
+                    &self.compressed_docstore_segment_block_buffer
+                } else {
+                    &self.level_index[block_id].docstore_pointer_docs
+                };
 
-            let position = doc_id_local * 4;
-            let pointer = read_u32(docstore_pointer_docs, position) as usize;
+                let position = doc_id_local * 4;
+                let pointer = read_u32(docstore_pointer_docs, position) as usize;
 
-            let previous_pointer = if doc_id_local == 0 {
-                ROARING_BLOCK_SIZE * 4
-            } else {
-                read_u32(docstore_pointer_docs, position - 4) as usize
-            };
+                let previous_pointer = if doc_id_local == 0 {
+                    ROARING_BLOCK_SIZE * 4
+                } else {
+                    read_u32(docstore_pointer_docs, position - 4) as usize
+                };
 
-            if previous_pointer == pointer {
-                return Err("not found".to_owned());
-            }
-
-            let compressed_doc = &docstore_pointer_docs[previous_pointer..pointer];
-            let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
-            let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
-            Ok(doc)
-        } else {
-            let level = doc_id >> 16;
-
-            let pointer;
-            let previous_pointer;
-            let position =
-                self.level_index[level].docstore_pointer_docs_pointer + (doc_id_local * 4);
-
-            if doc_id_local == 0 {
-                previous_pointer = 65_536 * 4;
-                pointer = read_u32(&self.docstore_file_mmap, position) as usize;
-            } else {
-                previous_pointer = read_u32(&self.docstore_file_mmap, position - 4) as usize;
-                pointer = read_u32(&self.docstore_file_mmap, position) as usize;
-            };
-
-            if previous_pointer == pointer {
-                return Err("not found".to_owned());
-            }
-
-            let compressed_doc = &self.docstore_file_mmap[(self.level_index[level]
-                .docstore_pointer_docs_pointer
-                + previous_pointer)
-                ..(self.level_index[level].docstore_pointer_docs_pointer + pointer)];
-
-            let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
-            let mut doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
-
-            if let Some(highlighter) = highlighter_option {
-                let mut kwic_vec: VecDeque<String> = VecDeque::new();
-                for highlight in highlighter.highlights.iter() {
-                    let kwic =
-                        top_fragments_from_field(&doc, &highlighter.query_terms_ac, highlight)
-                            .unwrap();
-                    kwic_vec.push_back(kwic);
+                if previous_pointer == pointer {
+                    return Err("not found".to_owned());
                 }
 
-                for highlight in highlighter.highlights.iter() {
-                    let kwic = kwic_vec.pop_front().unwrap();
-                    doc.insert(
-                        (if highlight.name.is_empty() {
-                            &highlight.field
-                        } else {
-                            &highlight.name
-                        })
-                        .to_string(),
-                        serde_json::Value::String(kwic),
-                    );
+                let compressed_doc = &docstore_pointer_docs[previous_pointer..pointer];
+                let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
+                let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                doc
+            } else {
+                let level = doc_id >> 16;
+
+                let pointer;
+                let previous_pointer;
+                let position =
+                    self.level_index[level].docstore_pointer_docs_pointer + (doc_id_local * 4);
+
+                if doc_id_local == 0 {
+                    previous_pointer = 65_536 * 4;
+                    pointer = read_u32(&self.docstore_file_mmap, position) as usize;
+                } else {
+                    previous_pointer = read_u32(&self.docstore_file_mmap, position - 4) as usize;
+                    pointer = read_u32(&self.docstore_file_mmap, position) as usize;
+                };
+
+                if previous_pointer == pointer {
+                    return Err("not found".to_owned());
                 }
+
+                let compressed_doc = &self.docstore_file_mmap[(self.level_index[level]
+                    .docstore_pointer_docs_pointer
+                    + previous_pointer)
+                    ..(self.level_index[level].docstore_pointer_docs_pointer + pointer)];
+
+                let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
+                let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+
+                doc
+            };
+
+        if let Some(highlighter) = highlighter_option {
+            let mut kwic_vec: VecDeque<String> = VecDeque::new();
+            for highlight in highlighter.highlights.iter() {
+                let kwic =
+                    top_fragments_from_field(&doc, &highlighter.query_terms_ac, highlight).unwrap();
+                kwic_vec.push_back(kwic);
             }
 
-            if !fields.is_empty() {
-                for key in self.stored_field_names.iter() {
-                    if !fields.contains(key) {
-                        doc.remove(key);
-                    }
-                }
+            for highlight in highlighter.highlights.iter() {
+                let kwic = kwic_vec.pop_front().unwrap();
+                doc.insert(
+                    (if highlight.name.is_empty() {
+                        &highlight.field
+                    } else {
+                        &highlight.name
+                    })
+                    .to_string(),
+                    serde_json::Value::String(kwic),
+                );
             }
-
-            Ok(doc)
         }
+
+        if !fields.is_empty() {
+            for key in self.stored_field_names.iter() {
+                if !fields.contains(key) {
+                    doc.remove(key);
+                }
+            }
+        }
+
+        Ok(doc)
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.1.9"
+version = "0.1.10"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -47,7 +47,7 @@ async-recursion = "1.1.0"
 zstd = "0.13.0"
 rayon = "1.9.0"
 aho-corasick = "1.1.3"
-smallvec = "1.13.1"
+smallvec = "1.13.2"
 memmap2 = "0.9.4"
 get-size = { version = "0.1.4", features = ["derive"] }
 regex-syntax = "0.8.2"

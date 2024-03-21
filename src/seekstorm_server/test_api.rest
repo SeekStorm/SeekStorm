@@ -33,7 +33,7 @@ content-type: application/json
         "field_type": "Text", 
         "field_stored": true, 
         "field_name": "title", 
-        "field_indexed": false,
+        "field_indexed": true,
         "field_boost":10.0
     },
         {
@@ -168,7 +168,7 @@ content-type: application/json
     "query":"test",
     "offset":0,
     "length":10,
-    "include_uncommited": true,
+    "realtime": true,
     "field_filter": ["title", "body"]
 }
 
@@ -181,7 +181,7 @@ content-type: application/json
     "query":"test",
     "offset":0,
     "length":10,
-    "include_uncommited": true,
+    "realtime": true,
     "highlights": [
     { "field": "title", "fragment_number": 0, "fragment_size": 1000, "highlight_markup": true},
     { "field": "body", "fragment_number": 2, "fragment_size": 160, "highlight_markup": true},

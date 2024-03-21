@@ -975,7 +975,7 @@ impl Index {
                     self.indexed_field_id_mask,
                     self.longest_field_id,
                     &mut plo.field_vec_bigram1,
-                    plo.byte_array,
+                    &self.postings_buffer,
                     &mut read_pointer,
                 );
                 read_multifield_vec(
@@ -984,17 +984,18 @@ impl Index {
                     self.indexed_field_id_mask,
                     self.longest_field_id,
                     &mut plo.field_vec_bigram2,
-                    plo.byte_array,
+                    &self.postings_buffer,
                     &mut read_pointer,
                 );
             }
+
             read_multifield_vec(
                 self.indexed_field_vec.len(),
                 self.indexed_field_id_bits,
                 self.indexed_field_id_mask,
                 self.longest_field_id,
                 &mut field_vec,
-                plo.byte_array,
+                &self.postings_buffer,
                 &mut read_pointer,
             );
         } else {

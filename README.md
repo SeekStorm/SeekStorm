@@ -7,7 +7,7 @@ SeekStorm<br>
 
 **SeekStorm** is an **open-source, sub-millisecond full-text search library** & **multi-tenancy server** implemented in **Rust**.
 
-Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, active work in progress.
+Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, work in progress.
 
 SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
@@ -55,7 +55,7 @@ Result types
 ## Why SeekStorm?
 
 **Performance**  
-Lower latency, higher throughput, lower cost, and energy consumption, especially for multi-field and concurrent queries.  
+Lower latency, higher throughput, lower cost & energy consumption, esp. for multi-field and concurrent queries.  
 Low tail latencies ensure a smooth user experience and prevent loss of customers and revenue.
 
 **Scaling**  
