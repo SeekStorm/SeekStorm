@@ -101,7 +101,25 @@ content-type: application/json
 }
 ]
 
-### get doc
+### get doc with highlight
+GET http://127.0.0.1/api/v1/index/0/doc/0 
+apikey: {{api_key}}
+content-type: application/json
+
+//optional request body
+{
+    "query_terms": ["test"],
+    "fields": ["title", "body"],
+    "highlights": [
+    { "field": "title", "fragment_number": 0, "fragment_size": 1000, "highlight_markup": true},
+    { "field": "body", "fragment_number": 2, "fragment_size": 160, "highlight_markup": true},
+    { "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}]
+}
+
+### get doc without highlight
+GET http://127.0.0.1/api/v1/index/0/doc/0
+apikey: {{api_key}}
+content-type: application/json
 
 ### get docs
 
@@ -155,9 +173,23 @@ content-type: application/json
 GET http://127.0.0.1/api/v1/index/0/query 
 ?query=test
 &offset=0
-&length=10 
+&length=10
+&realtime=true 
 apikey: {{api_key}}
 content-type: application/json
+
+### query index GET with json request
+GET http://127.0.0.1/api/v1/index/0/query 
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"test",
+    "offset":0,
+    "length":10,
+    "realtime": true,
+    "field_filter": ["title", "body"]
+}
 
 ### query index POST
 POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1

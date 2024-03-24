@@ -73,6 +73,17 @@ pub struct CreateIndexRequest {
 pub struct DeleteApikeyRequest {
     pub apikey_base64: String,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GetDocumentRequest {
+    #[serde(default)]
+    pub query_terms: Vec<String>,
+    #[serde(default)]
+    pub highlights: Vec<Highlight>,
+    #[serde(default)]
+    pub fields: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct IndexResponseObject {
     pub id: u64,
@@ -258,13 +269,16 @@ pub(crate) async fn delete_index_api(
     index_id: u64,
     index_list: &mut HashMap<u64, IndexArc>,
 ) -> Result<u64, String> {
-    let index_arc = index_list.get(&index_id).unwrap();
-    let mut index_mut = index_arc.write().await;
-    index_mut.delete_index();
-    drop(index_mut);
-    index_list.remove(&index_id);
+    if let Some(index_arc) = index_list.get(&index_id) {
+        let mut index_mut = index_arc.write().await;
+        index_mut.delete_index();
+        drop(index_mut);
+        index_list.remove(&index_id);
 
-    Ok(index_list.len() as u64)
+        Ok(index_list.len() as u64)
+    } else {
+        Err("index_id not found".to_string())
+    }
 }
 
 pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String> {
@@ -281,18 +295,21 @@ pub(crate) async fn get_index_stats_api(
     index_id: u64,
     index_list: &HashMap<u64, IndexArc>,
 ) -> Result<IndexResponseObject, String> {
-    let index_arc = index_list.get(&index_id).unwrap();
-    let index_ref = index_arc.read().await;
+    if let Some(index_arc) = index_list.get(&index_id) {
+        let index_ref = index_arc.read().await;
 
-    Ok(IndexResponseObject {
-        version: VERSION.to_string(),
-        schema: index_ref.schema_map.clone(),
-        id: index_ref.meta.id,
-        name: index_ref.meta.name.clone(),
-        indexed_doc_count: index_ref.indexed_doc_count,
-        operations_count: 0,
-        query_count: 0,
-    })
+        Ok(IndexResponseObject {
+            version: VERSION.to_string(),
+            schema: index_ref.schema_map.clone(),
+            id: index_ref.meta.id,
+            name: index_ref.meta.name.clone(),
+            indexed_doc_count: index_ref.indexed_doc_count,
+            operations_count: 0,
+            query_count: 0,
+        })
+    } else {
+        Err("index_id not found".to_string())
+    }
 }
 
 pub(crate) async fn get_all_index_stats_api(
@@ -318,8 +335,35 @@ pub(crate) async fn index_documents_api(
     Ok(index.read().await.indexed_doc_count)
 }
 
-pub(crate) async fn get_document_api(_index: &IndexArc, _document_id: String) -> Option<Document> {
-    None
+pub(crate) async fn get_document_api(
+    index_arc: &IndexArc,
+    document_id: usize,
+    get_document_request: GetDocumentRequest,
+) -> Option<Document> {
+    if !index_arc.read().await.stored_field_names.is_empty() {
+        let highlighter_option = if get_document_request.highlights.is_empty()
+            || get_document_request.query_terms.is_empty()
+        {
+            None
+        } else {
+            Some(highlighter(
+                get_document_request.highlights,
+                get_document_request.query_terms,
+            ))
+        };
+
+        match index_arc.read().await.get_document(
+            document_id,
+            true,
+            &highlighter_option,
+            &HashSet::from_iter(get_document_request.fields),
+        ) {
+            Ok(doc) => Some(doc),
+            Err(_e) => None,
+        }
+    } else {
+        None
+    }
 }
 
 pub(crate) async fn update_document_api(

@@ -23,7 +23,6 @@ use std::{convert::Infallible, net::SocketAddr};
 
 use base64::{engine::general_purpose, Engine as _};
 
-use crate::api_endpoints::delete_apikey_api;
 use crate::api_endpoints::delete_document_api;
 use crate::api_endpoints::delete_documents_api;
 use crate::api_endpoints::delete_index_api;
@@ -39,6 +38,7 @@ use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
 use crate::api_endpoints::{create_index_api, SearchRequestObject};
+use crate::api_endpoints::{delete_apikey_api, GetDocumentRequest};
 use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
 use crate::{MASTER_KEY_SECRET, VERSION};
@@ -106,24 +106,40 @@ pub(crate) async fn http_request_handler(
                     let index_id: u64 = parts[3].parse().unwrap();
 
                     let apikey_list_ref = apikey_list.read().await;
-                    let index_arc = &apikey_list_ref[&apikey_hash].index_list[&index_id];
-                    let index_arc_clone = index_arc.clone();
-                    drop(apikey_list_ref);
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let index_arc_clone = index_arc.clone();
+                            drop(apikey_list_ref);
 
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let search_request =
-                        match serde_json::from_slice::<SearchRequestObject>(&request_bytes) {
-                            Ok(search_request) => search_request,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                            }
-                        };
+                            let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
 
-                    let search_result_local =
-                        query_index_api(&index_arc_clone, search_request).await;
+                            let search_request =
+                                match serde_json::from_slice::<SearchRequestObject>(&request_bytes)
+                                {
+                                    Ok(search_request) => search_request,
+                                    Err(e) => {
+                                        return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                                    }
+                                };
 
-                    let search_result_json = serde_json::to_string(&search_result_local).unwrap();
-                    Ok(Response::new(search_result_json.into()))
+                            let search_result_local =
+                                query_index_api(&index_arc_clone, search_request).await;
+
+                            let search_result_json =
+                                serde_json::to_string(&search_result_local).unwrap();
+                            Ok(Response::new(search_result_json.into()))
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -137,56 +153,138 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
-
-                    let apikey_list_ref = apikey_list.read().await;
-                    let index_arc = &apikey_list_ref[&apikey_hash].index_list[&index_id];
-                    let index_arc_clone = index_arc.clone();
-                    drop(apikey_list_ref);
-
-                    let params: HashMap<String, String> = req
-                        .uri()
-                        .query()
-                        .map(|v| {
-                            url::form_urlencoded::parse(v.as_bytes())
-                                .into_owned()
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let mut query_string = "";
-                    if let Some(value) = params.get("query") {
-                        query_string = value;
-                    }
-                    let mut api_offset = 0;
-                    if let Some(value) = params.get("offset") {
-                        api_offset = value.parse::<usize>().unwrap();
-                    }
-                    let mut api_length = 10;
-                    if let Some(value) = params.get("length") {
-                        api_length = value.parse::<usize>().unwrap();
-                    }
-
-                    let search_request = SearchRequestObject {
-                        query_string: query_string.to_string(),
-                        offset: api_offset,
-                        length: api_length,
-                        highlights: Vec::new(),
-                        realtime: false,
-                        field_filter: Vec::new(),
-                        fields: Vec::new(),
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
                     };
 
-                    let search_result_local =
-                        query_index_api(&index_arc_clone, search_request).await;
-                    let search_result_json = serde_json::to_string(&search_result_local).unwrap();
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let index_arc_clone = index_arc.clone();
+                            drop(apikey_list_ref);
 
-                    Ok(Response::new(search_result_json.into()))
+                            let params: HashMap<String, String> = req
+                                .uri()
+                                .query()
+                                .map(|v| {
+                                    url::form_urlencoded::parse(v.as_bytes())
+                                        .into_owned()
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+
+                            let search_request = if !params.is_empty() {
+                                let query_string = if let Some(query_string) = params.get("query") {
+                                    query_string.to_string()
+                                } else {
+                                    "".to_string()
+                                };
+
+                                let offset = if let Some(value) = params.get("offset") {
+                                    let Ok(api_offset) = value.parse::<usize>() else {
+                                        return Ok(status(
+                                            StatusCode::BAD_REQUEST,
+                                            "api_offset invalid or missing".to_string(),
+                                        ));
+                                    };
+                                    api_offset
+                                } else {
+                                    0
+                                };
+
+                                let length = if let Some(value) = params.get("length") {
+                                    let Ok(api_length) = value.parse::<usize>() else {
+                                        return Ok(status(
+                                            StatusCode::BAD_REQUEST,
+                                            "api_length invalid or missing".to_string(),
+                                        ));
+                                    };
+                                    api_length
+                                } else {
+                                    10
+                                };
+
+                                let realtime = if let Some(value) = params.get("realtime") {
+                                    let Ok(realtime) = value.parse::<bool>() else {
+                                        return Ok(status(
+                                            StatusCode::BAD_REQUEST,
+                                            "api_length invalid or missing".to_string(),
+                                        ));
+                                    };
+                                    realtime
+                                } else {
+                                    true
+                                };
+
+                                SearchRequestObject {
+                                    query_string,
+                                    offset,
+                                    length,
+                                    realtime,
+                                    highlights: Vec::new(),
+                                    field_filter: Vec::new(),
+                                    fields: Vec::new(),
+                                }
+                            } else {
+                                let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+
+                                match request_bytes.len() {
+                                    0 => {
+                                        return Ok(status(
+                                            StatusCode::BAD_REQUEST,
+                                            "no query specified".to_string(),
+                                        ));
+                                    }
+                                    _ => {
+                                        let search_request: SearchRequestObject =
+                                            match serde_json::from_slice::<SearchRequestObject>(
+                                                &request_bytes,
+                                            ) {
+                                                Ok(document_object) => document_object,
+                                                Err(e) => {
+                                                    return Ok(status(
+                                                        StatusCode::BAD_REQUEST,
+                                                        e.to_string(),
+                                                    ));
+                                                }
+                                            };
+                                        search_request
+                                    }
+                                }
+                            };
+
+                            let search_result_local =
+                                query_index_api(&index_arc_clone, search_request).await;
+                            let search_result_json =
+                                serde_json::to_string(&search_result_local).unwrap();
+
+                            Ok(Response::new(search_result_json.into()))
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        "api_key invalid or missing".to_string(),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    "api_key invalid or missing".to_string(),
+                ))
             }
         }
 
@@ -196,6 +294,7 @@ pub(crate) async fn http_request_handler(
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+
                     let create_index_request_object =
                         match serde_json::from_slice::<CreateIndexRequest>(&request_bytes) {
                             Ok(create_index_request_object) => create_index_request_object,
@@ -205,17 +304,23 @@ pub(crate) async fn http_request_handler(
                         };
 
                     let mut apikey_list_mut = apikey_list.write().await;
-                    let apikey_object = apikey_list_mut.get_mut(&apikey_hash).unwrap();
-                    let index_id = create_index_api(
-                        &index_path,
-                        create_index_request_object.index_name,
-                        create_index_request_object.schema,
-                        create_index_request_object.similarity,
-                        create_index_request_object.tokenizer,
-                        apikey_object,
-                    );
-                    drop(apikey_list_mut);
-                    Ok(Response::new(index_id.to_string().into()))
+                    if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) {
+                        let index_id = create_index_api(
+                            &index_path,
+                            create_index_request_object.index_name,
+                            create_index_request_object.schema,
+                            create_index_request_object.similarity,
+                            create_index_request_object.tokenizer,
+                            apikey_object,
+                        );
+                        drop(apikey_list_mut);
+                        Ok(Response::new(index_id.to_string().into()))
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -229,16 +334,33 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
 
                     let mut apikey_list_mut = apikey_list.write().await;
-                    let apikey_object = apikey_list_mut.get_mut(&apikey_hash).unwrap();
-                    let _ = delete_index_api(index_id, &mut apikey_object.index_list).await;
+                    if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) {
+                        let Ok(_) = delete_index_api(index_id, &mut apikey_object.index_list).await
+                        else {
+                            return Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index_id does not exists".to_string(),
+                            ));
+                        };
 
-                    let index_count = apikey_object.index_list.len();
-                    drop(apikey_list_mut);
+                        let index_count = apikey_object.index_list.len();
+                        drop(apikey_list_mut);
 
-                    Ok(Response::new(index_count.to_string().into()))
+                        Ok(Response::new(index_count.to_string().into()))
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -252,15 +374,33 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
-                    let apikey_list_ref = apikey_list.read().await;
-                    let apikey_object = apikey_list_ref.get(&apikey_hash).unwrap();
-                    let index_arc = apikey_object.index_list.get(&index_id).unwrap();
-                    let index_arc_clone = index_arc.clone();
-                    drop(apikey_list_ref);
-                    let result = commit_index_api(&index_arc_clone).await;
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
 
-                    Ok(Response::new(result.unwrap().to_string().into()))
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let index_arc_clone = index_arc.clone();
+                            drop(apikey_list_ref);
+                            let result = commit_index_api(&index_arc_clone).await;
+
+                            Ok(Response::new(result.unwrap().to_string().into()))
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -295,18 +435,38 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
 
                     let apikey_list_ref = apikey_list.read().await;
-                    let apikey_object = apikey_list_ref.get(&apikey_hash).unwrap();
-                    let status_object =
-                        get_index_stats_api(&index_path, index_id, &apikey_object.index_list)
-                            .await
-                            .unwrap();
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        let status_object =
+                            get_index_stats_api(&index_path, index_id, &apikey_object.index_list)
+                                .await;
 
-                    drop(apikey_list_ref);
-                    let status_object_json = serde_json::to_string(&status_object).unwrap();
-                    Ok(Response::new(status_object_json.into()))
+                        drop(apikey_list_ref);
+
+                        match status_object {
+                            Ok(status_object) => {
+                                let status_object_json =
+                                    serde_json::to_string(&status_object).unwrap();
+                                Ok(Response::new(status_object_json.into()))
+                            }
+                            Err(_e) => Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            )),
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -320,37 +480,57 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
+
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
                     let request_string = str::from_utf8(&request_bytes).unwrap();
+
                     let apikey_list_ref = apikey_list.read().await;
-                    let apikey_object = apikey_list_ref.get(&apikey_hash).unwrap();
-                    let index_arc = apikey_object.index_list.get(&index_id).unwrap();
-                    let index_arc_clone = index_arc.clone();
-                    drop(apikey_list_ref);
 
-                    let is_doc_vector = request_string.trim().starts_with('[');
-                    let status_object = if !is_doc_vector {
-                        let document_object = match serde_json::from_str(request_string) {
-                            Ok(document_object) => document_object,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                            }
-                        };
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let index_arc_clone = index_arc.clone();
+                            drop(apikey_list_ref);
 
-                        index_document_api(&index_arc_clone, document_object).await
+                            let status_object = if !request_string.trim().starts_with('[') {
+                                let document_object = match serde_json::from_str(request_string) {
+                                    Ok(document_object) => document_object,
+                                    Err(e) => {
+                                        return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                                    }
+                                };
+
+                                index_document_api(&index_arc_clone, document_object).await
+                            } else {
+                                let document_object_vec = match serde_json::from_str(request_string)
+                                {
+                                    Ok(document_object_vec) => document_object_vec,
+                                    Err(e) => {
+                                        return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                                    }
+                                };
+
+                                index_documents_api(&index_arc_clone, document_object_vec).await
+                            };
+                            let status_object_json = serde_json::to_string(&status_object).unwrap();
+                            Ok(Response::new(status_object_json.into()))
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
                     } else {
-                        let document_object_vec = match serde_json::from_str(request_string) {
-                            Ok(document_object_vec) => document_object_vec,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                            }
-                        };
-
-                        index_documents_api(&index_arc_clone, document_object_vec).await
-                    };
-                    let status_object_json = serde_json::to_string(&status_object).unwrap();
-                    Ok(Response::new(status_object_json.into()))
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -409,15 +589,68 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
-                    let doc_id = parts[5].to_string();
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
+                    let Ok(doc_id) = parts[5].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "doc_id invalid or missing".to_string(),
+                        ));
+                    };
+
+                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_string = str::from_utf8(&request_bytes).unwrap();
+
+                    let get_document_request = if let Some(pos) = request_string.rfind('}') {
+                        let get_document_request: GetDocumentRequest =
+                            match serde_json::from_str(&request_string[..=pos]) {
+                                Ok(document_object) => document_object,
+                                Err(e) => {
+                                    return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                                }
+                            };
+                        get_document_request
+                    } else {
+                        GetDocumentRequest {
+                            query_terms: Vec::new(),
+                            highlights: Vec::new(),
+                            fields: Vec::new(),
+                        }
+                    };
+
                     let apikey_list_ref = apikey_list.read().await;
-                    let apikey_object = apikey_list_ref.get(&apikey_hash).unwrap();
-                    let index_arc = apikey_object.index_list.get(&index_id).unwrap();
-                    let status_object = get_document_api(index_arc, doc_id).await;
-                    drop(apikey_list_ref);
-                    let status_object_json = serde_json::to_string(&status_object).unwrap();
-                    Ok(Response::new(status_object_json.into()))
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let status_object =
+                                get_document_api(index_arc, doc_id, get_document_request).await;
+                            drop(apikey_list_ref);
+
+                            if let Some(status_object) = status_object {
+                                let status_object_json =
+                                    serde_json::to_string(&status_object).unwrap();
+                                Ok(Response::new(status_object_json.into()))
+                            } else {
+                                Ok(status(
+                                    StatusCode::NOT_FOUND,
+                                    "doc_id does not exists".to_string(),
+                                ))
+                            }
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
                 } else {
                     Ok(status(StatusCode::UNAUTHORIZED, String::new()))
                 }
@@ -478,10 +711,9 @@ pub(crate) async fn http_request_handler(
                 let peer_master_apikey_base64 =
                     general_purpose::STANDARD.encode(peer_master_apikey);
 
-                if apikey_header.to_str().unwrap() == peer_master_apikey_base64 {
+                if apikey_header.to_str().unwrap_or("") == peer_master_apikey_base64 {
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let request_string = str::from_utf8(&request_bytes).unwrap();
-                    let apikey_quota_object = match serde_json::from_str(request_string) {
+                    let apikey_quota_object = match serde_json::from_slice(&request_bytes) {
                         Ok(apikey_quota_object) => apikey_quota_object,
                         Err(e) => {
                             return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
@@ -517,20 +749,21 @@ pub(crate) async fn http_request_handler(
                 let master_apikey = hasher.finalize();
                 let master_apikey_base64 = general_purpose::STANDARD.encode(master_apikey);
 
-                if apikey_header.to_str().unwrap() == master_apikey_base64 {
+                if apikey_header.to_str().unwrap_or("") == master_apikey_base64 {
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let request_string = str::from_utf8(&request_bytes).unwrap();
                     let request_object: DeleteApikeyRequest =
-                        match serde_json::from_str(request_string) {
+                        match serde_json::from_slice(&request_bytes) {
                             Ok(request_object) => request_object,
                             Err(e) => {
                                 return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
                             }
                         };
 
-                    let apikey = general_purpose::STANDARD
-                        .decode(&request_object.apikey_base64)
-                        .unwrap();
+                    let Ok(apikey) =
+                        general_purpose::STANDARD.decode(&request_object.apikey_base64)
+                    else {
+                        return Ok(status(StatusCode::UNAUTHORIZED, String::new()));
+                    };
 
                     let apikey_hash = calculate_hash(&apikey) as u128;
 
@@ -540,13 +773,22 @@ pub(crate) async fn http_request_handler(
 
                     match result {
                         Ok(count) => Ok(Response::new(count.to_string().into())),
-                        Err(_) => Ok(status(StatusCode::NOT_FOUND, String::new())),
+                        Err(_) => Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        )),
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        "api_key invalid or missing".to_string(),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    "api_key invalid or missing".to_string(),
+                ))
             }
         }
 

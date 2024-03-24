@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.11] - 2024-03-24
+
+### Added
+
+- get_document REST API endpoint with highlights and fields parameter implemented
+
+### Changed
+
+- REST API examples in test_api.rest updated
+- Increased REST API robustness
+- Server documentation for REST API endpoints improved (readme + doc)
+- REST API query index via GET now supports alternatively url query parameter (only query,offst,lengh,realtime) or JSON request object (all parameters)
+
 ## [0.1.10] - 2024-03-21
 
 ### Fixed
