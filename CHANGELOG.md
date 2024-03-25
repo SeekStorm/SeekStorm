@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.12] - 2024-03-25
+
+### Fixed
+
+- Indexing (field_indexed:true) and highlighting (field_stored:true, highlishts:... ) number fields (e.g. field_type="I64") fixed
+
+### Changed
+
+- REST API examples in test_api.rest updated
+
 ## [0.1.11] - 2024-03-24
 
 ### Added

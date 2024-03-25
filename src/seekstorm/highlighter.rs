@@ -1,4 +1,4 @@
-use crate::index::Document;
+use crate::index::{Document, FieldType, Index};
 use crate::min_heap::MinHeap;
 use aho_corasick::AhoCorasick;
 use serde::{Deserialize, Serialize};
@@ -160,6 +160,7 @@ pub(crate) struct Fragment<'a> {
 /// If the fragment length exceeds the specified fragment_size, then the fragment is truncated at the right or left side, so that the query term higlight positions are kept within the remaining fragment window.
 /// Selecting the right fragment and the right fragment window is fundamental for the users perceived relevancy of the search results.
 pub(crate) fn top_fragments_from_field(
+    index: &Index,
     document: &Document,
     query_terms_ac: &AhoCorasick,
     highlight: &Highlight,
@@ -177,100 +178,111 @@ pub(crate) fn top_fragments_from_field(
             };
             let mut topk_candidates = MinHeap::new(fragment_number);
 
-            let text: String = serde_json::from_str(&value.to_string()).unwrap();
-
-            let mut fragments: Vec<Fragment> = Vec::new();
-
-            let mut last = 0;
-            if !no_fragmentation {
-                for (character_index, matched) in text.match_indices(&SENTENCE_BOUNDARY_CHARS[..]) {
-                    if last != character_index {
-                        let section = Fragment {
-                            text: &text[last..character_index + matched.len()],
-                            trim_left: false,
-                            trim_right: false,
-                        };
-
-                        add_fragment(
-                            no_score_no_highlight,
-                            section,
-                            query_terms_ac,
-                            &mut fragments,
-                            &mut topk_candidates,
-                            fragment_number,
-                            highlight.fragment_size,
-                        );
-
-                        if no_score_no_highlight
-                            && topk_candidates.current_heap_size == fragment_number
-                        {
-                            break;
-                        }
-                    }
-                    last = character_index + matched.len();
-                }
-            }
-
-            if last < text.len() - 1 {
-                let section = Fragment {
-                    text: &text[last..],
-                    trim_left: false,
-                    trim_right: false,
+            if let Some(schema_field) = index.schema_map.get(&highlight.field) {
+                let text = match schema_field.field_type {
+                    FieldType::Text | FieldType::String => serde_json::from_str(&value.to_string())
+                        .unwrap_or(value.to_string())
+                        .to_string(),
+                    _ => value.to_string(),
                 };
 
-                add_fragment(
-                    no_score_no_highlight,
-                    section,
-                    query_terms_ac,
-                    &mut fragments,
-                    &mut topk_candidates,
-                    fragment_number,
-                    highlight.fragment_size,
-                );
-            }
+                let mut fragments: Vec<Fragment> = Vec::new();
 
-            let mut combined_string = String::with_capacity(text.len());
+                let mut last = 0;
+                if !no_fragmentation {
+                    for (character_index, matched) in
+                        text.match_indices(&SENTENCE_BOUNDARY_CHARS[..])
+                    {
+                        if last != character_index {
+                            let section = Fragment {
+                                text: &text[last..character_index + matched.len()],
+                                trim_left: false,
+                                trim_right: false,
+                            };
 
-            if !fragments.is_empty() {
-                if topk_candidates.current_heap_size > 0 {
-                    if topk_candidates.current_heap_size < fragment_number {
+                            add_fragment(
+                                no_score_no_highlight,
+                                section,
+                                query_terms_ac,
+                                &mut fragments,
+                                &mut topk_candidates,
+                                fragment_number,
+                                highlight.fragment_size,
+                            );
+
+                            if no_score_no_highlight
+                                && topk_candidates.current_heap_size == fragment_number
+                            {
+                                break;
+                            }
+                        }
+                        last = character_index + matched.len();
+                    }
+                }
+
+                if last < text.len() - 1 {
+                    let section = Fragment {
+                        text: &text[last..],
+                        trim_left: false,
+                        trim_right: false,
+                    };
+
+                    add_fragment(
+                        no_score_no_highlight,
+                        section,
+                        query_terms_ac,
+                        &mut fragments,
+                        &mut topk_candidates,
+                        fragment_number,
+                        highlight.fragment_size,
+                    );
+                }
+
+                let mut combined_string = String::with_capacity(text.len());
+
+                if !fragments.is_empty() {
+                    if topk_candidates.current_heap_size > 0 {
+                        if topk_candidates.current_heap_size < fragment_number {
+                            topk_candidates
+                                ._elements
+                                .truncate(topk_candidates.current_heap_size);
+                        }
+
                         topk_candidates
                             ._elements
-                            .truncate(topk_candidates.current_heap_size);
+                            .sort_by(|a, b| a.doc_id.partial_cmp(&b.doc_id).unwrap());
+
+                        let mut previous_docid = 0;
+                        for candidate in topk_candidates._elements {
+                            if (!combined_string.is_empty()
+                                && !combined_string.ends_with("...")
+                                && candidate.doc_id != previous_docid + 1)
+                                || (fragments[candidate.doc_id].trim_left
+                                    && (combined_string.is_empty()
+                                        || !combined_string.ends_with("...")))
+                            {
+                                combined_string.push_str("...")
+                            };
+                            combined_string.push_str(fragments[candidate.doc_id].text);
+                            previous_docid = candidate.doc_id;
+
+                            if fragments[candidate.doc_id].trim_right {
+                                combined_string.push_str("...")
+                            };
+                        }
+                    } else {
+                        combined_string.push_str(fragments[0].text);
                     }
-
-                    topk_candidates
-                        ._elements
-                        .sort_by(|a, b| a.doc_id.partial_cmp(&b.doc_id).unwrap());
-
-                    let mut previous_docid = 0;
-                    for candidate in topk_candidates._elements {
-                        if (!combined_string.is_empty()
-                            && !combined_string.ends_with("...")
-                            && candidate.doc_id != previous_docid + 1)
-                            || (fragments[candidate.doc_id].trim_left
-                                && (combined_string.is_empty()
-                                    || !combined_string.ends_with("...")))
-                        {
-                            combined_string.push_str("...")
-                        };
-                        combined_string.push_str(fragments[candidate.doc_id].text);
-                        previous_docid = candidate.doc_id;
-
-                        if fragments[candidate.doc_id].trim_right {
-                            combined_string.push_str("...")
-                        };
-                    }
-                } else {
-                    combined_string.push_str(fragments[0].text);
                 }
-            }
 
-            if highlight.highlight_markup && !no_score_no_highlight {
-                highlight_terms(&mut combined_string, query_terms_ac);
-            }
+                if highlight.highlight_markup && !no_score_no_highlight {
+                    highlight_terms(&mut combined_string, query_terms_ac);
+                }
 
-            Ok(combined_string)
+                Ok(combined_string)
+            } else {
+                Ok("".to_string())
+            }
         }
     }
 }

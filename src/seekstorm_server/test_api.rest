@@ -220,5 +220,66 @@ content-type: application/json
     { "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}]
 }
 
+### create index NUMBER
+POST http://127.0.0.1:80/api/v1/index HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "schema":[{
+        "field_type": "Text", 
+        "field_stored": true, 
+        "field_name": "title", 
+        "field_indexed": true,
+        "field_boost":10.0
+    },
+        {
+        "field_type": "Text", 
+        "field_stored": true, 
+        "field_name": "body", 
+        "field_indexed": true
+    },
+    {
+        "field_type": "String", 
+        "field_stored": true, 
+        "field_name": "url", 
+        "field_indexed": false
+    },
+    {
+        "field_type": "I64", 
+        "field_stored": true, 
+        "field_name": "number", 
+        "field_indexed": true
+    }],
+    "index_name": "test_index",
+    "similarity": "Bm25fProximity",
+    "tokenizer": "UnicodeAlphanumeric"
+}
+
+### index doc NUMBER
+POST http://127.0.0.1:80/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "title":"title1 test",
+    "body":"body1",
+    "url":"url1",
+    "number": 12345
+}
+
+### query index POST with highlight NUMBER
+POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"12345",
+    "offset":0,
+    "length":10,
+    "realtime": true,
+    "highlights": [
+    { "field": "number", "name":"_number","fragment_number": 0, "fragment_size": 1000, "highlight_markup": true}]
+}
 
 // todo: other API endpoints

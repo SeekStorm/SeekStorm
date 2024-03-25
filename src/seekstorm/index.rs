@@ -303,12 +303,13 @@ pub(crate) struct SegmentLevel0 {
 pub enum FieldType {
     I64,
     U64,
+    F64,
+    Bool,
     String,
     Text,
     Bytes,
     Json,
     Date,
-    F64,
 }
 
 /// Defines a field in index schema: field_name, field_stored, field_indexed , field_type, field_boost.
@@ -1453,7 +1454,14 @@ impl IndexDocument for IndexArc {
                     let mut non_unique_terms: Vec<NonUniqueTermObject> = Vec::new();
                     let mut nonunique_terms_count = 0u32;
 
-                    let text: String = serde_json::from_str(&field_value.to_string()).unwrap();
+                    let text = match schema_field.field_type {
+                        FieldType::Text | FieldType::String => {
+                            serde_json::from_str(&field_value.to_string())
+                                .unwrap_or(field_value.to_string())
+                                .to_string()
+                        }
+                        _ => field_value.to_string(),
+                    };
 
                     let mut query_type_mut = QueryType::Union;
 

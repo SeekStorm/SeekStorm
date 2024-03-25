@@ -153,7 +153,8 @@ impl Index {
             let mut kwic_vec: VecDeque<String> = VecDeque::new();
             for highlight in highlighter.highlights.iter() {
                 let kwic =
-                    top_fragments_from_field(&doc, &highlighter.query_terms_ac, highlight).unwrap();
+                    top_fragments_from_field(self, &doc, &highlighter.query_terms_ac, highlight)
+                        .unwrap();
                 kwic_vec.push_back(kwic);
             }
 

@@ -231,14 +231,14 @@ pub(crate) async fn http_request_handler(
                             } else {
                                 let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
 
-                                match request_bytes.len() {
-                                    0 => {
+                                match request_bytes.is_empty() {
+                                    true => {
                                         return Ok(status(
                                             StatusCode::BAD_REQUEST,
                                             "no query specified".to_string(),
                                         ));
                                     }
-                                    _ => {
+                                    false => {
                                         let search_request: SearchRequestObject =
                                             match serde_json::from_slice::<SearchRequestObject>(
                                                 &request_bytes,
@@ -603,11 +603,10 @@ pub(crate) async fn http_request_handler(
                     };
 
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let request_string = str::from_utf8(&request_bytes).unwrap();
 
-                    let get_document_request = if let Some(pos) = request_string.rfind('}') {
+                    let get_document_request = if !request_bytes.is_empty() {
                         let get_document_request: GetDocumentRequest =
-                            match serde_json::from_str(&request_string[..=pos]) {
+                            match serde_json::from_slice(&request_bytes) {
                                 Ok(document_object) => document_object,
                                 Err(e) => {
                                     return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
