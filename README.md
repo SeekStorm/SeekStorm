@@ -109,33 +109,59 @@ Vector search works with semantic similarity, returning results within with a gi
 ### Keyword search (lexical search)
 If you search for exact results like proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then keyword search is your friend. Vector search on the other hand will bury the exact result that you are looking for among a myriad results that are only somehow semantically related. At the same time, if you don’t know the exact terms, or you are interested in a broader topic, meaning or synonym, no matter what exact terms are used, then keyword search will fail you.
 
-* high indexing speed (for large document numbers)
-* smaller index size
-* high query speed and throughput (for large document numbers)
-* lower infrastructure cost per document and per query, lower energy consumption
-* good scaling (for large document numbers)
-* perfect explainability
-* perfect precision (for exact keyword match)
-* perfect recall for exact keyword match, low for semantic meaning
-* unable to capture meaning and similarity
-* efficient and lossless for exact keyword and phrase search
+```diff
+- works with text data only
+- unable to capture context, meaning and semantic similarity
+- low recall for semantic meaning
++ perfect recall for exact keyword match 
++ perfect precision (for exact keyword match)
++ high query speed and throughput (for large document numbers)
++ high indexing speed (for large document numbers)
++ incremental indexing fully supported
++ smaller index size
++ lower infrastructure cost per document and per query, lower energy consumption
++ good scalability (for large document numbers)
++ perfect for exact keyword and phrase search, no false positives
++ perfect explainability
++ efficient and lossless for exact keyword and phrase search
++ works with new vocabulary out of the box
++ works with any language out of the box
++ works perfect with long-tail vocabulary out of the box
++ works perfect with any rare language or domain-specific vocabulary out of the box
++ RAG (Retrieval-augmented generation) based on keyword search offers unrestricted real-time capabilities.
+```
+
 
 ### Vector search
 Vector search is perfect if you don’t know the exact query terms, or you are interested in a broader topic, meaning or synonym, no matter what exact query terms are used. But if you are looking for exact terms, e.g. proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then you should always use keyword search. Vector search will but bury the exact result that you are looking for among a myriad results that are only somehow related. It has a good recall, but low precision, and higher latency. It is prone to false positives, e.g. in in plagiarism detection as exact words and word order get lost.
 
-Vector search enables you to search not only for similar text, but everything that can be transformed to a vector: text, images, audio ...
-It works for similar images, face recognition or finger prints and it enables you to do magic things like queen - woman + man = king
+Vector search enables you to search not only for similar text, but everything that can be transformed to a vector: text, images (face recognition, finger prints), audio and it enables you to do magic things like queen - woman + man = king.
 
-* slower indexing speed (for large document numbers)
-* larger index size
-* lower query speed and throughput (for large document numbers)
-* higher infrastructure cost per document and per query, higher energy consumption
-* limited scaling (for large document numbers)
-* low explainability makes it difficult to spot manipulations, bias and root cause of retieval/ranking problems
-* lower precision (for exact keyword match)
-* high recall for semantic meaning (80/90%), lower recall for exact keyword match
-* able to capture meaning and similarity
-* inefficient and lossy for exact keyword and phrase search
+```diff
++ works with any data that can be transformed to a vector: text, image, audio ...
++ able to capture context, meaning, and semantic similarity
++ high recall for semantic meaning (90%)
+- lower recall for exact keyword match
+- lower precision (for exact keyword match)
+- lower query speed and throughput (for large document numbers)
+- lower indexing speed (for large document numbers)
+- incremental indexing is expensive and requires rebuilding the entire index periodically, which is extremely time-consuming and ressource intensive.
+- larger index size
+- higher infrastructure cost per document and per query, higher energy consumption
+- limited scalability (for large document numbers)
+- unsuitible for exact keyword and phrase search, many false positives
+- low explainability makes it difficult to spot manipulations, bias and root cause of retieval/ranking problems
+- inefficient and lossy for exact keyword and phrase search
+- Additional effort and cost to create embeddings and keep them updated for every language and domain. Even if the number of indexed documents is small, the embeddings have to created from a large corpus before nevertheless.
+- Limited real-time capability due to limited recency of embeddings
+- works only with vocabulary known at the time of embedding creation
+- works only with the languages of the corpus from which the embeddings have been derived
+- works only with long-tail vocabulary that was sufficiently represented in the corpus from which the embeddings have been derived
+- works only with rare language or domain-specific vocabulary that was sufficiently represented in the corpus from which the embeddings have been derived
+- RAG (Retrieval-augmented generation) based on vector search offers only limited real-time capabilities, as it can't process new vocabulary that arrived after the embedding generation
+```
+
+In many cases vector search is not an replacement for keyword search, but rather a complementary addition - best to be used within a hybrid solution where the strengths of both approaches are combined.
 
 ---
 

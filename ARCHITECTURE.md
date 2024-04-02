@@ -17,6 +17,23 @@ index.bin : contains posting lists with document IDs and term positions. Posting
 
 index.json : contains index meta data such as similarity (e.g. Bm25), access type (e.g. Ram/Mmap), tokenizer (e.g. AsciiAlphabetic).
 
+**SeekStorm server index directory structure**
+
+First hierarchy level: API keys  
+Second hierarchy level: Indices per API key  
+```
+seekstorm_index/  
+├─ 0/  
+│  ├─ 0  
+│  ├─ 1  
+│  ├─ 2  
+├─ 1/  
+│  ├─ 0  
+│  ├─ 1  
+```
+
+You can manually delete, copy, or backup and restore both API key and index directories (shutdown server first and then restart).
+
 ## Search
 
 * DaaT (Document-at-a-Time) intersection and union: 
@@ -24,8 +41,8 @@ index.json : contains index meta data such as similarity (e.g. Bm25), access typ
   + allows streaming to enable scalability for huge indexes
 * SIMD vector processing hardware support for intersection and union of roaring bitmaps compressed posting lists
 * Galloping intersection
-* improved Block-max WAND
-* bigram indexing of frequent terms
+* Improved Block-max WAND
+* Bigram indexing of frequent terms
 
 ## Database schema
 

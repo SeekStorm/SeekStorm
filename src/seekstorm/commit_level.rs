@@ -17,6 +17,13 @@ impl Index {
     /// Flush level (64K documents) from HashMap in RAM to roaring bitmap compressed structure on Mmap or disk.
     /// commit_level is invoked automatically each time 64K documents are indexed as well as on server exit.
     /// It can also be invoked manually at any time.
+    /// commit_level is a **hard commit** for persistence on disk. A **soft commit** for searchability 
+    /// is invoked implicitly with every index_doc,
+    /// i.e. the document can immediately searched and included in the search results 
+    /// if it matches the query and the query paramter realtime=true is ebabled.
+    /// Usually you never need to invoke commit manually, besides before the program is terminated.
+    /// Use commit_level with cause, as it is an expensive operation
+
     pub fn commit_level(&mut self, indexed_doc_count: usize) {
         if !self.level0_uncommitted {
             return;
