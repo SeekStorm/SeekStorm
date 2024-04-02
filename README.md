@@ -161,7 +161,9 @@ Vector search enables you to search not only for similar text, but everything th
 - RAG (Retrieval-augmented generation) based on vector search offers only limited real-time capabilities, as it can't process new vocabulary that arrived after the embedding generation
 ```
 
-In many cases vector search is not an replacement for keyword search, but rather a complementary addition - best to be used within a hybrid solution where the strengths of both approaches are combined.
+<br>
+
+> **Vector search is not an replacement for keyword search, but a complementary addition** - best to be used within a hybrid solution where the strengths of both approaches are combined. **Keyword search is not outdated, but time-proven**.
 
 ---
 
