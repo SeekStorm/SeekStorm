@@ -58,6 +58,11 @@ Result types
 Lower latency, higher throughput, lower cost & energy consumption, esp. for multi-field and concurrent queries.  
 Low tail latencies ensure a smooth user experience and prevent loss of customers and revenue.
 
+**Consistency**  
+No unpredictable query latency during and after large-volume indexing as SeekStorm doesn't require resource-intensive segment merges.  
+Stable latencies - no cold start costs due to just-in-time compilation, no unpredictable garbage collection delays.  
+Realtime search available during before and during entire commit process.
+
 **Scaling**  
 Maintains low latency, high throughput, and low RAM consumption even for billion-scale indices.  
 Unlimited field number, field length & index size.
@@ -141,16 +146,16 @@ Vector search enables you to search not only for similar text, but everything th
 + works with any data that can be transformed to a vector: text, image, audio ...
 + able to capture context, meaning, and semantic similarity
 + high recall for semantic meaning (90%)
-- lower recall for exact keyword match
+- lower recall for exact keyword match (for Approximate Similarity Search)
 - lower precision (for exact keyword match)
 - lower query speed and throughput (for large document numbers)
 - lower indexing speed (for large document numbers)
-- incremental indexing is expensive and requires rebuilding the entire index periodically, which is extremely time-consuming and ressource intensive.
+- incremental indexing is expensive and requires rebuilding the entire index periodically, which is extremely time-consuming and resource intensive.
 - larger index size
 - higher infrastructure cost per document and per query, higher energy consumption
 - limited scalability (for large document numbers)
-- unsuitible for exact keyword and phrase search, many false positives
-- low explainability makes it difficult to spot manipulations, bias and root cause of retieval/ranking problems
+- unsuitable for exact keyword and phrase search, many false positives
+- low explainability makes it difficult to spot manipulations, bias and root cause of retrieval/ranking problems
 - inefficient and lossy for exact keyword and phrase search
 - Additional effort and cost to create embeddings and keep them updated for every language and domain. Even if the number of indexed documents is small, the embeddings have to created from a large corpus before nevertheless.
 - Limited real-time capability due to limited recency of embeddings
@@ -163,7 +168,7 @@ Vector search enables you to search not only for similar text, but everything th
 
 <br>
 
-> **Vector search is not an replacement for keyword search, but a complementary addition** - best to be used within a hybrid solution where the strengths of both approaches are combined. **Keyword search is not outdated, but time-proven**.
+> **Vector search is not a replacement for keyword search, but a complementary addition** - best to be used within a hybrid solution where the strengths of both approaches are combined. **Keyword search is not outdated, but time-proven**.
 
 ---
 
@@ -177,7 +182,6 @@ We have (partially) ported the SeekStorm codebase from C# to Rust
 + No framework dependencies (CLR or JVM virtual machines)
 + Ahead-of-time instead of just-in-time compilation
 + Memory safe language https://www.whitehouse.gov/oncd/briefing-room/2024/02/26/press-release-technical-report/ 
-- Steep learning curve (previously development time divided between designing algorithms and debugging, now between translating and fighting with the compiler borrow checker)
 
 Rust is great for performance-critical applications 🚀 that deal with big data and/or many concurrent users. 
 Fast algorithms will shine even more with a performance-conscious programming language 🙂
