@@ -2479,7 +2479,7 @@ pub(crate) fn add_result_multiterm_multifield(
                 plo.positions_pointer = item.positions_pointer as usize;
                 plo.is_embedded = item.is_embedded;
                 plo.embedded_positions = item.embedded_positions;
-                plo.field_vec = item.field_vec.clone();
+                plo.field_vec.clone_from(&item.field_vec);
                 plo.p_pos = 0;
                 plo.positions_count = item.positions_count;
                 plo.p_field = 0;

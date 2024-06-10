@@ -21,8 +21,6 @@ pub struct DocumentObject {
 }
 
 pub(crate) async fn ingest_ndjson(index_arc: Arc<RwLock<Index>>, data_path_str: &str) {
-    let batch_size = 100_000;
-
     let mut data_path = Path::new(&data_path_str);
     let mut absolute_path = current_exe().unwrap();
     if !data_path.is_absolute() {
@@ -60,13 +58,6 @@ pub(crate) async fn ingest_ndjson(index_arc: Arc<RwLock<Index>>, data_path_str: 
                     index_arc_clone_clone.index_document(doc_object).await;
 
                     docid += 1;
-
-                    if docid % batch_size == 0 {
-                        println!(
-                            "indexed documents {}",
-                            docid.to_formatted_string(&Locale::en)
-                        );
-                    }
                 }
             }
 
@@ -77,7 +68,7 @@ pub(crate) async fn ingest_ndjson(index_arc: Arc<RwLock<Index>>, data_path_str: 
 
             let mut index_mut = index_arc.write().await;
             let indexed_doc_count = index_mut.indexed_doc_count;
-            index_mut.commit_level(indexed_doc_count);
+            index_mut.commit(indexed_doc_count);
 
             let elapsed_time = start_time.elapsed().as_nanos();
 

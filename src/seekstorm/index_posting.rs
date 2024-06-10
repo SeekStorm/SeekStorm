@@ -1,16 +1,20 @@
 use std::cmp;
 
+use num::FromPrimitive;
+
 use crate::{
+    commit::KEY_HEAD_SIZE,
     compress_postinglist::compress_positions,
     index::{
-        Index, PostingListObject0, TermObject, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2,
-        ROARING_BLOCK_SIZE, STOP_BIT,
+        AccessType, CompressionType, Index, PostingListObject0, TermObject, FIELD_STOP_BIT_1,
+        FIELD_STOP_BIT_2, ROARING_BLOCK_SIZE, STOP_BIT,
     },
-    utils::{block_copy_mut, write_u16_ref, write_u32},
+    search::binary_search,
+    utils::{block_copy_mut, read_u16, read_u32, write_u16_ref, write_u32},
 };
 
 impl Index {
-    pub(crate) fn index_posting(&mut self, term: TermObject, doc_id: usize) {
+    pub(crate) fn index_posting(&mut self, term: TermObject, doc_id: usize, restore: bool) {
         let mut positions_count_sum = 0;
         let mut field_positions_vec: Vec<Vec<u16>> = Vec::new();
         for positions_uncompressed in term.field_positions_vec.iter() {
@@ -42,6 +46,102 @@ impl Index {
                 ..Default::default()
             });
         let exists: bool = value.posting_count > 0;
+
+        if self.is_last_level_incomplete && !exists && !restore {
+            if self.meta.access_type == AccessType::Mmap {
+                let pointer = self.segments_index[term.key0 as usize]
+                    .byte_array_blocks_pointer
+                    .last()
+                    .unwrap();
+
+                let key_count = pointer.2 as usize;
+
+                let byte_array_keys =
+                    &self.index_file_mmap[pointer.0 - (key_count * KEY_HEAD_SIZE)..pointer.0];
+                let key_index = binary_search(byte_array_keys, key_count, term.key_hash);
+
+                if key_index >= 0 {
+                    let key_address = key_index as usize * KEY_HEAD_SIZE;
+                    let compression_type_pointer = read_u32(byte_array_keys, key_address + 18);
+                    let rank_position_pointer_range =
+                        compression_type_pointer & 0b0011_1111_1111_1111_1111_1111_1111_1111;
+
+                    let position_range_previous = if key_index == 0 {
+                        0
+                    } else {
+                        let posting_count_previous =
+                            read_u16(byte_array_keys, key_address + 8 - KEY_HEAD_SIZE) as usize + 1;
+                        let pointer_pivot_p_docid_previous =
+                            read_u16(byte_array_keys, key_address + 16 - KEY_HEAD_SIZE);
+
+                        let posting_pointer_size_sum_previous = pointer_pivot_p_docid_previous
+                            as usize
+                            * 2
+                            + if (pointer_pivot_p_docid_previous as usize) < posting_count_previous
+                            {
+                                (posting_count_previous - pointer_pivot_p_docid_previous as usize)
+                                    * 3
+                            } else {
+                                0
+                            };
+
+                        let compression_type_pointer_previous =
+                            read_u32(byte_array_keys, key_address + 18 - KEY_HEAD_SIZE);
+                        let rank_position_pointer_range_previous = compression_type_pointer_previous
+                            & 0b0011_1111_1111_1111_1111_1111_1111_1111;
+                        let compression_type_previous: CompressionType = FromPrimitive::from_i32(
+                            (compression_type_pointer_previous >> 30) as i32,
+                        )
+                        .unwrap();
+
+                        let compressed_docid_previous = match compression_type_previous {
+                            CompressionType::Array => posting_count_previous * 2,
+                            CompressionType::Bitmap => 8192,
+                            CompressionType::Rle => {
+                                let block_id = doc_id >> 16;
+                                let segment: &crate::index::SegmentIndex =
+                                    &self.segments_index[term.key0 as usize];
+                                let byte_array_docid = &self.index_file_mmap[segment
+                                    .byte_array_blocks_pointer[block_id]
+                                    .0
+                                    ..segment.byte_array_blocks_pointer[block_id].0
+                                        + segment.byte_array_blocks_pointer[block_id].1];
+
+                                4 * read_u16(
+                                    byte_array_docid,
+                                    rank_position_pointer_range_previous as usize
+                                        + posting_pointer_size_sum_previous,
+                                ) as usize
+                                    + 2
+                            }
+                            _ => 0,
+                        };
+
+                        rank_position_pointer_range_previous
+                            + (posting_pointer_size_sum_previous + compressed_docid_previous) as u32
+                    };
+
+                    value.size_compressed_positions_key =
+                        (rank_position_pointer_range - position_range_previous) as usize;
+                }
+            } else {
+                let posting_list_object_index_option = self.segments_index[term.key0 as usize]
+                    .segment
+                    .get(&term.key_hash);
+
+                if posting_list_object_index_option.is_some() {
+                    let plo = posting_list_object_index_option.unwrap();
+                    let block = plo.blocks.last().unwrap();
+                    if block.block_id as usize == self.level_index.len() - 1 {
+                        let rank_position_pointer_range: u32 = block.compression_type_pointer
+                            & 0b0011_1111_1111_1111_1111_1111_1111_1111;
+
+                        value.size_compressed_positions_key =
+                            (rank_position_pointer_range - plo.position_range_previous) as usize;
+                    }
+                };
+            }
+        }
 
         let mut posting_pointer_size = if value.size_compressed_positions_key < 32_768 {
             value.pointer_pivot_p_docid = value.posting_count as u16 + 1;
@@ -428,7 +528,8 @@ impl Index {
                 is_bigram: term.is_bigram,
                 term_bigram1: term.term_bigram1,
                 term_bigram2: term.term_bigram2,
-                size_compressed_positions_key: positions_stack,
+                size_compressed_positions_key: value.size_compressed_positions_key
+                    + positions_stack,
                 docid_delta_max: docid_lsb,
                 docid_old: docid_lsb,
                 ..*value

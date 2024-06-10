@@ -1,4 +1,4 @@
-use crate::commit_level::KEY_HEAD_SIZE;
+use crate::commit::KEY_HEAD_SIZE;
 use crate::min_heap::CandidateObject;
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
@@ -77,20 +77,6 @@ pub struct ResultListObject {
 /// Create query_list and non_unique_query_list
 /// blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
 /// then the intersect_docid within a single block is executed  (=segments?)
-impl Index {
-    pub(crate) fn get_posting_count(&self, term_string: &str) -> u32 {
-        let key0 =
-            self.hasher_32.hash_one(term_string.as_bytes()) as u32 & self.segment_number_mask1;
-        let key_hash = self.hasher_64.hash_one(term_string.as_bytes());
-
-        match self.segments_index[key0 as usize].segment.get(&key_hash) {
-            Some(value1) => value1.posting_count,
-
-            None => 0,
-        }
-    }
-}
-
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
 /// Arguments:
@@ -119,7 +105,7 @@ pub trait Search {
 
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
 #[inline(never)]
-fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i64 {
+pub(crate) fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i64 {
     let mut left = 0i64;
     let mut right = len as i64 - 1;
     while left <= right {
@@ -161,10 +147,12 @@ pub(crate) fn decode_posting_list_object(
         if key_index >= 0 {
             let key_address = key_index as usize * KEY_HEAD_SIZE;
             let posting_count = read_u16(byte_array, key_address + 8);
+
             let max_docid = read_u16(byte_array, key_address + 10);
             let max_p_docid = read_u16(byte_array, key_address + 12);
             let pointer_pivot_p_docid = read_u16(byte_array, key_address + 16);
             let compression_type_pointer = read_u32(byte_array, key_address + 18);
+
             posting_count_list += posting_count as u32 + 1;
 
             if first {
@@ -214,6 +202,7 @@ pub(crate) fn decode_posting_list_object(
             bigram_term_index2,
             max_list_score,
             blocks: blocks_owned,
+            position_range_previous: 0,
         };
 
         Some(posting_list_object_index)
@@ -268,6 +257,7 @@ impl Search for IndexArc {
         }
 
         let result_count_arc = Arc::new(AtomicUsize::new(0));
+        let result_count_uncommitted_arc = Arc::new(AtomicUsize::new(0));
 
         'fallback: loop {
             let mut unique_terms: AHashMap<String, TermObject> = AHashMap::new();
@@ -290,7 +280,7 @@ impl Search for IndexArc {
                 1,
             );
 
-            if include_uncommited && index_ref.level0_uncommitted {
+            if include_uncommited && index_ref.uncommitted {
                 index_ref.search_uncommitted(
                     &unique_terms,
                     &non_unique_terms,
@@ -298,7 +288,7 @@ impl Search for IndexArc {
                     &result_type,
                     &field_filter_set,
                     &mut topk_candidates,
-                    &result_count_arc,
+                    &result_count_uncommitted_arc,
                     offset + length,
                 );
             }
@@ -719,8 +709,9 @@ impl Search for IndexArc {
             }
         }
 
-        rl.result_count_total = result_count_arc.load(Ordering::Relaxed) as i64;
-        rl.result_count_estimated = result_count_arc.load(Ordering::Relaxed) as i64;
+        rl.result_count_total = (result_count_uncommitted_arc.load(Ordering::Relaxed)
+            + result_count_arc.load(Ordering::Relaxed)) as i64;
+        rl.result_count_estimated = rl.result_count_total;
 
         rl
     }

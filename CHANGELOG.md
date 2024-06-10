@@ -5,12 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2024-06-03
+
+### Fixed
+
+- Intermittent indexing with multiple commits of incomplete levels (< 65_536 documents) fixed
+- get_document of uncommitted docs with a docid within the 64k range of an already committed incomplete level fixed
+- Result count for searches that both include results from uncommitted and committed documents fixed
+- Server handles empty index directories (manually deleted files) gracefully
+
+### Improved
+
+- Index compression ratio improved
 
 ## [0.1.12] - 2024-03-25
 
 ### Fixed
 
-- Indexing (field_indexed:true) and highlighting (field_stored:true, highlishts:... ) number fields (e.g. field_type="I64") fixed
+- Indexing (field_indexed:true) and highlighting (field_stored:true, highlights:... ) number fields (e.g. field_type="I64") fixed
 
 ### Changed
 

@@ -1,35 +1,45 @@
+// This crate is a library
 #![crate_type = "lib"]
+// The library is named "seekstorm"
 #![crate_name = "seekstorm"]
 #![doc(html_logo_url = "http://seekstorm.com/assets/logo.svg")]
 #![doc(html_favicon_url = "http://seekstorm.com/favicon.ico")]
 
 //! # `seekstorm`
+//!
 //! SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server written in Rust.
 //! The **SeekStorm library** can be embedded into your program, while the **SeekStorm server** is a standalone search server to be accessed via HTTP.
+//!
+//!
 //! ### Add required crates to your project
 //! ```text
 //! cargo add seekstorm
 //! cargo add tokio
 //! cargo add serde_json
 //! ```
+//!
 //! ```
 //! use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
 //! use seekstorm::{index::*,search::*,highlighter::*};
 //! use tokio::sync::RwLock;
 //! ```
+//!
 //! ### use an asynchronous Rust runtime
 //! ```text
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 //! ```
+//!
 //! ### create index
 //! ```rust
 //! let index_path=Path::new("C:/index/");
+//!
 //! let schema_json = r#"
 //! [{"field_name":"title","field_type":"Text","field_stored":false,"field_indexed":false},
 //! {"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
 //! {"field_name":"url","field_type":"Text","field_stored":false,"field_indexed":false}]"#;
 //! let schema=serde_json::from_str(schema_json).unwrap();
+//!
 //! let meta = IndexMetaObject {
 //! id: 0,
 //! name: "test_index".to_string(),
@@ -37,6 +47,7 @@
 //! tokenizer:TokenizerType::AsciiAlphabetic,
 //! access_type: AccessType::Mmap,
 //! };
+//!
 //! let segment_number_bits1=11;
 //! let serialize_schema=true;
 //! let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1).unwrap();
@@ -54,6 +65,7 @@
 //! {"title":"title2","body":"body2 test","url":"url2"},
 //! {"title":"title3 test","body":"body3 test","url":"url3"}]"#;
 //! let documents_vec=serde_json::from_str(documents_json).unwrap();
+//!
 //! index_arc.index_documents(documents_vec).await;
 //! ```
 //! ### search index
@@ -78,6 +90,7 @@
 //!     highlight_markup: true,
 //! },
 //! ];    
+//!
 //! let highlighter=Some(highlighter(highlights, result_list.query_term_strings));
 //! let fields_hashset= HashSet::new();
 //! let mut index=index_arc.write().await;
@@ -110,7 +123,7 @@
 //! ```
 
 pub(crate) mod add_result;
-pub(crate) mod commit_level;
+pub(crate) mod commit;
 pub(crate) mod compress_postinglist;
 pub(crate) mod doc_store;
 /// Extracts the most relevant fragments (snippets, summaries) from specified fields of the document to provide a "keyword in context" (KWIC) functionality.

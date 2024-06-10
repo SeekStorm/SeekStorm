@@ -98,6 +98,17 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
         select! {
 
             recv(receiver_ctrl_c) -> _ => {
+                println!("Committing all indices ...");
+                let mut apikey_list_mut=apikey_list_clone.write().await;
+                for apikey in apikey_list_mut.iter_mut()
+                {
+                    for index in apikey.1.index_list.iter_mut()
+                    {
+                        let mut index_mut=index.1.write().await;
+                        index_mut.close_index();
+                    }
+                }
+                drop(apikey_list_mut);
 
                 println!("Server stopped by Ctrl-C");
                 return;
@@ -176,8 +187,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             for index in apikey.1.index_list.iter_mut()
                             {
                                 let mut index_mut=index.1.write().await;
-                                let indexed_doc_count=index_mut.indexed_doc_count;
-                                index_mut.commit_level(indexed_doc_count);
+                                index_mut.close_index();
                             }
                         }
                         drop(apikey_list_mut);

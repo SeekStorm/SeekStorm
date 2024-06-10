@@ -3,6 +3,7 @@ use ahash::{AHashMap, HashSet, RandomState};
 use derivative::Derivative;
 use lazy_static::lazy_static;
 use memmap2::{Mmap, MmapOptions};
+use num::FromPrimitive;
 use num_derive::FromPrimitive;
 
 use get_size::GetSize;
@@ -25,7 +26,7 @@ use utils::{read_u32, write_u16};
 
 use crate::{
     add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
-    commit_level::KEY_HEAD_SIZE,
+    commit::KEY_HEAD_SIZE,
     search,
     tokenizer::tokenizer,
     utils::{self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref},
@@ -49,7 +50,8 @@ pub const MAX_POSITIONS_PER_TERM: usize = 65_536;
 pub(crate) const STOP_BIT: u8 = 0b10000000;
 pub(crate) const FIELD_STOP_BIT_1: u8 = 0b0010_0000;
 pub(crate) const FIELD_STOP_BIT_2: u8 = 0b0100_0000;
-pub(crate) const ROARING_BLOCK_SIZE: usize = 65_536;
+/// maximum number of documents per block
+pub const ROARING_BLOCK_SIZE: usize = 65_536;
 
 pub(crate) const SPEEDUP_FLAG: bool = true;
 pub(crate) const SORT_FLAG: bool = true;
@@ -108,6 +110,8 @@ pub(crate) struct PostingListObjectIndex {
     pub bigram_term_index2: u8,
     pub max_list_score: f32,
     pub blocks: Vec<BlockObjectIndex>,
+
+    pub position_range_previous: u32,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone, GetSize)]
@@ -378,6 +382,11 @@ pub struct Index {
 
     /// Number of indexed documents
     pub indexed_doc_count: usize,
+    /// Number of comitted documents
+    pub committed_doc_count: usize,
+    pub(crate) is_last_level_incomplete: bool,
+    pub(crate) last_level_index_file_start_pos: u64,
+    pub(crate) last_level_docstore_file_start_pos: u64,
     /// Number of allowed parallel indexed documents (default=available_parallelism). Can be used to detect wehen all indexing processes are finished.
     pub permits: Arc<Semaphore>,
     /// Defines a field in index schema: field_name, field_stored, field_indexed , field_type, field_boost.
@@ -408,7 +417,8 @@ pub struct Index {
     pub(crate) level_index: Vec<LevelIndex>,
     pub(crate) segments_index: Vec<SegmentIndex>,
     pub(crate) segments_level0: Vec<SegmentLevel0>,
-    pub(crate) level0_uncommitted: bool,
+    /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents, or once commit is invoked manually.
+    pub uncommitted: bool,
 
     pub(crate) enable_bigram: bool,
     pub(crate) enable_fallback: bool,
@@ -554,6 +564,10 @@ pub fn create_index(
                 },
                 document_length_normalized_average: 0.0,
                 indexed_doc_count: 0,
+                committed_doc_count: 0,
+                is_last_level_incomplete: false,
+                last_level_index_file_start_pos: 0,
+                last_level_docstore_file_start_pos: 0,
                 positions_sum_normalized: 0,
                 segment_number1: 0,
                 segment_number_bits1,
@@ -561,7 +575,7 @@ pub fn create_index(
                 level_index: Vec::new(),
                 segments_index: Vec::new(),
                 segments_level0: Vec::new(),
-                level0_uncommitted: false,
+                uncommitted: false,
                 enable_bigram: BIGRAM_FLAG,
                 enable_fallback: false,
                 enable_single_term_topk: false,
@@ -848,16 +862,18 @@ pub(crate) fn get_max_score(
     bm25f
 }
 
-pub(crate) fn update_list_max_impact_score(index: &mut Index) {
+pub(crate) fn update_stopwords_posting_counts(
+    index: &mut Index,
+    update_last_block_with_level0: bool,
+) {
     for (i, stopword) in STOPWORDS.iter().enumerate() {
-        index.stopword_posting_counts[i] = if index.meta.access_type != AccessType::Mmap {
-            index.get_posting_count(stopword)
-        } else {
-            let index_ref = &*index;
+        let index_ref = &*index;
 
-            let term_bytes = stopword.as_bytes();
-            let key0 = HASHER_32.hash_one(term_bytes) as u32 & index_ref.segment_number_mask1;
-            let key_hash = HASHER_64.hash_one(term_bytes);
+        let term_bytes = stopword.as_bytes();
+        let key0 = HASHER_32.hash_one(term_bytes) as u32 & index_ref.segment_number_mask1;
+        let key_hash = HASHER_64.hash_one(term_bytes);
+
+        index.stopword_posting_counts[i] = if index.meta.access_type == AccessType::Mmap {
             let plo_option = decode_posting_list_object(
                 &index_ref.segments_index[key0 as usize],
                 index_ref,
@@ -869,8 +885,25 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
             } else {
                 0
             }
+        } else if let Some(plo) = index_ref.segments_index[key0 as usize]
+            .segment
+            .get(&key_hash)
+        {
+            plo.posting_count
+        } else {
+            0
         };
+
+        if update_last_block_with_level0 {
+            if let Some(x) = index.segments_level0[key0 as usize].segment.get(&key_hash) {
+                index.stopword_posting_counts[i] += x.posting_count as u32;
+            }
+        }
     }
+}
+
+pub(crate) fn update_list_max_impact_score(index: &mut Index) {
+    update_stopwords_posting_counts(index, false);
 
     if index.meta.access_type == AccessType::Mmap {
         return;
@@ -952,6 +985,18 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                 let mut segment_head_vec: Vec<(u32, u32)> = Vec::new();
                                 for key0 in 0..index.segment_number1 {
                                     if key0 == 0 {
+                                        index.last_level_index_file_start_pos = if is_mmap {
+                                            index_mmap_position as u64
+                                        } else {
+                                            index.index_file.stream_position().unwrap()
+                                        };
+
+                                        index.last_level_docstore_file_start_pos = if is_mmap {
+                                            docstore_mmap_position as u64
+                                        } else {
+                                            index.docstore_file.stream_position().unwrap()
+                                        };
+
                                         if index.level_index.is_empty() {
                                             let longest_field_id = if is_mmap {
                                                 read_u16_ref(
@@ -991,7 +1036,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                         let document_length_compressed_array_pointer = if is_mmap {
                                             index_mmap_position
                                         } else {
-                                            index.docstore_file.stream_position().unwrap() as usize
+                                            index.index_file.stream_position().unwrap() as usize
                                         };
 
                                         for _i in 0..index.indexed_field_vec.len() {
@@ -1058,7 +1103,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                                 &mut index_mmap_position,
                                             );
 
-                                            for _ in 0..index.segment_number1 {
+                                            for _key0 in 0..index.segment_number1 {
                                                 let block_length = read_u32_ref(
                                                     &index.index_file_mmap,
                                                     &mut index_mmap_position,
@@ -1067,6 +1112,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                                     &index.index_file_mmap,
                                                     &mut index_mmap_position,
                                                 );
+
                                                 segment_head_vec.push((block_length, key_count));
                                             }
                                         } else {
@@ -1080,12 +1126,13 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                                 0,
                                             )
                                                 as usize;
+
                                             index.positions_sum_normalized = read_u64(
                                                 &index.compressed_index_segment_block_buffer,
                                                 8,
                                             );
 
-                                            for _ in 0..index.segment_number1 {
+                                            for _key0 in 0..index.segment_number1 {
                                                 let _ = index.index_file.read(
                                                     &mut index
                                                         .compressed_index_segment_block_buffer
@@ -1161,7 +1208,12 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                             .push(block_array);
 
                                         let mut read_pointer = 0;
-                                        for _i in 0..key_count {
+
+                                        let mut posting_count_previous = 0;
+                                        let mut pointer_pivot_p_docid_previous = 0;
+                                        let mut compression_type_pointer_previous = 0;
+
+                                        for key_index in 0..key_count {
                                             let key_hash = read_u64_ref(
                                                 compressed_index_segment_block_buffer,
                                                 &mut read_pointer,
@@ -1223,6 +1275,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                                     bigram_term_index1,
                                                     bigram_term_index2,
                                                     max_list_score: 0.0,
+                                                    position_range_previous: 0,
                                                     blocks: vec![BlockObjectIndex {
                                                         max_block_score: 0.0,
                                                         block_id,
@@ -1237,10 +1290,82 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                                     .segment
                                                     .insert(key_hash, value);
                                             };
+
+                                            if index.indexed_doc_count % ROARING_BLOCK_SIZE > 0
+                                                && block_id as usize
+                                                    == index.indexed_doc_count / ROARING_BLOCK_SIZE
+                                                && index.meta.access_type == AccessType::Ram
+                                            {
+                                                let position_range_previous = if key_index == 0 {
+                                                    0
+                                                } else {
+                                                    let posting_pointer_size_sum_previous =
+                                                        pointer_pivot_p_docid_previous as usize * 2
+                                                            + if (pointer_pivot_p_docid_previous
+                                                                as usize)
+                                                                < posting_count_previous
+                                                            {
+                                                                (posting_count_previous
+                                                                    - pointer_pivot_p_docid_previous
+                                                                        as usize)
+                                                                    * 3
+                                                            } else {
+                                                                0
+                                                            };
+
+                                                    let rank_position_pointer_range_previous= compression_type_pointer_previous & 0b0011_1111_1111_1111_1111_1111_1111_1111;
+                                                    let compression_type_previous: CompressionType =
+                                                        FromPrimitive::from_i32(
+                                                            (compression_type_pointer_previous
+                                                                >> 30)
+                                                                as i32,
+                                                        )
+                                                        .unwrap();
+
+                                                    let compressed_docid_previous =
+                                                        match compression_type_previous {
+                                                            CompressionType::Array => {
+                                                                posting_count_previous * 2
+                                                            }
+                                                            CompressionType::Bitmap => 8192,
+                                                            CompressionType::Rle => {
+                                                                let byte_array_docid = &index
+                                                                    .segments_index[key0]
+                                                                    .byte_array_blocks
+                                                                    [block_id as usize];
+                                                                4 * read_u16( byte_array_docid, rank_position_pointer_range_previous as usize +posting_pointer_size_sum_previous) as usize + 2
+                                                            }
+                                                            _ => 0,
+                                                        };
+
+                                                    rank_position_pointer_range_previous
+                                                        + (posting_pointer_size_sum_previous
+                                                            + compressed_docid_previous)
+                                                            as u32
+                                                };
+
+                                                let plo = index.segments_index[key0]
+                                                    .segment
+                                                    .get_mut(&key_hash)
+                                                    .unwrap();
+
+                                                plo.position_range_previous =
+                                                    position_range_previous;
+
+                                                posting_count_previous = posting_count as usize + 1;
+                                                pointer_pivot_p_docid_previous =
+                                                    pointer_pivot_p_docid;
+                                                compression_type_pointer_previous =
+                                                    compression_type_pointer;
+                                            };
                                         }
                                     }
                                 }
                             }
+
+                            index.committed_doc_count = index.indexed_doc_count;
+                            index.is_last_level_incomplete =
+                                index.committed_doc_count % ROARING_BLOCK_SIZE > 0;
 
                             update_list_max_impact_score(&mut index);
 
@@ -1299,6 +1424,7 @@ pub(crate) struct TermObject {
     pub key_hash: u64,
     pub key0: u32,
     pub term: String,
+
     pub is_bigram: bool,
     pub term_bigram1: String,
     pub term_bigram2: String,
@@ -1343,6 +1469,11 @@ pub(crate) fn norm_frequency(term_frequency: u32) -> u8 {
 }
 
 impl Index {
+    /// Get number of index levels. One index level comprises 64K documents.
+    pub fn level_count(index: &Index) -> usize {
+        index.level_index.len()
+    }
+
     /// Reset index to empty, while maintaining schema
     pub fn clear_index(&mut self) {
         let _ = self.index_file.rewind();
@@ -1403,7 +1534,9 @@ impl Index {
     }
 
     /// Remove index from RAM (Reverse of open_index)
-    pub fn close_index(&mut self) {}
+    pub fn close_index(&mut self) {
+        self.commit(self.indexed_doc_count);
+    }
 }
 
 /// Indexes a list of documents
@@ -1429,6 +1562,7 @@ pub trait IndexDocument {
 
 impl IndexDocument for IndexArc {
     /// Index document
+    /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_document(&self, document: Document) {
         let index_arc_clone = self.clone();
         let index_ref = self.read().await;
@@ -1548,16 +1682,17 @@ impl IndexDocument2 for IndexArc {
 
         let doc_id: usize = index_mut.indexed_doc_count;
         index_mut.indexed_doc_count += 1;
+
         if index_mut.block_id != doc_id >> 16 {
-            index_mut.commit_level(doc_id);
+            index_mut.commit(doc_id);
             index_mut.block_id = doc_id >> 16;
         }
 
-        if !index_mut.level0_uncommitted {
+        if !index_mut.uncommitted {
             for strip0 in index_mut.segments_level0.iter_mut() {
                 strip0.positions_compressed = vec![0; MAX_POSITIONS_PER_TERM * 2];
             }
-            index_mut.level0_uncommitted = true;
+            index_mut.uncommitted = true;
         }
 
         let mut longest_field_id: usize = 0;
@@ -1586,7 +1721,7 @@ impl IndexDocument2 for IndexArc {
         }
 
         for term in document_item.unique_terms {
-            index_mut.index_posting(term.1, doc_id);
+            index_mut.index_posting(term.1, doc_id, false);
         }
 
         if !index_mut.stored_field_names.is_empty() {

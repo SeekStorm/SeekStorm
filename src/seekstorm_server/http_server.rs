@@ -23,7 +23,6 @@ use std::{convert::Infallible, net::SocketAddr};
 
 use base64::{engine::general_purpose, Engine as _};
 
-use crate::api_endpoints::delete_document_api;
 use crate::api_endpoints::delete_documents_api;
 use crate::api_endpoints::delete_index_api;
 use crate::api_endpoints::get_all_index_stats_api;
@@ -36,6 +35,7 @@ use crate::api_endpoints::update_document_api;
 use crate::api_endpoints::update_documents_api;
 use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
+use crate::api_endpoints::{close_index_api, delete_document_api};
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
 use crate::api_endpoints::{create_index_api, SearchRequestObject};
 use crate::api_endpoints::{delete_apikey_api, GetDocumentRequest};
@@ -387,6 +387,46 @@ pub(crate) async fn http_request_handler(
                             let index_arc_clone = index_arc.clone();
                             drop(apikey_list_ref);
                             let result = commit_index_api(&index_arc_clone).await;
+
+                            Ok(Response::new(result.unwrap().to_string().into()))
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
+                } else {
+                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                }
+            } else {
+                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+            }
+        }
+
+        ("api", "v1", "index", _, "", "", &Method::PUT) => {
+            if let Some(apikey) = headers.get("apikey") {
+                if let Some(apikey_hash) =
+                    get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
+                {
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
+
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let index_arc_clone = index_arc.clone();
+                            drop(apikey_list_ref);
+                            let result = close_index_api(&index_arc_clone).await;
 
                             Ok(Response::new(result.unwrap().to_string().into()))
                         } else {

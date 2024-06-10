@@ -180,7 +180,10 @@ pub(crate) async fn open_all_indices(
         let path = result.unwrap();
         if path.path().is_dir() {
             let single_index_path = path.path();
-            let index_arc = open_index(&single_index_path).await.unwrap();
+            let Ok(index_arc) = open_index(&single_index_path).await else {
+                continue;
+            };
+
             let index_id = index_arc.read().await.meta.id;
             index_list.insert(index_id, index_arc);
         }
@@ -284,7 +287,16 @@ pub(crate) async fn delete_index_api(
 pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String> {
     let mut index_mut = index_arc.write().await;
     let indexed_doc_count = index_mut.indexed_doc_count;
-    index_mut.commit_level(indexed_doc_count);
+    index_mut.commit(indexed_doc_count);
+    drop(index_mut);
+
+    Ok(indexed_doc_count as u64)
+}
+
+pub(crate) async fn close_index_api(index_arc: &IndexArc) -> Result<u64, String> {
+    let mut index_mut = index_arc.write().await;
+    let indexed_doc_count = index_mut.indexed_doc_count;
+    index_mut.close_index();
     drop(index_mut);
 
     Ok(indexed_doc_count as u64)

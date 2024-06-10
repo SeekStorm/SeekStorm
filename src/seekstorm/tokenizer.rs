@@ -11,6 +11,7 @@ use crate::{
 
 /// Tokenizer splits text to terms
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::assigning_clones)]
 pub(crate) fn tokenizer(
     text: &str,
     unique_terms: &mut AHashMap<String, TermObject>,
@@ -202,7 +203,7 @@ pub(crate) fn tokenizer(
                 || (non_unique_terms[non_unique_terms.len() - 1].op == QueryType::Phrase
                     && non_unique_terms[non_unique_terms.len() - 2].op == QueryType::Phrase))
         {
-            let bigram_term_string = previous_term_string.to_string() + " " + &term_string;
+            let bigram_term_string = previous_term_string.to_string() + " " + term_string;
             let bigram_term_hash = HASHER_64.hash_one(bigram_term_string.as_bytes());
 
             if is_query {
@@ -234,11 +235,10 @@ pub(crate) fn tokenizer(
                 non_unique_terms.pop();
 
                 let non_unique_term = non_unique_terms.last_mut().unwrap();
-                non_unique_term.term = bigram_term_string.clone();
+                non_unique_term.term.clone_from(&bigram_term_string);
                 non_unique_term.term_bigram1 = previous_term_string;
                 non_unique_term.term_bigram2 = term_string.to_string();
                 non_unique_term.is_bigram = true;
-
                 previous_term_string = bigram_term_string.clone();
                 previous_term_hash = bigram_term_hash;
             }

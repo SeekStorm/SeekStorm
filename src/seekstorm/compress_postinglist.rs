@@ -26,41 +26,10 @@ pub(crate) fn compress_postinglist(
         let plo = index.segments_level0[*key0].segment.get(key_hash).unwrap();
 
         if plo.is_bigram {
-            let key0_bigram1 = index.hasher_32.hash_one(plo.term_bigram1.as_bytes()) as u32
-                & index.segment_number_mask1;
-            let key_hash_bigram1 = index.hasher_64.hash_one(plo.term_bigram1.as_bytes());
-            if *key0 <= key0_bigram1 as usize {
-                posting_count_bigram1 = index.segments_level0[key0_bigram1 as usize]
-                    .segment
-                    .get(&key_hash_bigram1)
-                    .unwrap()
-                    .posting_count;
-            }
-
-            if let Some(x) = index.segments_index[key0_bigram1 as usize]
-                .segment
-                .get(&key_hash_bigram1)
-            {
-                posting_count_bigram1 += x.posting_count as usize;
-            }
-
-            let key0_bigram2 = index.hasher_32.hash_one(plo.term_bigram2.as_bytes()) as u32
-                & index.segment_number_mask1;
-            let key_hash_bigram2 = index.hasher_64.hash_one(plo.term_bigram2.as_bytes());
-            if *key0 <= key0_bigram2 as usize {
-                posting_count_bigram2 = index.segments_level0[key0_bigram2 as usize]
-                    .segment
-                    .get(&key_hash_bigram2)
-                    .unwrap()
-                    .posting_count;
-            }
-
-            if let Some(x) = index.segments_index[key0_bigram2 as usize]
-                .segment
-                .get(&key_hash_bigram2)
-            {
-                posting_count_bigram2 += x.posting_count as usize;
-            }
+            let bigram_term_index1 = STOPWORDS.binary_search(&plo.term_bigram1.as_str()).unwrap();
+            let bigram_term_index2 = STOPWORDS.binary_search(&plo.term_bigram2.as_str()).unwrap();
+            posting_count_bigram1 = index.stopword_posting_counts[bigram_term_index1] as usize;
+            posting_count_bigram2 = index.stopword_posting_counts[bigram_term_index2] as usize;
         }
     }
 
@@ -97,8 +66,12 @@ pub(crate) fn compress_postinglist(
         if enable_rle_compression {
             let runs_count_threshold: u16 = cmp::min(
                 (plo.posting_count / 2) as u16,
-                (delta_compression_size_byte >> 2) as u16,
-            ); // /4
+                if enable_delta_compression {
+                    (delta_compression_size_byte >> 2) as u16
+                } else {
+                    u16::MAX
+                }, // !!
+            );
             compress_postinglist_rle(
                 index,
                 roaring_offset,
@@ -130,8 +103,14 @@ pub(crate) fn compress_postinglist(
         }
     } else {
         if enable_rle_compression {
-            let runs_count_threshold: u16 =
-                cmp::min(2048, (delta_compression_size_byte >> 2) as u16); // /4
+            let runs_count_threshold: u16 = cmp::min(
+                2048,
+                if enable_delta_compression {
+                    (delta_compression_size_byte >> 2) as u16
+                } else {
+                    u16::MAX
+                },
+            ); // !!
             compress_postinglist_rle(
                 index,
                 roaring_offset,
@@ -478,6 +457,7 @@ pub(crate) fn compress_postinglist_array(
             &mut size_compressed_positions_key,
             p_docid,
         );
+
         write_u16(
             doc_id,
             &mut index.compressed_index_segment_block_buffer,
