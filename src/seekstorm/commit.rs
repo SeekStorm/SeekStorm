@@ -185,7 +185,7 @@ impl Index {
             .unwrap();
 
         if !self.stored_field_names.is_empty() {
-            self.commit_docstore(is_last_level_incomplete);
+            self.commit_docstore(indexed_doc_count, is_last_level_incomplete);
         }
 
         if self.meta.access_type == AccessType::Mmap {
@@ -681,7 +681,7 @@ impl Index {
         }
     }
 
-    pub (crate) fn merge_incomplete_index_level_to_level0(self: &mut Index) {
+    pub(crate) fn merge_incomplete_index_level_to_level0(self: &mut Index) {
         for strip0 in self.segments_level0.iter_mut() {
             if strip0.positions_compressed.is_empty() {
                 strip0.positions_compressed = vec![0; MAX_POSITIONS_PER_TERM * 2];
