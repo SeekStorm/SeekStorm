@@ -81,9 +81,13 @@ True real-time search, as opposed to NRT: every indexed document is immediately 
 <br>
 <img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*YpkRW-_bbltmyLgTKkutOA.jpeg" alt="Benchmark">
 
-### Benchmark
+### Benchmarks
 
 https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
+
+https://seekstorm.github.io/bench/
+
+https://github.com/SeekStorm/search-benchmark-game/
 
 ### Why latency matters
 
