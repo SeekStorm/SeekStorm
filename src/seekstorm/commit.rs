@@ -14,10 +14,10 @@ use crate::{
     },
     compress_postinglist::compress_postinglist,
     index::{
-        update_list_max_impact_score, update_stopwords_posting_counts, AccessType,
-        BlockObjectIndex, CompressionType, Index, LevelIndex, NonUniquePostingListObjectQuery,
-        PostingListObjectIndex, PostingListObjectQuery, TermObject, MAX_POSITIONS_PER_TERM,
-        ROARING_BLOCK_SIZE, STOPWORDS,
+        update_list_max_impact_score, update_stopwords_posting_counts, warmup, AccessType,
+        BlockObjectIndex, CompressionType, Index, IndexArc, LevelIndex,
+        NonUniquePostingListObjectQuery, PostingListObjectIndex, PostingListObjectQuery,
+        TermObject, MAX_POSITIONS_PER_TERM, ROARING_BLOCK_SIZE, STOPWORDS,
     },
     utils::{
         block_copy, block_copy_mut, cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16,
@@ -27,7 +27,30 @@ use crate::{
 
 pub(crate) const KEY_HEAD_SIZE: usize = 22;
 
-impl Index {
+#[allow(async_fn_in_trait)]
+pub trait Commit {
+    async fn commit(&mut self);
+}
+
+/// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
+/// to the final compressed data structure (roaring bitmap) on Mmap or disk -
+/// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+/// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+/// There is no way to prevent this automatic commit by not manually invoking it.
+/// But commit can also be invoked manually at any time at any number of newly indexed documents.
+/// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
+/// is invoked implicitly with every index_doc,
+/// i.e. the document can immediately searched and included in the search results
+/// if it matches the query AND the query paramter realtime=true is enabled.
+/// **Use commit with caution, as it is an expensive operation**.
+/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+/// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
+/// There are only 2 reasons that justify a manual commit:
+/// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+/// 2. if after indexing new documents there won't be more documents indexed (for some time),
+/// so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+/// but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
+impl Commit for IndexArc {
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
     /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
@@ -46,7 +69,17 @@ impl Index {
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
     /// so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
     /// but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
-    pub fn commit(&mut self, indexed_doc_count: usize) {
+    async fn commit(&mut self) {
+        let mut index_mut = self.write().await;
+        let indexed_doc_count = index_mut.indexed_doc_count;
+        index_mut.commit(indexed_doc_count);
+        drop(index_mut);
+        warmup(self).await;
+    }
+}
+
+impl Index {
+    pub(crate) fn commit(&mut self, indexed_doc_count: usize) {
         if !self.uncommitted {
             return;
         }
@@ -197,17 +230,19 @@ impl Index {
 
         self.committed_doc_count = indexed_doc_count;
         self.is_last_level_incomplete = (self.committed_doc_count) % ROARING_BLOCK_SIZE > 0;
-        println!(
-            "commit level {} committed documents {} {} mode {}",
-            self.level_index.len(),
-            new_document_count.to_formatted_string(&Locale::en),
-            self.committed_doc_count.to_formatted_string(&Locale::en),
-            if is_last_level_incomplete {
-                "merge"
-            } else {
-                "append"
-            }
-        );
+        if !self.mute {
+            println!(
+                "commit level {} committed documents {} {} mode {}",
+                self.level_index.len(),
+                new_document_count.to_formatted_string(&Locale::en),
+                self.committed_doc_count.to_formatted_string(&Locale::en),
+                if is_last_level_incomplete {
+                    "merge"
+                } else {
+                    "append"
+                }
+            );
+        }
 
         self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
         self.postings_buffer = vec![0; 400_000_000];

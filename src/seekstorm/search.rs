@@ -52,7 +52,7 @@ pub enum ResultType {
 #[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
 pub struct ResultListObject {
     pub query: String,
-    pub result_count: i64,
+    pub result_count: usize,
 
     #[serde(rename = "countEvaluated")]
     pub result_count_total: i64,
@@ -588,6 +588,36 @@ impl Search for IndexArc {
             let mut matching_blocks: i32 = 0;
             if query_list_len == 0 {
             } else if query_list_len == 1 {
+                if !(index_ref.uncommitted && include_uncommited)
+                    && offset + length <= 1000
+                    && not_query_list.is_empty()
+                    && field_filter_set.is_empty()
+                {
+                    if let Some(result_list) =
+                        index_ref.stopword_results.get(&non_unique_terms[0].term)
+                    {
+                        if result_type == ResultType::Count {
+                            rl.query_term_strings
+                                .clone_from(&result_list.query_term_strings);
+                            rl.result_count = result_list.result_count;
+                            rl.result_count_total = result_list.result_count_total;
+                            rl.result_count_estimated = result_list.result_count_estimated;
+
+                            return rl;
+                        } else {
+                            let mut rl = result_list.clone();
+                            if offset > 0 {
+                                rl.results.drain(..offset);
+                            }
+                            if length < 1000 {
+                                rl.results.truncate(length);
+                            }
+
+                            return rl;
+                        }
+                    }
+                }
+
                 single_blockid(
                     &index_ref,
                     &mut non_unique_query_list,
@@ -686,7 +716,7 @@ impl Search for IndexArc {
             break;
         }
 
-        rl.result_count = topk_candidates.current_heap_size as i64;
+        rl.result_count = topk_candidates.current_heap_size;
 
         if topk_candidates.current_heap_size > offset {
             rl.results = topk_candidates._elements;

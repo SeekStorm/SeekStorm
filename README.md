@@ -83,9 +83,23 @@ True real-time search, as opposed to NRT: every indexed document is immediately 
 
 ### Benchmarks
 
+Using our own benchmarks to measure aspects that are currently not covered by search_benchmark_game such as:
+- multi-field search 
+- concurrent query processing
+- billion scale indexing
+
 https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 
-https://seekstorm.github.io/bench/
+
+Comparing SeekStorm with other open-source search engine libraries (BM25 lexical search) using the awesome open-source search_benchmark_game from Tantivy et al.
+
+Benefits:
++ using a proven open-source benchmark used by other search libraries for comparability
++ adapters writtten mostly by search library authors themselves for maximum authenticity and faithfulness
++ results can be replicated by everbody on their own infrastructure
++ detailed results per query, per query type and per result type to investigate optimization potential
+
+https://seekstorm.github.io/search-benchmark-game/
 
 https://github.com/SeekStorm/search-benchmark-game/
 
@@ -231,7 +245,7 @@ cargo add serde_json
 
 ```
 use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
-use seekstorm::{index::*,search::*,highlighter::*};
+use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
 use tokio::sync::RwLock;
 ```
 
@@ -261,14 +275,14 @@ let meta = IndexMetaObject {
 
 let serialize_schema=true;
 let segment_number_bits1=11;
-let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1).unwrap();
+let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1,false).unwrap();
 let _index_arc = Arc::new(RwLock::new(index));
 ```
 
 open index (alternatively to create index)
 ```
 let index_path=Path::new("C:/index/");
-let index_arc=open_index(index_path).await.unwrap(); 
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
 ```
 index documents
 ```
@@ -279,6 +293,10 @@ let documents_json = r#"
 let documents_vec=serde_json::from_str(documents_json).unwrap();
 
 index_arc.index_documents(documents_vec).await; 
+```
+commit documents
+```
+index_arc.commit().await;
 ```
 search index
 ```

@@ -85,9 +85,7 @@ pub(crate) fn add_result_singleterm_uncommitted(
 
     index.decode_positions_uncommitted(plo_single, false);
 
-    if field_filter_set.len() > 0
-        && plo_single.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
-    {
+    if field_filter_set.len() > 0 && plo_single.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
         let mut match_flag = false;
         for field in plo_single.field_vec.iter() {
             if field_filter_set.contains(&field.0) {
@@ -165,9 +163,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
     for plo in query_list.iter_mut() {
         index.decode_positions_uncommitted(plo, phrase_query);
 
-        if field_filter_set.len() > 0
-            && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
-        {
+        if field_filter_set.len() > 0 && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
             let mut match_flag = false;
             for field in plo.field_vec.iter() {
                 if field_filter_set.contains(&field.0) {

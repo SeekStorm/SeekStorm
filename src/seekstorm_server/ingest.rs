@@ -9,7 +9,10 @@ use std::{
 };
 
 use num_format::{Locale, ToFormattedString};
-use seekstorm::index::{Document, Index, IndexDocument};
+use seekstorm::{
+    commit::Commit,
+    index::{Document, Index, IndexDocument},
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -66,9 +69,8 @@ pub(crate) async fn ingest_ndjson(index_arc: Arc<RwLock<Index>>, data_path_str: 
                 permit_vec.push(index_permits.acquire().await.unwrap());
             }
 
-            let mut index_mut = index_arc.write().await;
-            let indexed_doc_count = index_mut.indexed_doc_count;
-            index_mut.commit(indexed_doc_count);
+            let mut index_arc_clone3 = index_arc.clone();
+            index_arc_clone3.commit().await;
 
             let elapsed_time = start_time.elapsed().as_nanos();
 

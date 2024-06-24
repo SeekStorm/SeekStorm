@@ -6,7 +6,6 @@ use memmap2::{Mmap, MmapOptions};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
 
-use get_size::GetSize;
 use num_format::{Locale, ToFormattedString};
 
 use search::{decode_posting_list_object, QueryType, Search};
@@ -27,7 +26,7 @@ use utils::{read_u32, write_u16};
 use crate::{
     add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
     commit::KEY_HEAD_SIZE,
-    search,
+    search::{self, ResultListObject},
     tokenizer::tokenizer,
     utils::{self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref},
 };
@@ -91,7 +90,7 @@ pub(crate) struct LevelIndex {
 
 /// Posting lists are divided into blocks of a doc id range of 65.536 (16 bit).
 /// Each block can be compressed with a different method.
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone, GetSize)]
+#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
 pub(crate) struct BlockObjectIndex {
     pub max_block_score: f32,
     pub block_id: u32,
@@ -103,7 +102,7 @@ pub(crate) struct BlockObjectIndex {
 }
 
 /// PostingListObjectIndex owns all blocks of a postinglist of a term
-#[derive(Default, GetSize)]
+#[derive(Default)]
 pub(crate) struct PostingListObjectIndex {
     pub posting_count: u32,
     pub bigram_term_index1: u8,
@@ -114,7 +113,7 @@ pub(crate) struct PostingListObjectIndex {
     pub position_range_previous: u32,
 }
 
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone, GetSize)]
+#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
 pub(crate) struct PostingListObject0 {
     pub pointer_first: usize,
     pub pointer_last: usize,
@@ -449,6 +448,9 @@ pub struct Index {
     pub(crate) postinglist_count: usize,
     pub(crate) docid_count: usize,
     pub(crate) position_count: usize,
+
+    pub(crate) mute: bool,
+    pub(crate) stopword_results: AHashMap<String, ResultListObject>,
 }
 
 /// Get the version of the SeekStorm search library
@@ -458,18 +460,27 @@ pub fn version() -> &'static str {
 
 /// Create index in RAM.
 /// Inner data structures for create index and open_index
+/// * `index_path` - index path.  
+/// * `meta` - index meta object.  
+/// * `schema` - schema.  
+/// * `serialize_schema` - serialize schema.  
+/// * `segment_number_bits1` - number of index segments: e.g. 11 bits for 2048 segments.  
+/// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
 pub fn create_index(
     index_path: &Path,
     meta: IndexMetaObject,
     schema: &Vec<SchemaField>,
     serialize_schema: bool,
     segment_number_bits1: usize,
+    mute: bool,
 ) -> Result<Index, String> {
     let index_path_buf = index_path.to_path_buf();
     let index_path_string = index_path_buf.to_str().unwrap();
 
     if !index_path.exists() {
-        println!("index path created: {} ", index_path_string);
+        if !mute {
+            println!("index path created: {} ", index_path_string);
+        }
         fs::create_dir_all(index_path).unwrap();
     }
 
@@ -603,6 +614,8 @@ pub fn create_index(
                 position_count: 0,
                 postinglist_count: 0,
                 permits: Arc::new(Semaphore::new(available_parallelism().unwrap().get())),
+                mute,
+                stopword_results: AHashMap::new(),
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -948,8 +961,12 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
 }
 
 /// Loads the index from disk into RAM.
-pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
-    println!("opening index ...");
+/// * `index_path` - index path.  
+/// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
+pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, String> {
+    if !mute {
+        println!("opening index ...");
+    }
 
     let start_time = Instant::now();
 
@@ -964,7 +981,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                 Ok(file) => {
                     let schema = serde_json::from_reader(BufReader::new(file)).unwrap();
 
-                    match create_index(index_path, meta, &schema, false, 11) {
+                    match create_index(index_path, meta, &schema, false, 11, false) {
                         Ok(mut index) => {
                             let mut block_count_sum = 0;
 
@@ -1371,7 +1388,8 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
 
                             let elapsed_time = start_time.elapsed().as_nanos();
 
-                            println!(
+                            if !mute {
+                                println!(
                         "{} name {} id {} version {} {} level {} fields {} {} docs {} segments {} time {} s",
                         INDEX_FILENAME,
                         index.meta.name,
@@ -1388,7 +1406,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                         index.segment_number1,
                         elapsed_time/1_000_000_000
                     );
-
+                            }
                             let index_arc = Arc::new(RwLock::new(index));
                             warmup(&index_arc).await;
                             Ok(index_arc)
@@ -1404,18 +1422,25 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
 }
 
 pub(crate) async fn warmup(index_object_arc: &IndexArc) {
+    index_object_arc.write().await.stopword_results.clear();
+
     for stopword in STOPWORDS {
-        let _ = index_object_arc
+        let results_list = index_object_arc
             .search(
                 stopword.to_owned(),
                 QueryType::Union,
                 0,
-                10,
+                1000,
                 search::ResultType::TopkCount,
                 false,
                 Vec::new(),
             )
             .await;
+
+        let mut index_mut = index_object_arc.write().await;
+        index_mut
+            .stopword_results
+            .insert(stopword.to_string(), results_list);
     }
 }
 
@@ -1683,8 +1708,10 @@ impl IndexDocument2 for IndexArc {
         let doc_id: usize = index_mut.indexed_doc_count;
         index_mut.indexed_doc_count += 1;
 
-        if index_mut.block_id != doc_id >> 16 {
+        let do_commit = index_mut.block_id != doc_id >> 16;
+        if do_commit {
             index_mut.commit(doc_id);
+
             index_mut.block_id = doc_id >> 16;
         }
 
@@ -1726,6 +1753,11 @@ impl IndexDocument2 for IndexArc {
 
         if !index_mut.stored_field_names.is_empty() {
             index_mut.store_document(doc_id, document_item.document);
+        }
+
+        if do_commit {
+            drop(index_mut);
+            warmup(self).await;
         }
     }
 }

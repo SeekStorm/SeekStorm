@@ -11,6 +11,7 @@ use itertools::Itertools;
 use std::collections::HashSet;
 
 use seekstorm::{
+    commit::Commit,
     highlighter::{highlighter, Highlight},
     index::{
         create_index, open_index, AccessType, Document, IndexArc, IndexDocument, IndexDocuments,
@@ -180,7 +181,7 @@ pub(crate) async fn open_all_indices(
         let path = result.unwrap();
         if path.path().is_dir() {
             let single_index_path = path.path();
-            let Ok(index_arc) = open_index(&single_index_path).await else {
+            let Ok(index_arc) = open_index(&single_index_path, false).await else {
                 continue;
             };
 
@@ -260,7 +261,7 @@ pub(crate) fn create_index_api<'a>(
         access_type: AccessType::Mmap,
     };
 
-    let index = create_index(&index_id_path, meta, &schema, true, 11).unwrap();
+    let index = create_index(&index_id_path, meta, &schema, true, 11, false).unwrap();
 
     let index_arc = Arc::new(RwLock::new(index));
     apikey_object.index_list.insert(index_id, index_arc);
@@ -285,10 +286,12 @@ pub(crate) async fn delete_index_api(
 }
 
 pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String> {
-    let mut index_mut = index_arc.write().await;
-    let indexed_doc_count = index_mut.indexed_doc_count;
-    index_mut.commit(indexed_doc_count);
-    drop(index_mut);
+    let mut index_arc_clone = index_arc.clone();
+    let index_ref = index_arc.read().await;
+    let indexed_doc_count = index_ref.indexed_doc_count;
+
+    drop(index_ref);
+    index_arc_clone.commit().await;
 
     Ok(indexed_doc_count as u64)
 }

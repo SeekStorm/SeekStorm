@@ -2350,9 +2350,7 @@ pub(crate) fn add_result_multiterm_multifield(
             return;
         }
 
-        if field_filter_set.len() > 0
-            && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
-        {
+        if field_filter_set.len() > 0 && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
             let mut match_flag = false;
             for field in plo.field_vec.iter() {
                 if field_filter_set.contains(&field.0) {
@@ -2751,9 +2749,7 @@ pub(crate) fn add_result_multiterm_singlefield(
             return;
         }
 
-        if field_filter_set.len() > 0
-            && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
-        {
+        if field_filter_set.len() > 0 && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
             let mut match_flag = false;
             for field in plo.field_vec.iter() {
                 if field_filter_set.contains(&field.0) {
