@@ -73,25 +73,17 @@ Term proximity ranking provides more relevant results compared to BM25.
 **Real-time**  
 True real-time search, as opposed to NRT: every indexed document is immediately searchable.
 
-<img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*7IvVqlClkfHvmywr4hyofw.jpeg" alt="Benchmark">
+<img src="assets/search_benchmark_game1.png" width="600" alt="Benchmark">
 <br>
 <br>
-<img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*GQ0wk-MghqXhO3Sa3Hehdw.jpeg" alt="Benchmark">
+<img src="assets/search_benchmark_game2.png" width="600" alt="Benchmark">
 <br>
 <br>
-<img width="600" src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*YpkRW-_bbltmyLgTKkutOA.jpeg" alt="Benchmark">
+<img src="assets/ranking.jpg" width="600" alt="Ranking">
 
 ### Benchmarks
 
-Using our own benchmarks to measure aspects that are currently not covered by search_benchmark_game such as:
-- multi-field search 
-- concurrent query processing
-- billion scale indexing
-
-https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
-
-
-Comparing SeekStorm with other open-source search engine libraries (BM25 lexical search) using the awesome open-source search_benchmark_game from Tantivy et al.
+Comparing SeekStorm with other open-source search engine libraries (BM25 lexical search) using the open-source search_benchmark_game developed by [Tantivy](https://github.com/quickwit-oss/search-benchmark-game/) and [Jason Wolfe](https://github.com/jason-wolfe/search-index-benchmark-game).
 
 Benefits:
 + using a proven open-source benchmark used by other search libraries for comparability
@@ -99,9 +91,13 @@ Benefits:
 + results can be replicated by everbody on their own infrastructure
 + detailed results per query, per query type and per result type to investigate optimization potential
 
+**Detailed benchmark results**
 https://seekstorm.github.io/search-benchmark-game/
 
+**Benchmark code repository**
 https://github.com/SeekStorm/search-benchmark-game/
+
+See our blog post for more detailed information https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 
 ### Why latency matters
 
