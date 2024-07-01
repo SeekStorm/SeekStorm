@@ -57,6 +57,7 @@ Result types
 **Performance**  
 Lower latency, higher throughput, lower cost & energy consumption, esp. for multi-field and concurrent queries.  
 Low tail latencies ensure a smooth user experience and prevent loss of customers and revenue.
+While some rely on proprietary hardware accelerators (ASIC) to improve performance, SeekStorm achieves a similar boost algorithmically on commodity hardware.
 
 **Consistency**  
 No unpredictable query latency during and after large-volume indexing as SeekStorm doesn't require resource-intensive segment merges.  
@@ -73,13 +74,13 @@ Term proximity ranking provides more relevant results compared to BM25.
 **Real-time**  
 True real-time search, as opposed to NRT: every indexed document is immediately searchable.
 
-<img src="assets/search_benchmark_game1.png" width="600" alt="Benchmark">
+<img src="assets/search_benchmark_game1.png" width="800" alt="Benchmark">
 <br>
 <br>
-<img src="assets/search_benchmark_game2.png" width="600" alt="Benchmark">
+<img src="assets/search_benchmark_game2.png" width="800" alt="Benchmark">
 <br>
 <br>
-<img src="assets/ranking.jpg" width="600" alt="Ranking">
+<img src="assets/ranking.jpg" width="800" alt="Ranking">
 
 ### Benchmarks
 
@@ -356,7 +357,7 @@ end of main function
 
 A quick step-by-step tutorial on how to build a Wikipedia search engine from a Wikipedia corpus using the SeekStorm server in 5 easy steps.
 
-<img src="assets/wikipedia_demo.png" width="600">
+<img src="assets/wikipedia_demo.png" width="800">
 
 **Download SeekStorm**
 
@@ -444,7 +445,7 @@ Full-text search 30M Hacker News posts AND linked web pages
 
 [DeepHN.org](https://deephn.org/)
 
-<img src="assets/deephn_demo.png" width="600">
+<img src="assets/deephn_demo.png" width="800">
 
 The DeepHN demo is still based on the SeekStorm C# codebase.  
 We are currently porting all required missing features.  
