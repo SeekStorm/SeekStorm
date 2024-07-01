@@ -57,7 +57,7 @@ Result types
 **Performance**  
 Lower latency, higher throughput, lower cost & energy consumption, esp. for multi-field and concurrent queries.  
 Low tail latencies ensure a smooth user experience and prevent loss of customers and revenue.  
-While some rely on proprietary hardware accelerators (ASIC) to improve performance, SeekStorm achieves a similar boost algorithmically on commodity hardware.
+While some rely on proprietary hardware accelerators (FPGA/ASIC) to improve performance, SeekStorm achieves a similar boost algorithmically on commodity hardware.
 
 **Consistency**  
 No unpredictable query latency during and after large-volume indexing as SeekStorm doesn't require resource-intensive segment merges.  
