@@ -62,7 +62,6 @@ While some rely on proprietary hardware accelerators (FPGA/ASIC) to improve perf
 **Consistency**  
 No unpredictable query latency during and after large-volume indexing as SeekStorm doesn't require resource-intensive segment merges.  
 Stable latencies - no cold start costs due to just-in-time compilation, no unpredictable garbage collection delays.  
-Realtime search available during before and during entire commit process.
 
 **Scaling**  
 Maintains low latency, high throughput, and low RAM consumption even for billion-scale indices.  
@@ -72,7 +71,7 @@ Unlimited field number, field length & index size.
 Term proximity ranking provides more relevant results compared to BM25.
 
 **Real-time**  
-True real-time search, as opposed to NRT: every indexed document is immediately searchable.
+True real-time search, as opposed to NRT: every indexed document is immediately searchable, even before and during commit.
 
 <img src="assets/search_benchmark_game1.png" width="800" alt="Benchmark">
 <br>
