@@ -1,9 +1,10 @@
-use std::{arch::x86_64::_lzcnt_u32, cmp};
+use std::cmp;
 
 use smallvec::SmallVec;
 
 use crate::{
     add_result::{decode_positions_commit, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
+    compatible::_lzcnt_u32,
     index::{CompressionType, Index, SimilarityType, STOPWORDS, STOP_BIT},
     utils::{
         block_copy, read_u16_ref, read_u32_ref, write_u16, write_u16_ref, write_u32_ref,

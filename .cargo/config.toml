@@ -1,2 +1,8 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
+
+[target.aarch64-apple-darwin]
+rustflags = [
+    "-C",
+    "debug-assertions=false",
+]
