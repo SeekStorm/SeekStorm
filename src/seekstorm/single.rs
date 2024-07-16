@@ -1,13 +1,11 @@
-use std::{
-    arch::x86_64::{_blsr_u64, _mm_tzcnt_64},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 use crate::{
     add_result::{add_result_singleterm_multifield, PostingListObjectSingle},
+    compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
         AccessType, BlockObjectIndex, CompressionType, Index, NonUniquePostingListObjectQuery,
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
@@ -38,7 +36,10 @@ pub(crate) async fn single_docid<'a>(
     let block_score = blo.max_block_score;
     let filtered = !not_query_list.is_empty() || field_filter_set.len() > 0;
     if SPEEDUP_FLAG
-        && topk_candidates.current_heap_size == top_k && block_score <= topk_candidates._elements[0].score && (!filtered || result_type == &ResultType::Topk) {
+        && topk_candidates.current_heap_size == top_k
+        && block_score <= topk_candidates._elements[0].score
+        && (!filtered || result_type == &ResultType::Topk)
+    {
         return;
     }
 
@@ -338,7 +339,7 @@ pub(crate) async fn single_blockid<'a>(
                 )
                 .await;
             }
-        } 
+        }
     }
 
     if SORT_FLAG && SPEEDUP_FLAG {

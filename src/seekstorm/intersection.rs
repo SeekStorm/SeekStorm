@@ -1,5 +1,6 @@
 use crate::{
     add_result::add_result_multiterm_multifield,
+    compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
         AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
@@ -12,7 +13,6 @@ use crate::{
 use ahash::AHashSet;
 use num_traits::FromPrimitive;
 use std::{
-    arch::x86_64::{_blsr_u64, _mm_tzcnt_64},
     cmp,
     cmp::Ordering as OtherOrdering,
     sync::{

@@ -2,6 +2,7 @@ use crate::{
     add_result::{
         add_result_multiterm_multifield, add_result_singleterm_multifield, PostingListObjectSingle,
     },
+    compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
         AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
         PostingListObjectQuery, QueueObject,
@@ -16,10 +17,7 @@ use crate::{
 use ahash::AHashSet;
 use num_traits::FromPrimitive;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::{
-    arch::x86_64::{_blsr_u64, _mm_tzcnt_64},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use async_recursion::async_recursion;
 

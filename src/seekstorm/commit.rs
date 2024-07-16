@@ -2,16 +2,14 @@ use ahash::AHashMap;
 use memmap2::Mmap;
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
-use std::{
-    arch::x86_64::{_blsr_u64, _mm_tzcnt_64},
-    io::{Seek, SeekFrom, Write},
-};
+use std::io::{Seek, SeekFrom, Write};
 
 use crate::{
     add_result::{
         decode_positions_multiterm_multifield, decode_positions_multiterm_singlefield,
         get_next_position_multifield, get_next_position_singlefield,
     },
+    compatible::{_blsr_u64, _mm_tzcnt_64},
     compress_postinglist::compress_postinglist,
     index::{
         update_list_max_impact_score, update_stopwords_posting_counts, warmup, AccessType,

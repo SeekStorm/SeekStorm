@@ -1,9 +1,16 @@
+#[cfg(target_arch = "x86_64")]
 use std::{
     arch::x86_64::{
         __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
         _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
         _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
     },
+    mem::{self},
+};
+
+#[cfg(target_arch = "aarch64")]
+use std::{
+    arch::aarch64::{uint16x8_t, vceqq_u16, vld1q_dup_u16, vld1q_u16, vst1q_u16},
     mem::{self},
 };
 
@@ -16,6 +23,7 @@ use crate::{
     search::ResultType,
 };
 
+#[cfg(target_arch = "x86_64")]
 const SHUFFLE_MASK16: [u8; 4096] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0, 1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 2, 3,
@@ -224,6 +232,7 @@ const SHUFFLE_MASK16: [u8; 4096] = [
     5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 ];
 
+#[cfg(target_arch = "x86_64")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn intersection_vector16(
     a: &[u16],
@@ -417,6 +426,163 @@ pub(crate) fn intersection_vector16(
                     i_a += 1;
                     i_b += 1;
                 }
+            }
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn intersection_vector16(
+    a: &[u16],
+    s_a: usize,
+    b: &[u16],
+    s_b: usize,
+    result_count: &mut i32,
+    block_id: usize,
+    index: &Index,
+    result_candidates: &mut MinHeap,
+    top_k: usize,
+    result_type: &ResultType,
+    field_filter_set: &AHashSet<u16>,
+    non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
+    query_list: &mut [PostingListObjectQuery],
+    not_query_list: &mut [PostingListObjectQuery],
+    phrase_query: bool,
+    all_terms_frequent: bool,
+) {
+    unsafe {
+        let mut i_a = 0;
+        let mut i_b = 0;
+        let vectorlength = mem::size_of::<uint16x8_t>() / mem::size_of::<u16>();
+        // let vectorlength_i32 = vectorlength as i32;
+        let st_b = (s_b / vectorlength) * vectorlength;
+        while i_a < s_a && i_b < st_b {
+            if a[i_a] < b[i_b] {
+                i_a += 1;
+                continue;
+            } else if a[i_a] > b[i_b + vectorlength - 1] {
+                i_b += vectorlength;
+                continue;
+            }
+            let v_a = vld1q_dup_u16(a[i_a..].as_ptr());
+            let v_b = vld1q_u16(b[i_b..].as_ptr());
+            let res_v = vceqq_u16(v_a, v_b);
+            let mut res = [0u16; 8];
+            vst1q_u16(res.as_mut_ptr(), res_v);
+            for i in 0..res.len() {
+                if res[i] == 0 {
+                    continue;
+                }
+                query_list[0].p_docid = i_a;
+                query_list[1].p_docid = i_b + i;
+                add_result_multiterm_multifield(
+                    index,
+                    (block_id << 16) | a[i_a] as usize,
+                    result_count,
+                    result_candidates,
+                    top_k,
+                    result_type,
+                    field_filter_set,
+                    non_unique_query_list,
+                    query_list,
+                    not_query_list,
+                    phrase_query,
+                    f32::MAX,
+                    all_terms_frequent,
+                );
+                break;
+            }
+            i_a += 1;
+        }
+        while i_a < s_a && i_b < s_b {
+            let a = a[i_a];
+            let b = b[i_b];
+            match a.cmp(&b) {
+                std::cmp::Ordering::Less => {
+                    i_a += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    i_b += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    query_list[0].p_docid = i_a;
+                    query_list[1].p_docid = i_b;
+                    add_result_multiterm_multifield(
+                        index,
+                        (block_id << 16) | a as usize,
+                        result_count,
+                        result_candidates,
+                        top_k,
+                        result_type,
+                        field_filter_set,
+                        non_unique_query_list,
+                        query_list,
+                        not_query_list,
+                        phrase_query,
+                        f32::MAX,
+                        all_terms_frequent,
+                    );
+
+                    i_a += 1;
+                    i_b += 1;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+pub(crate) fn intersection_vector16(
+    a: &[u16],
+    s_a: usize,
+    b: &[u16],
+    s_b: usize,
+    result_count: &mut i32,
+    block_id: usize,
+    index: &Index,
+    result_candidates: &mut MinHeap,
+    top_k: usize,
+    result_type: &ResultType,
+    field_filter_set: &AHashSet<u16>,
+    non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
+    query_list: &mut [PostingListObjectQuery],
+    not_query_list: &mut [PostingListObjectQuery],
+    phrase_query: bool,
+    all_terms_frequent: bool,
+) {
+    let mut i_a = 0;
+    let mut i_b = 0;
+    while i_a < s_a && i_b < s_b {
+        let a = a[i_a];
+        let b = b[i_b];
+        match a.cmp(&b) {
+            std::cmp::Ordering::Less => {
+                i_a += 1;
+            }
+            std::cmp::Ordering::Greater => {
+                i_b += 1;
+            }
+            std::cmp::Ordering::Equal => {
+                query_list[0].p_docid = i_a;
+                query_list[1].p_docid = i_b;
+                add_result_multiterm_multifield(
+                    index,
+                    (block_id << 16) | a as usize,
+                    result_count,
+                    result_candidates,
+                    top_k,
+                    result_type,
+                    field_filter_set,
+                    non_unique_query_list,
+                    query_list,
+                    not_query_list,
+                    phrase_query,
+                    f32::MAX,
+                    all_terms_frequent,
+                );
+
+                i_a += 1;
+                i_b += 1;
             }
         }
     }

@@ -113,6 +113,8 @@
 //! }
 //! ```
 
+pub(crate) mod compatible;
+
 pub(crate) mod add_result;
 /// Commit moves indexed documents from the intermediate uncompressed data structure in RAM
 /// to the final compressed data structure on disk.
