@@ -21,6 +21,7 @@ use num_traits::FromPrimitive;
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::ptr_arg)]
+#[allow(non_snake_case)]
 pub(crate) async fn single_docid<'a>(
     index: &'a Index,
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
@@ -237,6 +238,7 @@ pub(crate) async fn single_docid<'a>(
         CompressionType::Bitmap => {
             let ulongs1 = cast_byte_ulong_slice(&byte_array[compressed_doc_id_range as usize..]);
             plo.p_docid = 0;
+            let block_id_msb = (blo.block_id as usize) << 16;
 
             for ulong_pos in 0u64..1024 {
                 let mut intersect: u64 = ulongs1[ulong_pos as usize];
@@ -248,7 +250,7 @@ pub(crate) async fn single_docid<'a>(
 
                     add_result_singleterm_multifield(
                         index,
-                        ((blo.block_id as usize) << 16) | ((ulong_pos << 6) + bit_pos) as usize,
+                        block_id_msb | ((ulong_pos << 6) + bit_pos) as usize,
                         result_count,
                         topk_candidates,
                         top_k,
@@ -343,7 +345,7 @@ pub(crate) async fn single_blockid<'a>(
     }
 
     if SORT_FLAG && SPEEDUP_FLAG {
-        block_vec.sort_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
+        block_vec.sort_unstable_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
         let mut block_index = 0;
         for block in block_vec {
             block_index += 1;

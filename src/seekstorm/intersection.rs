@@ -204,6 +204,7 @@ pub(crate) async fn intersection_docid(
 
         query_list_item_mut.compression_type =
             FromPrimitive::from_i32((blo.compression_type_pointer >> 30) as i32).unwrap();
+
         query_list_item_mut.rank_position_pointer_range =
             blo.compression_type_pointer & 0b0011_1111_1111_1111_1111_1111_1111_1111;
 
@@ -243,7 +244,7 @@ pub(crate) async fn intersection_docid(
         return;
     }
 
-    query_list.sort_by(|x, y| {
+    query_list.sort_unstable_by(|x, y| {
         if (x.compression_type == CompressionType::Bitmap)
             != (y.compression_type == CompressionType::Bitmap)
         {
@@ -276,7 +277,9 @@ pub(crate) async fn intersection_docid(
                 let mut doc_id1: u16 = ushorts1[query_list[t1].p_docid];
                 let mut doc_id2: u16 = ushorts2[query_list[t2].p_docid];
 
-                if query_list.len() == 2 {
+                if query_list.len() == 2
+                    && cfg!(any(target_arch = "x86_64", target_arch = "aarch64"))
+                {
                     intersection_vector16(
                         ushorts1,
                         query_list[0].p_docid_count,
@@ -331,15 +334,12 @@ pub(crate) async fn intersection_docid(
                                 break;
                             }
 
-                            if true {
-                                let mut bound = 2;
-                                while (query_list[t2].p_docid + bound
-                                    < query_list[t2].p_docid_count)
-                                    && (ushorts2[query_list[t2].p_docid + bound] < doc_id1)
-                                {
-                                    query_list[t2].p_docid += bound;
-                                    bound <<= 1;
-                                }
+                            let mut bound = 2;
+                            while (query_list[t2].p_docid + bound < query_list[t2].p_docid_count)
+                                && (ushorts2[query_list[t2].p_docid + bound] < doc_id1)
+                            {
+                                query_list[t2].p_docid += bound;
+                                bound <<= 1;
                             }
 
                             doc_id2 = ushorts2[query_list[t2].p_docid];
@@ -2114,8 +2114,15 @@ pub(crate) async fn intersection_blockid<'a>(
     }
 
     if SORT_FLAG && SPEEDUP_FLAG && (result_type != &ResultType::Count) {
-        block_vec.sort_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
+        block_vec.sort_unstable_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
         for block in block_vec {
+            if (result_type == &ResultType::Topk)
+                && (topk_candidates.current_heap_size == top_k)
+                && (block.block_score <= topk_candidates._elements[0].score)
+            {
+                break;
+            }
+
             for item in query_list.iter_mut() {
                 item.p_block = block.p_block_vec[item.term_index_unique];
             }
@@ -2179,13 +2186,6 @@ pub(crate) async fn intersection_blockid<'a>(
             .await;
 
             result_count_arc.fetch_add(result_count_local as usize, Ordering::Relaxed);
-
-            if (result_type == &ResultType::Topk)
-                && (topk_candidates.current_heap_size == top_k)
-                && (block.block_score <= topk_candidates._elements[0].score)
-            {
-                break;
-            }
         }
     }
 }

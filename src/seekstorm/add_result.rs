@@ -2399,8 +2399,9 @@ pub(crate) fn add_result_multiterm_multifield(
                 plo.pos = get_next_position_singlefield(plo);
             }
 
-            non_unique_query_list
-                .sort_by(|x, y| x.positions_count.partial_cmp(&y.positions_count).unwrap());
+            non_unique_query_list.sort_unstable_by(|x, y| {
+                x.positions_count.partial_cmp(&y.positions_count).unwrap()
+            });
 
             let t1 = 0;
             let mut t2 = 1;
@@ -2515,8 +2516,9 @@ pub(crate) fn add_result_multiterm_multifield(
                     continue;
                 }
 
-                non_unique_query_list
-                    .sort_by(|x, y| x.positions_count.partial_cmp(&y.positions_count).unwrap());
+                non_unique_query_list.sort_unstable_by(|x, y| {
+                    x.positions_count.partial_cmp(&y.positions_count).unwrap()
+                });
 
                 let t1 = 0;
                 let mut t2 = 1;
@@ -2801,7 +2803,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
 
         non_unique_query_list
-            .sort_by(|x, y| x.positions_count.partial_cmp(&y.positions_count).unwrap());
+            .sort_unstable_by(|x, y| x.positions_count.partial_cmp(&y.positions_count).unwrap());
 
         let t1 = 0;
         let mut t2 = 1;

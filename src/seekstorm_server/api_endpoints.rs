@@ -54,7 +54,7 @@ pub struct ResultObject {
     pub offset: usize,
     pub length: usize,
     pub count: usize,
-    pub count_evaluated: usize,
+    pub count_total: usize,
     pub results: Vec<Document>,
     pub suggestions: Vec<String>,
 }
@@ -462,7 +462,7 @@ pub(crate) async fn query_index_api(
         offset: search_request.offset,
         length: search_request.length,
         count: rlo.results.len(),
-        count_evaluated: rlo.result_count_total as usize,
+        count_total: rlo.result_count_total as usize,
         results,
         suggestions: Vec::new(),
     }

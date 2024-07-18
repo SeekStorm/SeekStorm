@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17] - 2024-07-18
+
+### Changed
+
+- "detect longest field id" only if index_mut.indexed_field_vec.len()>1
+- ResultListObject.result_count_estimated (count) removed
+- ResultListObject.result_count_total i64 -> usize; serde rename countEvaluated removed
+- count_evaluated renamed to count_total in master.js and api_endpoints.rs
+- early termination invoked earlier in intersection_blockid
+- sort_by -> sort_unstable_by
+- Normal intersection with galloping when SIMD not supported for the architecture.
+
 ## [0.1.16] - 2024-07-16
 
 ### Added

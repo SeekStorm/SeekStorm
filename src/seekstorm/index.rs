@@ -943,6 +943,7 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
                     block.pointer_pivot_p_docid as usize,
                     block.compression_type_pointer,
                 );
+
                 index.segments_index[key0]
                     .segment
                     .get_mut(&key)
@@ -1739,12 +1740,14 @@ impl IndexDocument2 for IndexArc {
         if doc_id == 0 {
             index_mut.longest_field_id = longest_field_id;
             index_mut.indexed_field_vec[longest_field_id].is_longest_field = true;
-            println!(
-                "detect longest field id {} name {} length {}",
-                longest_field_id,
-                index_mut.indexed_field_vec[longest_field_id].schema_field_name,
-                longest_field_length
-            );
+            if index_mut.indexed_field_vec.len() > 1 {
+                println!(
+                    "detect longest field id {} name {} length {}",
+                    longest_field_id,
+                    index_mut.indexed_field_vec[longest_field_id].schema_field_name,
+                    longest_field_length
+                );
+            }
         }
 
         for term in document_item.unique_terms {

@@ -30,6 +30,7 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * API keys
 * RESTful API with CORS
 * Index either in RAM or memory mapped files
+* Cross-platform (Windows, Linux, MacOS)
 * SIMD (Single Instruction, Multiple Data) hardware acceleration support, 
 <br>both for x86-64 (AMD64 and Intel 64) and AArch64 (ARM, Apple Silicon).
 

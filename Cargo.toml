@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.1.16"
+version = "0.1.17"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -27,7 +27,7 @@ ctrlc = "3.4.4"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 derivative = "2.2.0"
-tokio = { version = "1.38.0", features = ["full"] }
+tokio = { version = "1.38.1", features = ["full"] }
 base64 = "0.22.1"
 num-format = "0.4.4"
 ahash = "0.8.11"

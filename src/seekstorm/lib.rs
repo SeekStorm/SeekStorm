@@ -113,12 +113,11 @@
 //! }
 //! ```
 
-pub(crate) mod compatible;
-
 pub(crate) mod add_result;
 /// Commit moves indexed documents from the intermediate uncompressed data structure in RAM
 /// to the final compressed data structure on disk.
 pub mod commit;
+pub(crate) mod compatible;
 pub(crate) mod compress_postinglist;
 pub(crate) mod doc_store;
 /// Extracts the most relevant fragments (snippets, summaries) from specified fields of the document to provide a "keyword in context" (KWIC) functionality.

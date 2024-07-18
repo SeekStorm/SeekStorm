@@ -23,6 +23,8 @@ use crate::{
     search::ResultType,
 };
 
+/// Fast SIMD intersection and union partially ported and modified from Daniel Lemire's CRoaring project (which is dual licensed Apache/MIT).
+
 #[cfg(target_arch = "x86_64")]
 const SHUFFLE_MASK16: [u8; 4096] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -232,6 +234,8 @@ const SHUFFLE_MASK16: [u8; 4096] = [
     5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 ];
 
+const CMPESTRM_CTRL: i32 = _SIDD_UWORD_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK;
+
 #[cfg(target_arch = "x86_64")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn intersection_vector16(
@@ -266,13 +270,8 @@ pub(crate) fn intersection_vector16(
             let mut v_b = _mm_loadu_si128(b[i_b..].as_ptr() as *const __m128i);
 
             while (a[i_a] == 0) || (b[i_b] == 0) {
-                let res_v = _mm_cmpestrm(
-                    v_b,
-                    vectorlength_i32,
-                    v_a,
-                    vectorlength_i32,
-                    _SIDD_UWORD_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK,
-                );
+                let res_v =
+                    _mm_cmpestrm(v_b, vectorlength_i32, v_a, vectorlength_i32, CMPESTRM_CTRL);
                 let r = _mm_extract_epi32(res_v, 0);
 
                 let sm16 =
@@ -454,7 +453,6 @@ pub(crate) fn intersection_vector16(
         let mut i_a = 0;
         let mut i_b = 0;
         let vectorlength = mem::size_of::<uint16x8_t>() / mem::size_of::<u16>();
-        // let vectorlength_i32 = vectorlength as i32;
         let st_b = (s_b / vectorlength) * vectorlength;
         while i_a < s_a && i_b < st_b {
             if a[i_a] < b[i_b] {

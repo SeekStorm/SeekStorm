@@ -54,11 +54,7 @@ pub struct ResultListObject {
     pub query: String,
     pub result_count: usize,
 
-    #[serde(rename = "countEvaluated")]
-    pub result_count_total: i64,
-
-    #[serde(rename = "count")]
-    pub result_count_estimated: i64,
+    pub result_count_total: usize,
 
     #[serde(skip)]
     #[derivative(Default(value = "1"))]
@@ -601,7 +597,6 @@ impl Search for IndexArc {
                                 .clone_from(&result_list.query_term_strings);
                             rl.result_count = result_list.result_count;
                             rl.result_count_total = result_list.result_count_total;
-                            rl.result_count_estimated = result_list.result_count_estimated;
 
                             return rl;
                         } else {
@@ -739,9 +734,8 @@ impl Search for IndexArc {
             }
         }
 
-        rl.result_count_total = (result_count_uncommitted_arc.load(Ordering::Relaxed)
-            + result_count_arc.load(Ordering::Relaxed)) as i64;
-        rl.result_count_estimated = rl.result_count_total;
+        rl.result_count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
+            + result_count_arc.load(Ordering::Relaxed);
 
         rl
     }

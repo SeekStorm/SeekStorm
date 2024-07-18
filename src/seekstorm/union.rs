@@ -501,7 +501,7 @@ pub(crate) async fn union_count<'a>(
     query_list: &mut [PostingListObjectQuery<'a>],
     not_query_list: &mut [PostingListObjectQuery<'a>],
 ) {
-    query_list.sort_by(|a, b| b.p_docid_count.partial_cmp(&a.p_docid_count).unwrap());
+    query_list.sort_unstable_by(|a, b| b.p_docid_count.partial_cmp(&a.p_docid_count).unwrap());
 
     let mut result_count_local =
         query_list[0].blocks[query_list[0].p_block as usize].posting_count as u32 + 1;
@@ -619,7 +619,6 @@ pub(crate) async fn union_count<'a>(
                     cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
                 let runs_count = ushorts1[0] as i32;
 
-                plo.p_docid = 0;
                 for i in (1..(runs_count << 1) + 1).step_by(2) {
                     let startdocid: u16 = ushorts1[i as usize];
                     let runlength = ushorts1[(i + 1) as usize];
