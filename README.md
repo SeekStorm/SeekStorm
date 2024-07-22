@@ -465,4 +465,14 @@ The Rust port is not yet feature complete. The following features are currently 
 * autosuggestion, spelling correction, instant search
 * fuzzy search
 * more tokenizer types (stemming, umlauts, apostrophes, CJK)
+* intra-query concurrency
+
+**Improvements**
+* Faster indexing
+* Relevancy benchmarks: BeIR, MS MARCO
+
+**New features**
+* Native vector search (currently PoC)
+* Distributed search cluster (currently PoC)
+
 
