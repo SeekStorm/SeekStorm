@@ -17,13 +17,14 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::Method;
 use hyper::StatusCode;
 use hyper::{Body, Request, Response, Server};
+use seekstorm::index::Document;
+use seekstorm::search::ResultType;
 use sha2::Digest;
 use sha2::Sha256;
 use std::{convert::Infallible, net::SocketAddr};
 
 use base64::{engine::general_purpose, Engine as _};
 
-use crate::api_endpoints::delete_documents_api;
 use crate::api_endpoints::delete_index_api;
 use crate::api_endpoints::get_all_index_stats_api;
 use crate::api_endpoints::get_document_api;
@@ -39,6 +40,7 @@ use crate::api_endpoints::{close_index_api, delete_document_api};
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
 use crate::api_endpoints::{create_index_api, SearchRequestObject};
 use crate::api_endpoints::{delete_apikey_api, GetDocumentRequest};
+use crate::api_endpoints::{delete_documents_api, delete_documents_by_query_api};
 use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
 use crate::{MASTER_KEY_SECRET, VERSION};
@@ -223,6 +225,7 @@ pub(crate) async fn http_request_handler(
                                     query_string,
                                     offset,
                                     length,
+                                    result_type: ResultType::default(),
                                     realtime,
                                     highlights: Vec::new(),
                                     field_filter: Vec::new(),
@@ -593,25 +596,32 @@ pub(crate) async fn http_request_handler(
                     let index_arc_clone = index_arc.clone();
                     drop(apikey_list_ref);
 
-                    let is_doc_vector = request_string.trim().starts_with('[');
+                    let is_doc_vector = if let Some(pos) = request_string.find('[') {
+                        request_string[pos + 1..].find('[').is_some()
+                    } else {
+                        return Ok(status(StatusCode::BAD_REQUEST, String::new()));
+                    };
+
                     let status_object = if !is_doc_vector {
-                        let document_object = match serde_json::from_str(request_string) {
-                            Ok(document_object) => document_object,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                            }
-                        };
+                        let document_object: (u64, Document) =
+                            match serde_json::from_str(request_string) {
+                                Ok(id_document_object) => id_document_object,
+                                Err(e) => {
+                                    return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                                }
+                            };
 
                         update_document_api(&index_arc_clone, document_object).await
                     } else {
-                        let document_object_vec = match serde_json::from_str(request_string) {
-                            Ok(document_object_vec) => document_object_vec,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                            }
-                        };
+                        let id_document_object_vec: Vec<(u64, Document)> =
+                            match serde_json::from_str(request_string) {
+                                Ok(document_object_vec) => document_object_vec,
+                                Err(e) => {
+                                    return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                                }
+                            };
 
-                        update_documents_api(&index_arc_clone, document_object_vec).await
+                        update_documents_api(&index_arc_clone, id_document_object_vec).await
                     };
 
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
@@ -703,35 +713,68 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let index_id: u64 = parts[3].parse().unwrap();
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-                    let request_string = str::from_utf8(&request_bytes).unwrap();
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
+
                     let apikey_list_ref = apikey_list.read().await;
                     let apikey_object = apikey_list_ref.get(&apikey_hash).unwrap();
                     let index_arc = apikey_object.index_list.get(&index_id).unwrap();
                     let index_arc_clone = index_arc.clone();
                     drop(apikey_list_ref);
 
-                    let is_doc_vector = request_string.trim().starts_with('[');
-                    let status_object = if !is_doc_vector {
-                        let document_id = match serde_json::from_str(request_string) {
-                            Ok(document_id) => document_id,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                    let Ok(document_id) = parts[5].parse() else {
+                        let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+
+                        match serde_json::from_slice::<SearchRequestObject>(&request_bytes) {
+                            Ok(search_request) => {
+                                let status_object =
+                                    delete_documents_by_query_api(&index_arc_clone, search_request)
+                                        .await;
+                                let status_object_json =
+                                    serde_json::to_string(&status_object).unwrap();
+                                return Ok(Response::new(status_object_json.into()));
+                            }
+                            Err(_) => {
+                                let request_string = str::from_utf8(&request_bytes).unwrap();
+                                let is_doc_vector = request_string.trim().starts_with('[');
+                                let status_object = if !is_doc_vector {
+                                    let document_id = match serde_json::from_str(request_string) {
+                                        Ok(document_id) => document_id,
+                                        Err(e) => {
+                                            return Ok(status(
+                                                StatusCode::BAD_REQUEST,
+                                                e.to_string(),
+                                            ));
+                                        }
+                                    };
+
+                                    delete_document_api(&index_arc_clone, document_id).await
+                                } else {
+                                    let document_id_vec = match serde_json::from_str(request_string)
+                                    {
+                                        Ok(document_id_vec) => document_id_vec,
+                                        Err(e) => {
+                                            return Ok(status(
+                                                StatusCode::BAD_REQUEST,
+                                                e.to_string(),
+                                            ));
+                                        }
+                                    };
+
+                                    delete_documents_api(&index_arc_clone, document_id_vec).await
+                                };
+                                let status_object_json =
+                                    serde_json::to_string(&status_object).unwrap();
+                                return Ok(Response::new(status_object_json.into()));
                             }
                         };
-
-                        delete_document_api(&index_arc_clone, document_id).await
-                    } else {
-                        let document_id_vec = match serde_json::from_str(request_string) {
-                            Ok(document_id_vec) => document_id_vec,
-                            Err(e) => {
-                                return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                            }
-                        };
-
-                        delete_documents_api(&index_arc_clone, document_id_vec).await
                     };
+
+                    let status_object = delete_document_api(&index_arc_clone, document_id).await;
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {

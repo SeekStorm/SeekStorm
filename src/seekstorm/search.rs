@@ -1,5 +1,5 @@
 use crate::commit::KEY_HEAD_SIZE;
-use crate::min_heap::CandidateObject;
+use crate::min_heap::Result;
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
 use crate::utils::{read_u16, read_u32, read_u64, read_u8};
@@ -41,16 +41,17 @@ pub enum QueryType {
 /// **Count** (count all results that match the query, but returning top-k results is not required)
 /// **Topk** (returns the top-k results per query, but counting all results that match the query is not required)
 /// **TopkCount** (returns the top-k results per query + count all results that match the query)
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum ResultType {
     Count = 0,
     Topk = 1,
+    #[default]
     TopkCount = 2,
 }
 
 /// Contains the results returned when searching the index.
 #[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
-pub struct ResultListObject {
+pub struct ResultList {
     pub query: String,
     pub result_count: usize,
 
@@ -66,7 +67,7 @@ pub struct ResultListObject {
     pub time: i64,
     pub suggestions: Vec<String>,
 
-    pub results: Vec<CandidateObject>,
+    pub results: Vec<Result>,
     pub query_term_strings: Vec<String>,
 }
 
@@ -96,7 +97,7 @@ pub trait Search {
         result_type: ResultType,
         include_uncommited: bool,
         field_filter: Vec<String>,
-    ) -> ResultListObject;
+    ) -> ResultList;
 }
 
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
@@ -228,11 +229,11 @@ impl Search for IndexArc {
         result_type: ResultType,
         include_uncommited: bool,
         field_filter: Vec<String>,
-    ) -> ResultListObject {
+    ) -> ResultList {
         let index_ref = self.read().await;
         let mut query_type_mut = query_type_default;
         let mut topk_candidates = MinHeap::new(offset + length);
-        let mut rl: ResultListObject = Default::default();
+        let mut rl: ResultList = Default::default();
 
         if index_ref.segments_index.is_empty() {
             return rl;
@@ -588,6 +589,7 @@ impl Search for IndexArc {
                     && offset + length <= 1000
                     && not_query_list.is_empty()
                     && field_filter_set.is_empty()
+                    && index_ref.delete_hashset.is_empty()
                 {
                     if let Some(result_list) =
                         index_ref.stopword_results.get(&non_unique_terms[0].term)

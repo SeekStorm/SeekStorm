@@ -56,6 +56,29 @@
 //! let documents_vec=serde_json::from_str(documents_json).unwrap();
 //! index_arc.index_documents(documents_vec).await;
 //! ```
+//! ### delete documents by document id
+//! ```rust
+//! let docid_vec=vec![1,2];
+//! index_arc.delete_documents(docid_vec).await;
+//! ```
+//! ### delete documents by query
+//! ```rust
+//! let query="test".to_string();
+//! let offset=0;
+//! let length=10;
+//! let query_type=QueryType::Intersection;
+//! let include_uncommitted=false;
+//! let field_filter=Vec::new();
+//! index_arc.delete_documents_by_query(query, query_type, offset, length, include_uncommitted,field_filter).await;
+//! ```
+//! ### update documents
+//! ```rust
+//! let id_document_vec_json = r#"
+//! [[1,{"title":"title1 test","body":"body1","url":"url1"}],
+//! [2,{"title":"title3 test","body":"body3 test","url":"url3"}]]"#;
+//! let id_document_vec=serde_json::from_str(id_document_vec_json).unwrap();
+//! index_arc.update_documents(id_document_vec).await;
+//! ```
 //! ### commit documents
 //! ```rust
 //! index_arc.commit().await;

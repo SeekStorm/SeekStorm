@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.1.17"
+version = "0.1.18"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]

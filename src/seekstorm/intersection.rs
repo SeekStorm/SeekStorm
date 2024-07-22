@@ -127,7 +127,7 @@ pub(crate) async fn intersection_docid(
     let t1 = 0;
     let mut t2 = 1;
 
-    let filtered = !not_query_list.is_empty() || phrase_query || field_filter_set.len() > 0;
+    let filtered = !not_query_list.is_empty() || phrase_query || !field_filter_set.is_empty();
     for plo in not_query_list.iter_mut() {
         let query_list_item_mut = plo;
 

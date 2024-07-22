@@ -126,6 +126,10 @@ pub(crate) fn add_result_singleterm_multifield(
     not_query_list: &mut [PostingListObjectQuery],
     block_score: f32,
 ) {
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+        return;
+    }
+
     if index.indexed_field_vec.len() == 1 {
         add_result_singleterm_singlefield(
             index,
@@ -336,6 +340,10 @@ pub(crate) fn add_result_singleterm_singlefield(
     not_query_list: &mut [PostingListObjectQuery],
     block_score: f32,
 ) {
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+        return;
+    }
+
     for plo in not_query_list.iter_mut() {
         if !plo.bm25_flag {
             continue;
@@ -2231,6 +2239,10 @@ pub(crate) fn add_result_multiterm_multifield(
     block_score: f32,
     all_terms_frequent: bool,
 ) {
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+        return;
+    }
+
     if index.indexed_field_vec.len() == 1 {
         add_result_multiterm_singlefield(
             index,
@@ -2653,6 +2665,10 @@ pub(crate) fn add_result_multiterm_singlefield(
     block_score: f32,
     all_terms_frequent: bool,
 ) {
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+        return;
+    }
+
     let local_docid = docid & 0b11111111_11111111;
     for plo in not_query_list.iter_mut() {
         if !plo.bm25_flag {

@@ -57,7 +57,33 @@
 //! ```
 //! multiple documents
 //! ```
-//! curl --request POST --url http://127.0.0.1:80/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --header 'user-agent: vscode-restclient' --data '[{"title":"title2","body":"body2 test","url":"url2"},{"title":"title3 test","body":"body3 test","url":"url3"}]'
+//! curl --request POST --url http://127.0.0.1:80/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[{"title":"title2","body":"body2 test","url":"url2"},{"title":"title3 test","body":"body3 test","url":"url3"}]'
+//! ```
+//! ### delete document(s)
+//! single document (by document id in URL parameter)
+//! ```
+//! curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey: VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=' --header 'content-type: application/json'
+//! ```
+//! single document (by document id in JSON parameter)
+//! ```
+//! curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=' --header 'content-type: application/json' --data 0
+//! ```
+//! multiple documents (by document id's in JSON parameter)
+//! ```
+//! curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=' --header 'content-type: application/json' --data '[0,1]'
+//! ```
+//! multiple documents (by query in JSON parameter)
+//! ```
+//! curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=' --header 'content-type: application/json' --data '{"query":"test","offset":0,"length":10,"realtime": true,"field_filter": ["title", "body"]}'
+//! ```
+//! ### update document(s)
+//! single document
+//! ```
+//! curl --request PATCH --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=' --header 'content-type: application/json' --data '[0,{"title":"title1 test","body":"body1","url":"url1"}]'
+//! ```
+//! multiple documents
+//! ```
+//! curl --request PATCH --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=' --header 'content-type: application/json' --data '[[1,{"title":"title1 test","body":"body1","url":"url1"}],[2,{"title":"title3 test","body":"body3 test","url":"url3"}]]'
 //! ```
 //! ### get document
 //! without highlight

@@ -1,5 +1,5 @@
 use add_result::decode_positions_commit;
-use ahash::{AHashMap, HashSet, RandomState};
+use ahash::{AHashMap, AHashSet, HashSet, RandomState};
 use derivative::Derivative;
 use lazy_static::lazy_static;
 use memmap2::{Mmap, MmapOptions};
@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{BufReader, Read, Seek, Write},
+    io::{BufRead, BufReader, Read, Seek, Write},
     path::Path,
     sync::Arc,
     thread::available_parallelism,
@@ -26,13 +26,16 @@ use utils::{read_u32, write_u16};
 use crate::{
     add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
     commit::KEY_HEAD_SIZE,
-    search::{self, ResultListObject},
+    search::{self, ResultList, ResultType},
     tokenizer::tokenizer,
-    utils::{self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref},
+    utils::{
+        self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref, write_u64,
+    },
 };
 
 pub(crate) const INDEX_FILENAME: &str = "index.bin";
 pub(crate) const DOCSTORE_FILENAME: &str = "docstore.bin";
+pub(crate) const DELETE_FILENAME: &str = "delete.bin";
 pub(crate) const SCHEMA_FILENAME: &str = "schema.json";
 pub(crate) const META_FILENAME: &str = "index.json";
 
@@ -400,6 +403,10 @@ pub struct Index {
 
     pub(crate) docstore_file: File,
     pub(crate) docstore_file_mmap: Mmap,
+
+    pub(crate) delete_file: File,
+    pub(crate) delete_hashset: AHashSet<usize>,
+
     pub(crate) index_file: File,
     pub(crate) index_path_string: String,
     pub(crate) index_file_mmap: Mmap,
@@ -450,7 +457,7 @@ pub struct Index {
     pub(crate) position_count: usize,
 
     pub(crate) mute: bool,
-    pub(crate) stopword_results: AHashMap<String, ResultListObject>,
+    pub(crate) stopword_results: AHashMap<String, ResultList>,
 }
 
 /// Get the version of the SeekStorm search library
@@ -498,6 +505,14 @@ pub fn create_index(
                 .create(true)
                 .truncate(false)
                 .open(Path::new(index_path).join(DOCSTORE_FILENAME))
+                .unwrap();
+
+            let delete_file = File::options()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(Path::new(index_path).join(DELETE_FILENAME))
                 .unwrap();
 
             let mut document_length_compressed_array: Vec<[u8; ROARING_BLOCK_SIZE]> = Vec::new();
@@ -562,6 +577,8 @@ pub fn create_index(
                 hasher_64,
                 stopword_posting_counts: [0; STOPWORDS.len()],
                 docstore_file,
+                delete_file,
+                delete_hashset: AHashSet::new(),
                 index_file,
                 index_path_string: index_path_string.to_owned(),
                 index_file_mmap,
@@ -1387,11 +1404,29 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                             update_list_max_impact_score(&mut index);
 
+                            let mut reader = BufReader::with_capacity(8192, &index.delete_file);
+                            loop {
+                                let Ok(buffer) = reader.fill_buf() else { break };
+
+                                let length = buffer.len();
+
+                                if length == 0 {
+                                    break;
+                                }
+
+                                for i in (0..length).step_by(8) {
+                                    let docid = read_u64(buffer, i);
+                                    index.delete_hashset.insert(docid as usize);
+                                }
+
+                                reader.consume(length);
+                            }
+
                             let elapsed_time = start_time.elapsed().as_nanos();
 
                             if !mute {
                                 println!(
-                        "{} name {} id {} version {} {} level {} fields {} {} docs {} segments {} time {} s",
+                        "{} name {} id {} version {} {} level {} fields {} {} docs {} deleted {} segments {} time {} s",
                         INDEX_FILENAME,
                         index.meta.name,
                         index.meta.id,
@@ -1404,6 +1439,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                         index.schema_map.len(),
 
                         index.indexed_doc_count.to_formatted_string(&Locale::en),
+                        index.delete_hashset.len().to_formatted_string(&Locale::en),
                         index.segment_number1,
                         elapsed_time/1_000_000_000
                     );
@@ -1524,6 +1560,10 @@ impl Index {
         let _ = self.docstore_file.rewind();
         let _ = self.docstore_file.set_len(0);
 
+        let _ = self.delete_file.rewind();
+        let _ = self.delete_file.set_len(0);
+        self.delete_hashset.clear();
+
         if !self.stored_field_names.is_empty() && self.meta.access_type == AccessType::Mmap {
             self.docstore_file_mmap =
                 unsafe { Mmap::map(&self.docstore_file).expect("Unable to create Mmap") };
@@ -1556,12 +1596,160 @@ impl Index {
         let _ = fs::remove_file(index_path.join(INDEX_FILENAME));
         let _ = fs::remove_file(index_path.join(SCHEMA_FILENAME));
         let _ = fs::remove_file(index_path.join(META_FILENAME));
+        let _ = fs::remove_file(index_path.join(DELETE_FILENAME));
         let _ = fs::remove_dir(index_path);
     }
 
     /// Remove index from RAM (Reverse of open_index)
     pub fn close_index(&mut self) {
         self.commit(self.indexed_doc_count);
+    }
+}
+
+/// Delete document from index by document id
+#[allow(async_fn_in_trait)]
+pub trait DeleteDocument {
+    async fn delete_document(&self, docid: u64);
+}
+
+/// Delete document from index by document id
+/// Document ID can by obtained by search.
+/// Immediately effective, indpendent of commit.
+/// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
+/// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
+/// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
+/// For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
+/// BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
+impl DeleteDocument for IndexArc {
+    async fn delete_document(&self, docid: u64) {
+        let mut index_mut = self.write().await;
+        if docid as usize >= index_mut.indexed_doc_count {
+            return;
+        }
+        if index_mut.delete_hashset.insert(docid as usize) {
+            let mut buffer: [u8; 8] = [0; 8];
+            write_u64(docid, &mut buffer, 0);
+            let _ = index_mut.delete_file.write(&buffer);
+            let _ = index_mut.delete_file.flush();
+        }
+    }
+}
+
+/// Delete documents from index by document id
+#[allow(async_fn_in_trait)]
+pub trait DeleteDocuments {
+    async fn delete_documents(&self, docid_vec: Vec<u64>);
+}
+
+/// Delete documents from index by document id
+/// Document ID can by obtained by search.
+/// Immediately effective, indpendent of commit.
+/// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
+/// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
+/// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
+/// For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
+/// BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
+impl DeleteDocuments for IndexArc {
+    async fn delete_documents(&self, docid_vec: Vec<u64>) {
+        let mut index_mut = self.write().await;
+        let mut buffer: [u8; 8] = [0; 8];
+        for docid in docid_vec {
+            if docid as usize >= index_mut.indexed_doc_count {
+                continue;
+            }
+            if index_mut.delete_hashset.insert(docid as usize) {
+                write_u64(docid, &mut buffer, 0);
+                let _ = index_mut.delete_file.write(&buffer);
+            }
+        }
+        let _ = index_mut.delete_file.flush();
+    }
+}
+
+/// Delete documents from index by query
+/// Delete and search have identical parameters.
+/// It is recommended to test with search prior to delete to verify that only those documents are returned that you really want to delete.
+#[allow(async_fn_in_trait)]
+pub trait DeleteDocumentsByQuery {
+    async fn delete_documents_by_query(
+        &self,
+        query_string: String,
+        query_type_default: QueryType,
+        offset: usize,
+        length: usize,
+        include_uncommited: bool,
+        field_filter: Vec<String>,
+    );
+}
+
+/// Delete documents from index by query
+/// Delete and search have identical parameters.
+/// It is recommended to test with search prior to delete to verify that only those documents are returned that you really want to delete.
+impl DeleteDocumentsByQuery for IndexArc {
+    async fn delete_documents_by_query(
+        &self,
+        query_string: String,
+        query_type_default: QueryType,
+        offset: usize,
+        length: usize,
+        include_uncommited: bool,
+        field_filter: Vec<String>,
+    ) {
+        let rlo = self
+            .search(
+                query_string.to_owned(),
+                query_type_default,
+                offset,
+                length,
+                ResultType::Topk,
+                include_uncommited,
+                field_filter,
+            )
+            .await;
+
+        let document_id_vec: Vec<u64> = rlo
+            .results
+            .iter()
+            .map(|result| result.doc_id as u64)
+            .collect();
+        self.delete_documents(document_id_vec).await;
+    }
+}
+
+/// Update document in index
+/// Update_document is a combination of delete_document and index_document.
+/// All current limitations of delete_document apply.
+#[allow(async_fn_in_trait)]
+pub trait UpdateDocument {
+    async fn update_document(&self, id_document: (u64, Document));
+}
+
+/// Update document in index
+/// Update_document is a combination of delete_document and index_document.
+/// All current limitations of delete_document apply.
+impl UpdateDocument for IndexArc {
+    async fn update_document(&self, id_document: (u64, Document)) {
+        self.delete_document(id_document.0).await;
+        self.index_document(id_document.1).await;
+    }
+}
+
+/// Update documents in index
+/// Update_document is a combination of delete_document and index_document.
+/// All current limitations of delete_document apply.
+#[allow(async_fn_in_trait)]
+pub trait UpdateDocuments {
+    async fn update_documents(&self, id_document_vec: Vec<(u64, Document)>);
+}
+
+/// Update documents in index
+/// Update_document is a combination of delete_document and index_document.
+/// All current limitations of delete_document apply.
+impl UpdateDocuments for IndexArc {
+    async fn update_documents(&self, id_document_vec: Vec<(u64, Document)>) {
+        let (docid_vec, document_vec): (Vec<_>, Vec<_>) = id_document_vec.into_iter().unzip();
+        self.delete_documents(docid_vec).await;
+        self.index_documents(document_vec).await;
     }
 }
 

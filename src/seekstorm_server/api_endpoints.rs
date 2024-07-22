@@ -14,8 +14,9 @@ use seekstorm::{
     commit::Commit,
     highlighter::{highlighter, Highlight},
     index::{
-        create_index, open_index, AccessType, Document, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, SchemaField, SimilarityType, TokenizerType,
+        create_index, open_index, AccessType, DeleteDocument, DeleteDocuments,
+        DeleteDocumentsByQuery, Document, IndexArc, IndexDocument, IndexDocuments, IndexMetaObject,
+        SchemaField, SimilarityType, TokenizerType, UpdateDocument, UpdateDocuments,
     },
     search::{QueryType, ResultType, Search},
 };
@@ -36,6 +37,11 @@ pub struct SearchRequestObject {
     pub query_string: String,
     pub offset: usize,
     pub length: usize,
+
+    #[serde(default)]
+    #[derivative(Default(value = "TopkCount"))]
+    pub result_type: ResultType,
+
     #[serde(default)]
     #[derivative(Default(value = "false"))]
     pub realtime: bool,
@@ -58,6 +64,7 @@ pub struct ResultObject {
     pub results: Vec<Document>,
     pub suggestions: Vec<String>,
 }
+
 
 #[derive(Debug, Clone, Deserialize, Serialize, Derivative)]
 pub struct CreateIndexRequest {
@@ -96,6 +103,7 @@ pub(crate) struct IndexResponseObject {
     pub version: String,
 }
 
+
 /// Save file atomically
 pub(crate) fn save_file_atomically(path: &PathBuf, content: String) {
     let mut temp_path = path.clone();
@@ -122,6 +130,7 @@ pub(crate) fn create_apikey_api<'a>(
     apikey: &[u8],
     apikey_list: &'a mut HashMap<u128, ApikeyObject>,
 ) -> &'a mut ApikeyObject {
+
     let apikey_hash_u128 = calculate_hash(&apikey) as u128;
 
     let mut apikey_id: u64 = 0;
@@ -156,6 +165,7 @@ pub(crate) fn delete_apikey_api(
     apikey_list: &mut HashMap<u128, ApikeyObject>,
     apikey_hash: u128,
 ) -> Result<u64, String> {
+
     if let Some(apikey_object) = apikey_list.get(&apikey_hash) {
         let apikey_id_path = Path::new(&index_path).join(apikey_object.id.to_string());
         println!("delete path {}", apikey_id_path.to_string_lossy());
@@ -230,6 +240,8 @@ pub(crate) async fn open_all_apikeys(
     }
     test_index_flag
 }
+
+
 
 pub(crate) fn create_index_api<'a>(
     index_path: &'a PathBuf,
@@ -335,19 +347,19 @@ pub(crate) async fn get_all_index_stats_api(
 }
 
 pub(crate) async fn index_document_api(
-    index: &IndexArc,
+    index_arc: &IndexArc,
     document: Document,
 ) -> Result<usize, String> {
-    index.index_document(document).await;
-    Ok(index.read().await.indexed_doc_count)
+    index_arc.index_document(document).await;
+    Ok(index_arc.read().await.indexed_doc_count)
 }
 
 pub(crate) async fn index_documents_api(
-    index: &IndexArc,
+    index_arc: &IndexArc,
     document_vec: Vec<Document>,
 ) -> Result<usize, String> {
-    index.index_documents(document_vec).await;
-    Ok(index.read().await.indexed_doc_count)
+    index_arc.index_documents(document_vec).await;
+    Ok(index_arc.read().await.indexed_doc_count)
 }
 
 pub(crate) async fn get_document_api(
@@ -382,31 +394,53 @@ pub(crate) async fn get_document_api(
 }
 
 pub(crate) async fn update_document_api(
-    _index: &IndexArc,
-    _document: Document,
+    index_arc: &IndexArc,
+    id_document: (u64, Document),
 ) -> Result<u64, String> {
-    Ok(0)
+    index_arc.update_document(id_document).await;
+    Ok(index_arc.read().await.indexed_doc_count as u64)
 }
 
 pub(crate) async fn update_documents_api(
-    _index: &IndexArc,
-    _document_vec: Vec<Document>,
+    index_arc: &IndexArc,
+    id_document_vec: Vec<(u64, Document)>,
 ) -> Result<u64, String> {
-    Ok(0)
+    index_arc.update_documents(id_document_vec).await;
+    Ok(index_arc.read().await.indexed_doc_count as u64)
 }
 
 pub(crate) async fn delete_document_api(
-    _index: &IndexArc,
-    _document_id: String,
+    index_arc: &IndexArc,
+    document_id: u64,
 ) -> Result<u64, String> {
-    Ok(0)
+    index_arc.delete_document(document_id).await;
+    Ok(index_arc.read().await.indexed_doc_count as u64)
 }
 
 pub(crate) async fn delete_documents_api(
-    _index: &IndexArc,
-    _document_id_vec: Vec<String>,
+    index_arc: &IndexArc,
+    document_id_vec: Vec<u64>,
 ) -> Result<u64, String> {
-    Ok(0)
+    index_arc.delete_documents(document_id_vec).await;
+    Ok(index_arc.read().await.indexed_doc_count as u64)
+}
+
+pub(crate) async fn delete_documents_by_query_api(
+    index_arc: &IndexArc,
+    search_request: SearchRequestObject,
+) -> Result<u64, String> {
+    index_arc
+        .delete_documents_by_query(
+            search_request.query_string.to_owned(),
+            QueryType::Intersection,
+            search_request.offset,
+            search_request.length,
+            search_request.realtime,
+            search_request.field_filter,
+        )
+        .await;
+
+    Ok(index_arc.read().await.indexed_doc_count as u64)
 }
 
 pub(crate) async fn query_index_api(
@@ -421,13 +455,14 @@ pub(crate) async fn query_index_api(
             QueryType::Intersection,
             search_request.offset,
             search_request.length,
-            ResultType::TopkCount,
+            search_request.result_type,
             search_request.realtime,
             search_request.field_filter,
         )
         .await;
 
     let fields_hashset = HashSet::from_iter(search_request.fields);
+
 
     let mut results: Vec<Document> = Vec::new();
 
@@ -449,9 +484,14 @@ pub(crate) async fn query_index_api(
                 &fields_hashset,
             ) {
                 Ok(doc) => {
+                    let mut doc = doc;
+                    doc.insert("_id".to_string(), result.doc_id.into());
+                    doc.insert("_score".to_string(), result.score.into());
+
                     results.push(doc);
                 }
-                Err(_e) => {}
+                Err(_e) => {
+                }
             }
         }
     }
@@ -467,3 +507,4 @@ pub(crate) async fn query_index_api(
         suggestions: Vec::new(),
     }
 }
+

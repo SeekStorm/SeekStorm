@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2024-07-30
+
+### Added
+
+- delete_document, delete_documents, delete_documents_by_query, update_document, update_documents implemented, both for library and server REST API (single docid/document and vector of docid/document)
+- Query index REST API now returns also _id and _score fields for each result
+- Documentation updated
+- test_api.rest updated
+- SearchRequestObject contains result_type parameter (Count, Topk, TopkCount)
+
+### Fixed
+
+- Fixed count_total for realtime search with field filters
+
 ## [0.1.17] - 2024-07-18
 
 ### Changed

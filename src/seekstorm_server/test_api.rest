@@ -1,6 +1,6 @@
 // use with VSC extension "Rest client" to execute API calls and inspect responses
 
-### individual API key
+### individual API key (use create api key below to generate)
 @api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
 // WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, 
@@ -72,7 +72,7 @@ PATCH http://127.0.0.1/api/v1/index/0 HTTP/1.1
 apikey: {{api_key}}
 content-type: application/json
 
-### index doc
+### index document
 POST http://127.0.0.1:80/api/v1/index/0/doc HTTP/1.1
 apikey: {{api_key}}
 content-type: application/json
@@ -83,7 +83,7 @@ content-type: application/json
     "url":"url1"
 }
 
-### index docs
+### index documents
 POST http://127.0.0.1:80/api/v1/index/0/doc HTTP/1.1
 apikey: {{api_key}}
 content-type: application/json
@@ -101,7 +101,7 @@ content-type: application/json
 }
 ]
 
-### get doc with highlight
+### get documents with highlight
 GET http://127.0.0.1/api/v1/index/0/doc/0 
 apikey: {{api_key}}
 content-type: application/json
@@ -116,58 +116,61 @@ content-type: application/json
     { "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}]
 }
 
-### get doc without highlight
+### get document without highlight
 GET http://127.0.0.1/api/v1/index/0/doc/0
 apikey: {{api_key}}
 content-type: application/json
 
-### get docs
-
-### update doc
-PATCH http://127.0.0.1/api/v1/index/0/doc	HTTP/1.1
+### delete document, by single document ID in URL parameter
+DELETE  http://127.0.0.1/api/v1/index/0/doc/0 HTTP/1.1
 apikey: {{api_key}}
 content-type: application/json
 
-{
-    "title":"title1 test",
-    "body":"body1",
-    "url":"url1"
-}
 
-### update docs
-PATCH http://127.0.0.1/api/v1/index/0/doc	HTTP/1.1
-apikey: {{api_key}}
-content-type: application/json
-
-[
-{
-    "title":"title2",
-    "body":"body2 test",
-    "url":"url2"
-},
-{
-    "title":"title3 test",
-    "body":"body3 test",
-    "url":"url3"
-}
-]
-
-### delete doc
+### delete document, by single document ID in JSON request object
 DELETE  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
 apikey: {{api_key}}
 content-type: application/json
 
-"4ce8fb8d3b5a3981f27b66c0100325a53a74aacd3d8129b9baf5955190022e28"
+0
 
-### delete docs
+### delete documents, by vector of document IDs in JSON request object
 DELETE  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
 apikey: {{api_key}}
 content-type: application/json
 
 [
-    "4ce8fb8d3b5a3981f27b66c0100325a53a74aacd3d8129b9baf5955190022e88",
-    "4ce8fb8d3b5a3981f27b66c0100325a53a74aacd3d8129b9baf5955190022e18"
+    0,
+    1
 ]
+
+### delete documents, by query in JSON request object
+DELETE  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"test",
+    "offset":0,
+    "length":10,
+    "realtime": true,
+    "field_filter": ["title", "body"]
+}
+
+### update document
+PATCH  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+[0,{"title":"title1 test","body":"body1","url":"url1"}]
+
+### update documents
+PATCH  http://127.0.0.1/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+[[1,{"title":"title1 test","body":"body1","url":"url1"}],
+[2,{"title":"title3 test","body":"body3 test","url":"url3"}]]
 
 ### query index GET
 GET http://127.0.0.1/api/v1/index/0/query 
@@ -200,6 +203,7 @@ content-type: application/json
     "query":"test",
     "offset":0,
     "length":10,
+    "result_type": "TopkCount",
     "realtime": true,
     "field_filter": ["title", "body"]
 }

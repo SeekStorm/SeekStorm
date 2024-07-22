@@ -285,7 +285,9 @@ pub(crate) async fn single_blockid<'a>(
 ) {
     let term_index = 0;
 
-    let filtered = !not_query_list.is_empty() || field_filter_set.len() > 0;
+    let filtered = !not_query_list.is_empty()
+        || !field_filter_set.is_empty()
+        || !index.delete_hashset.is_empty();
 
     if (index.enable_single_term_topk || (result_type == &ResultType::Count))
         && (non_unique_query_list.len() <= 1)
@@ -295,6 +297,7 @@ pub(crate) async fn single_blockid<'a>(
             query_list[term_index].posting_count as usize,
             Ordering::Relaxed,
         );
+
         return;
     }
 

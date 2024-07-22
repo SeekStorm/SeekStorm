@@ -460,7 +460,7 @@ See roadmap below.
 The Rust port is not yet feature complete. The following features are currently ported.
 
 **Porting** 
-* delete document
+* ✅ delete document
 * faceted search
 * autosuggestion, spelling correction, instant search
 * fuzzy search

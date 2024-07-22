@@ -3,7 +3,7 @@ use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Copy, Default, Deserialize, Serialize, Derivative)]
-pub struct CandidateObject {
+pub struct Result {
     pub doc_id: usize,
     pub score: f32,
 }
@@ -12,7 +12,7 @@ pub struct CandidateObject {
 /// Maintains a list of the top-k most relevant result candidates.
 /// Better performance than a ordered list with binary search, inserts, and deletes
 pub(crate) struct MinHeap {
-    pub _elements: Vec<CandidateObject>,
+    pub _elements: Vec<Result>,
     pub current_heap_size: usize,
     pub docid_hashset: AHashMap<usize, f32>,
 }
@@ -24,7 +24,7 @@ impl MinHeap {
             current_heap_size: 0,
             docid_hashset: AHashMap::new(),
             _elements: vec![
-                CandidateObject {
+                Result {
                     doc_id: 0,
                     score: 0.0,
                 };
@@ -64,17 +64,17 @@ impl MinHeap {
     }
 
     #[inline(always)]
-    fn get_left_child(&self, element_index: usize) -> &CandidateObject {
+    fn get_left_child(&self, element_index: usize) -> &Result {
         &self._elements[Self::get_left_child_index(element_index)]
     }
 
     #[inline(always)]
-    fn get_right_child(&self, element_index: usize) -> &CandidateObject {
+    fn get_right_child(&self, element_index: usize) -> &Result {
         &self._elements[Self::get_right_child_index(element_index)]
     }
 
     #[inline(always)]
-    fn get_parent(&self, element_index: usize) -> &CandidateObject {
+    fn get_parent(&self, element_index: usize) -> &Result {
         &self._elements[Self::get_parent_index(element_index)]
     }
 

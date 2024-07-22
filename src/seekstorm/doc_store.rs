@@ -144,18 +144,22 @@ impl Index {
         highlighter_option: &Option<Highlighter>,
         fields: &HashSet<String>,
     ) -> Result<Document, String> {
+        if !self.delete_hashset.is_empty() && self.delete_hashset.contains(&doc_id) {
+            return Err("not found".to_owned());
+        }
+
         if doc_id >= self.indexed_doc_count {
-            return Err("not found1".to_owned());
+            return Err("not found".to_owned());
         }
         let block_id = doc_id >> 16;
 
         let is_uncommitted = doc_id >= self.committed_doc_count;
         if is_uncommitted && !(include_uncommited && self.uncommitted) {
-            return Err("not found2".to_owned());
+            return Err("not found".to_owned());
         }
 
         if self.stored_field_names.is_empty() {
-            return Err("not found3".to_owned());
+            return Err("not found".to_owned());
         }
 
         let doc_id_local = doc_id & 0b11111111_11111111;
@@ -177,7 +181,7 @@ impl Index {
             };
 
             if previous_pointer == pointer {
-                return Err("not found4".to_owned());
+                return Err("not found".to_owned());
             }
 
             let compressed_doc = &docstore_pointer_docs[previous_pointer..pointer];
@@ -202,7 +206,7 @@ impl Index {
             };
 
             if previous_pointer == pointer {
-                return Err(format!("not found5 {} {}", previous_pointer, pointer));
+                return Err(format!("not found {} {}", previous_pointer, pointer));
             }
 
             let compressed_doc = &self.docstore_file_mmap[(self.level_index[level]

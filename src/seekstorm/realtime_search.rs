@@ -60,7 +60,13 @@ pub(crate) fn add_result_singleterm_uncommitted(
     plo_single: &mut PostingListObjectQuery,
     not_query_list: &mut [PostingListObjectQuery],
 ) {
-    let filtered = !not_query_list.is_empty() || !field_filter_set.is_empty();
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+        return;
+    }
+
+    let filtered = !not_query_list.is_empty()
+        || !field_filter_set.is_empty()
+        || !index.delete_hashset.is_empty();
     for plo in not_query_list.iter_mut() {
         if !plo.bm25_flag {
             continue;
@@ -134,7 +140,11 @@ pub(crate) fn add_result_multiterm_uncommitted(
     not_query_list: &mut [PostingListObjectQuery],
     phrase_query: bool,
 ) {
-    let filtered = phrase_query || field_filter_set.len() > 0;
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+        return;
+    }
+
+    let filtered = phrase_query || !field_filter_set.is_empty() || !index.delete_hashset.is_empty();
     for plo in not_query_list.iter_mut() {
         if !plo.bm25_flag {
             continue;
@@ -902,8 +912,12 @@ impl Index {
         result_count_arc: &Arc<AtomicUsize>,
         top_k: usize,
     ) {
+        let filtered = !not_query_list.is_empty()
+            || !field_filter_set.is_empty()
+            || !self.delete_hashset.is_empty();
+
         if (self.enable_single_term_topk || (result_type == &ResultType::Count))
-            && (non_unique_query_list.len() <= 1)
+            && (non_unique_query_list.len() <= 1 && !filtered)
         {
             result_count_arc.fetch_add(
                 query_list[term_index].posting_count as usize,
