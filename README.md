@@ -328,6 +328,44 @@ for result in result_list.results.iter() {
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 ```
+multi-threaded search
+```
+let query_vec=vec!["house".to_string(),"car".to_string(),"bird".to_string(),"sky".to_string()];
+let offset=0;
+let length=10;
+let query_type=QueryType::Union; 
+let result_type=ResultType::TopkCount;
+let thread_number = 4;
+let permits = Arc::new(Semaphore::new(thread_number));
+for query in query_vec {
+    let permit_thread = permits.clone().acquire_owned().await.unwrap();
+
+    let query_clone = query.clone();
+    let index_arc_clone = index_arc.clone();
+    let query_type_clone = query_type.clone();
+    let result_type_clone = result_type.clone();
+    let offset_clone = offset;
+    let length_clone = length;
+
+    tokio::spawn(async move {
+        let rlo = index_arc_clone
+            .search(
+                query_clone,
+                query_type_clone,
+                offset_clone,
+                length_clone,
+                result_type_clone,
+                false,
+                Vec::new(),
+            )
+            .await;
+
+        println!("result count {}", rlo.result_count);
+        
+        drop(permit_thread);
+    });
+}
+```
 clear index
 ```
 index.clear_index();
