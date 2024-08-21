@@ -333,7 +333,7 @@ pub(crate) fn docid_iterator(
 
             let tf = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient_doc)))))
@@ -368,7 +368,7 @@ pub(crate) fn docid_iterator(
 
             let tf_bigram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_bigram1
@@ -387,7 +387,7 @@ pub(crate) fn docid_iterator(
 
             let tf_bigram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_bigram2

@@ -16,16 +16,17 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 ### SeekStorm high-performance search library
 
 * Full-text search
-* true real-time search, with negligible performance impact
-* incremental indexing
-* multithreaded indexing & search
-* unlimited field number, field length & index size
-* compressed document store: ZStandard
-* boolean queries: AND, OR, PHRASE, NOT
-* field filtering
+* True real-time search, with negligible performance impact
+* Incremental indexing
+* Multithreaded indexing & search
+* Unlimited field number, field length & index size
+* Compressed document store: ZStandard
+* Boolean queries: AND, OR, PHRASE, NOT
+* Field filtering
+* String & Numeric Range Facets: Counting, filtering, sorting of matching results
 * BM25F and BM25F_Proximity ranking
 * KWIC snippets, highlighting
-* billion-scale index
+* Billion-scale index
 * Language independent
 * API keys
 * RESTful API with CORS
@@ -259,9 +260,9 @@ create index
 let index_path=Path::new("C:/index/");
 
 let schema_json = r#"
-[{"field_name":"title","field_type":"Text","field_stored":false,"field_indexed":false},
-{"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
-{"field_name":"url","field_type":"Text","field_stored":false,"field_indexed":false}]"#;
+[{"field":"title","field_type":"Text","stored":false,"indexed":false},
+{"field":"body","field_type":"Text","stored":true,"indexed":true},
+{"field":"url","field_type":"Text","stored":false,"indexed":false}]"#;
 let schema=serde_json::from_str(schema_json).unwrap();
 
 let meta = IndexMetaObject {
@@ -306,7 +307,7 @@ let query_type=QueryType::Intersection;
 let result_type=ResultType::TopkCount;
 let include_uncommitted=false;
 let field_filter=Vec::new();
-let result_list = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter).await;
+let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter).await;
 ```
 display results
 ```
@@ -320,11 +321,11 @@ let highlights:Vec<Highlight>= vec![
     },
 ];    
 
-let highlighter=Some(highlighter(highlights, result_list.query_term_strings));
-let fields_hashset= HashSet::new();
+let highlighter=Some(highlighter(highlights, result_object.query_term_strings));
+let return_fields_filter= HashSet::new();
 let mut index=index_arc.write().await;
-for result in result_list.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter,&fields_hashset).unwrap();
+for result in result_object.results.iter() {
+  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 ```
@@ -382,6 +383,115 @@ seekstorm library version string
 ```
 let version=version();
 println!("version {}",version);
+```
+<br/>
+
+---
+### Faceted search - Quick start
+
+Facets are defined in 3 different places:
+1. the facet fields are defined in schema at create_index,
+2. the facet field values are set in index_document at index time,
+3. the query_facets/facet_filter parameters are specified at query time.  
+   Facets are then returned in the search result object.
+
+A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious. This is why we provide a quick start example here:
+
+Add required crates to your project
+```
+cargo add seekstorm
+cargo add tokio
+cargo add serde_json
+```
+Add use declarations
+```
+use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
+use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
+use tokio::sync::RwLock;
+```
+use an asynchronous Rust runtime
+```
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+```
+create index
+```
+let index_path=Path::new("C:/index/");//x
+
+let schema_json = r#"
+[{"field":"title","field_type":"Text","stored":false,"indexed":false},
+{"field":"body","field_type":"Text","stored":true,"indexed":true},
+{"field":"url","field_type":"Text","stored":true,"indexed":false},
+{"field":"town","field_type":"String","stored":false,"indexed":false,"facet":true}]"#;
+let schema=serde_json::from_str(schema_json).unwrap();
+
+let meta = IndexMetaObject {
+    id: 0,
+    name: "test_index".to_string(),
+    similarity:SimilarityType::Bm25f,
+    tokenizer:TokenizerType::AsciiAlphabetic,
+    access_type: AccessType::Mmap,
+};
+
+let serialize_schema=true;
+let segment_number_bits1=11;
+let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1,false).unwrap();
+let mut index_arc = Arc::new(RwLock::new(index));
+```
+index documents
+```
+let documents_json = r#"
+[{"title":"title1 test","body":"body1","url":"url1","town":"Berlin"},
+{"title":"title2","body":"body2 test","url":"url2","town":"Warsaw"},
+{"title":"title3 test","body":"body3 test","url":"url3","town":"New York"}]"#;
+let documents_vec=serde_json::from_str(documents_json).unwrap();
+
+index_arc.index_documents(documents_vec).await; 
+```
+commit documents
+```
+index_arc.commit().await;
+```
+search index
+```
+let query="test".to_string();
+let offset=0;
+let length=10;
+let query_type=QueryType::Intersection; 
+let result_type=ResultType::TopkCount;
+let include_uncommitted=false;
+let field_filter=Vec::new();
+let query_facets = vec![QueryFacet::String {field: "age".to_string(),prefix: "".to_string(),length:u16::MAX}];
+let facet_filter=Vec::new();
+//let facet_filter = vec![FacetFilter::String { field: "town".to_string(),filter: vec!["Berlin".to_string()],}];
+
+let facet_result_sort=Vec::new();
+
+let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;
+```
+display results
+```
+let highlights:Vec<Highlight>= vec![
+        Highlight {
+            field: "body".to_owned(),
+            name:String::new(),
+            fragment_number: 2,
+            fragment_size: 160,
+            highlight_markup: true,
+        },
+    ];    
+
+let highlighter2=Some(highlighter(highlights, result_object.query_terms));
+let return_fields_filter= HashSet::new();
+let index=index_arc.write().await;
+for result in result_object.results.iter() {
+  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).unwrap();
+  println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+}
+```
+display facets
+```
+println!("{}", serde_json::to_string_pretty(&result_object.facets).unwrap());
 ```
 end of main function
 ```
@@ -498,12 +608,13 @@ See roadmap below.
 The Rust port is not yet feature complete. The following features are currently ported.
 
 **Porting** 
-* ✅ delete document
-* faceted search
-* autosuggestion, spelling correction, instant search
-* fuzzy search
-* more tokenizer types (stemming, umlauts, apostrophes, CJK)
-* intra-query concurrency
+* ✅ Delete document
+* ✅ Faceted search
+* Sorting of results by any numerical field (score becomes a special field)
+* Autosuggestion, spelling correction, instant search
+* Fuzzy search
+* More tokenizer types (stemming, umlauts, apostrophes, CJK)
+* Intra-query concurrency
 
 **Improvements**
 * Faster indexing

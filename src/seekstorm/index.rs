@@ -1,8 +1,10 @@
 use add_result::decode_positions_commit;
 use ahash::{AHashMap, AHashSet, HashSet, RandomState};
 use derivative::Derivative;
+use indexmap::IndexMap;
+use itertools::Itertools;
 use lazy_static::lazy_static;
-use memmap2::{Mmap, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
 
@@ -26,10 +28,11 @@ use utils::{read_u32, write_u16};
 use crate::{
     add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
     commit::KEY_HEAD_SIZE,
-    search::{self, ResultList, ResultType},
+    search::{self, FacetFilter, QueryFacet, Ranges, ResultObject, ResultType},
     tokenizer::tokenizer,
     utils::{
-        self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref, write_u64,
+        self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref, write_f32,
+        write_f64, write_i16, write_i32, write_i64, write_i8, write_u32, write_u64,
     },
 };
 
@@ -38,6 +41,8 @@ pub(crate) const DOCSTORE_FILENAME: &str = "docstore.bin";
 pub(crate) const DELETE_FILENAME: &str = "delete.bin";
 pub(crate) const SCHEMA_FILENAME: &str = "schema.json";
 pub(crate) const META_FILENAME: &str = "index.json";
+pub(crate) const FACET_FILENAME: &str = "facet.bin";
+pub(crate) const FACET_VALUES_FILENAME: &str = "facet.json";
 
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -305,12 +310,20 @@ pub(crate) struct SegmentLevel0 {
 }
 
 /// In the index schema the type for every field of the document is defined.
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
 pub enum FieldType {
-    I64,
+    U8,
+    U16,
+    U32,
     U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F32,
     F64,
     Bool,
+    #[default]
     String,
     Text,
     Bytes,
@@ -322,28 +335,43 @@ pub enum FieldType {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SchemaField {
     /// unique name of a field
-    pub field_name: String,
+    pub field: String,
     /// only stored fields are returned in the search results
-    pub field_stored: bool,
+    pub stored: bool,
     /// only indexed fields can be searched
-    pub field_indexed: bool,
+    pub indexed: bool,
     /// type of a field
     pub field_type: FieldType,
+    /// optional faceting for a field
+    /// Faceting can be enabled both for string field type and numerical field types.
+    /// both numerical and string fields can be indexed (field_indexed=true) and stored (field_stored=true) in the json document,
+    /// but with field_facet=true they are additionally stored in a binary format, for fast faceting and sorting without docstore access (decompression, deserialization)
+    #[serde(skip_serializing_if = "is_default_bool")]
+    #[serde(default = "default_false")]
+    pub facet: bool,
 
     /// optional custom weight factor for Bm25 ranking
-    #[serde(skip_serializing_if = "is_default")]
+    #[serde(skip_serializing_if = "is_default_f32")]
     #[serde(default = "default_1")]
-    pub field_boost: f32,
+    pub boost: f32,
 
     #[serde(skip)]
     pub(crate) indexed_field_id: usize,
+}
+
+fn default_false() -> bool {
+    false
+}
+
+fn is_default_bool(num: &bool) -> bool {
+    !(*num)
 }
 
 fn default_1() -> f32 {
     1.0
 }
 
-fn is_default(num: &f32) -> bool {
+fn is_default_f32(num: &f32) -> bool {
     *num == 1.0
 }
 
@@ -367,6 +395,39 @@ pub struct IndexMetaObject {
     pub tokenizer: TokenizerType,
 
     pub access_type: AccessType,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ResultFacet {
+    pub field: String,
+    pub values: AHashMap<u16, usize>,
+    pub prefix: String,
+    pub length: u16,
+    pub ranges: Ranges,
+}
+
+/// Facet field, with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct FacetField {
+    /// Facet field name
+    pub name: String,
+    /// Vector of facet value names and their count
+    pub values: IndexMap<String, usize>,
+    #[serde(skip)]
+    pub(crate) offset: usize,
+    #[serde(skip)]
+    pub(crate) field_type: FieldType,
+}
+
+/// Facet field, with field name and a vector of unique values and their count (number of times the specific value appears in the whole index).
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Facet {
+    /// Facet field name
+    pub field: String,
+    /// Vector of facet value names and their count
+    /// The number of distinct string values and numerical ranges per facet field (cardinality) is limited to 65_536.
+    /// Once that number is reached, the facet field is not updated anymore (no new values are added, no existing values are counted).
+    pub values: Vec<(String, usize)>,
 }
 
 /// Index wrapped in Arc and RwLock for concurrent read and write access.
@@ -457,7 +518,15 @@ pub struct Index {
     pub(crate) position_count: usize,
 
     pub(crate) mute: bool,
-    pub(crate) stopword_results: AHashMap<String, ResultList>,
+    pub(crate) stopword_results: AHashMap<String, ResultObject>,
+
+    pub(crate) facets: Vec<FacetField>,
+    pub(crate) facets_map: AHashMap<String, usize>,
+    pub(crate) facets_size_sum: usize,
+    pub(crate) facets_file: File,
+    pub(crate) facets_file_mmap: MmapMut,
+
+    pub(crate) bm25_component_cache: [f32; 256],
 }
 
 /// Get the version of the SeekStorm search library
@@ -515,20 +584,58 @@ pub fn create_index(
                 .open(Path::new(index_path).join(DELETE_FILENAME))
                 .unwrap();
 
+            let facets_file = File::options()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(Path::new(index_path).join(FACET_FILENAME))
+                .unwrap();
+
             let mut document_length_compressed_array: Vec<[u8; ROARING_BLOCK_SIZE]> = Vec::new();
             let mut indexed_field_vec: Vec<IndexedField> = Vec::new();
+            let mut facets_vec: Vec<FacetField> = Vec::new();
+            let mut facets_map: AHashMap<String, usize> = AHashMap::new();
+
             let mut schema_map: HashMap<String, SchemaField> = HashMap::new();
             let mut indexed_schema_vec: Vec<SchemaField> = Vec::new();
             let mut stored_fields_flag = false;
             let mut stored_field_names = Vec::new();
+            let mut facets_size_sum = 0;
             for schema_field in schema.iter() {
                 let mut schema_field_clone = schema_field.clone();
                 schema_field_clone.indexed_field_id = indexed_field_vec.len();
-                schema_map.insert(schema_field.field_name.clone(), schema_field_clone.clone());
+                schema_map.insert(schema_field.field.clone(), schema_field_clone.clone());
 
-                if schema_field.field_indexed {
+                if schema_field.facet {
+                    let facet_size = match schema_field.field_type {
+                        FieldType::U8 => 1,
+                        FieldType::U16 => 2,
+                        FieldType::U32 => 4,
+                        FieldType::U64 => 8,
+                        FieldType::I8 => 1,
+                        FieldType::I16 => 2,
+                        FieldType::I32 => 4,
+                        FieldType::I64 => 8,
+                        FieldType::F32 => 4,
+                        FieldType::F64 => 8,
+                        FieldType::String => 2,
+                        _ => 1,
+                    };
+
+                    facets_map.insert(schema_field.field.clone(), facets_vec.len());
+                    facets_vec.push(FacetField {
+                        name: schema_field.field.clone(),
+                        values: IndexMap::new(),
+                        offset: facets_size_sum,
+                        field_type: schema_field.field_type.clone(),
+                    });
+                    facets_size_sum += facet_size;
+                }
+
+                if schema_field.indexed {
                     indexed_field_vec.push(IndexedField {
-                        schema_field_name: schema_field.field_name.clone(),
+                        schema_field_name: schema_field.field.clone(),
                         is_longest_field: false,
                         field_length_sum: 0,
                         indexed_field_id: indexed_field_vec.len(),
@@ -537,9 +644,9 @@ pub fn create_index(
                     document_length_compressed_array.push([0; ROARING_BLOCK_SIZE]);
                 }
 
-                if schema_field.field_stored {
+                if schema_field.stored {
                     stored_fields_flag = true;
-                    stored_field_names.push(schema_field.field_name.clone());
+                    stored_field_names.push(schema_field.field.clone());
                 }
             }
 
@@ -550,11 +657,10 @@ pub fn create_index(
             let hasher_64 = RandomState::with_seeds(808259318, 750368348, 84901999, 789810389);
 
             let index_file_mmap;
-            let docstore_file_mmap;
-            if meta.access_type == AccessType::Mmap {
+            let docstore_file_mmap = if meta.access_type == AccessType::Mmap {
                 index_file_mmap = unsafe { Mmap::map(&index_file).expect("Unable to create Mmap") };
-                docstore_file_mmap =
-                    unsafe { Mmap::map(&docstore_file).expect("Unable to create Mmap") };
+
+                unsafe { Mmap::map(&docstore_file).expect("Unable to create Mmap") }
             } else {
                 index_file_mmap = unsafe {
                     MmapOptions::new()
@@ -562,12 +668,39 @@ pub fn create_index(
                         .map(&index_file)
                         .expect("Unable to create Mmap")
                 };
-                docstore_file_mmap = unsafe {
+                unsafe {
                     MmapOptions::new()
                         .len(0)
                         .map(&docstore_file)
                         .expect("Unable to create Mmap")
-                };
+                }
+            };
+
+            if !facets_vec.is_empty() {
+                if let Ok(file) = File::open(Path::new(index_path).join(FACET_VALUES_FILENAME)) {
+                    if let Ok(facets) = serde_json::from_reader(BufReader::new(file)) {
+                        let mut facets: Vec<FacetField> = facets;
+                        if facets_vec.len() == facets.len() {
+                            for i in 0..facets.len() {
+                                facets[i].offset = facets_vec[i].offset;
+                                facets[i].field_type = facets_vec[i].field_type.clone();
+                            }
+                        }
+                        facets_vec = facets;
+                    }
+                }
+            }
+
+            let facets_file_mmap = if !facets_vec.is_empty() {
+                if facets_file.metadata().unwrap().len() == 0 {
+                    facets_file
+                        .set_len((facets_size_sum * ROARING_BLOCK_SIZE) as u64)
+                        .expect("Unable to set len");
+                }
+
+                unsafe { MmapMut::map_mut(&facets_file).expect("Unable to create Mmap") }
+            } else {
+                unsafe { MmapMut::map_mut(&facets_file).expect("Unable to create Mmap") }
             };
 
             let mut index = Index {
@@ -633,6 +766,12 @@ pub fn create_index(
                 permits: Arc::new(Semaphore::new(available_parallelism().unwrap().get())),
                 mute,
                 stopword_results: AHashMap::new(),
+                facets: facets_vec,
+                facets_map,
+                facets_size_sum,
+                facets_file,
+                facets_file_mmap,
+                bm25_component_cache: [0.0; 256],
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -820,7 +959,7 @@ pub(crate) fn get_max_score(
 
             let tf = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * idf
@@ -856,7 +995,7 @@ pub(crate) fn get_max_score(
 
             let tf_bigram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * idf_bigram1
@@ -880,7 +1019,7 @@ pub(crate) fn get_max_score(
 
             let tf_bigram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * idf_bigram2
@@ -1402,6 +1541,14 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                             index.is_last_level_incomplete =
                                 index.committed_doc_count % ROARING_BLOCK_SIZE > 0;
 
+                            for (i, component) in index.bm25_component_cache.iter_mut().enumerate()
+                            {
+                                let document_length_quotient = DOCUMENT_LENGTH_COMPRESSION[i]
+                                    as f32
+                                    / index.document_length_normalized_average;
+                                *component = K * (1.0 - B + B * document_length_quotient);
+                            }
+
                             update_list_max_impact_score(&mut index);
 
                             let mut reader = BufReader::with_capacity(8192, &index.delete_file);
@@ -1426,7 +1573,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                             if !mute {
                                 println!(
-                        "{} name {} id {} version {} {} level {} fields {} {} docs {} deleted {} segments {} time {} s",
+                        "{} name {} id {} version {} {} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
                         INDEX_FILENAME,
                         index.meta.name,
                         index.meta.id,
@@ -1437,6 +1584,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                         index.indexed_field_vec.len(),
                         index.schema_map.len(),
+                        index.facets.len(),
 
                         index.indexed_doc_count.to_formatted_string(&Locale::en),
                         index.delete_hashset.len().to_formatted_string(&Locale::en),
@@ -1460,6 +1608,16 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
 pub(crate) async fn warmup(index_object_arc: &IndexArc) {
     index_object_arc.write().await.stopword_results.clear();
+    let mut query_facets: Vec<QueryFacet> = Vec::new();
+    for facet in index_object_arc.read().await.facets.iter() {
+        if facet.field_type == FieldType::String {
+            query_facets.push(QueryFacet::String {
+                field: facet.name.clone(),
+                prefix: "".to_string(),
+                length: u16::MAX,
+            })
+        };
+    }
 
     for stopword in STOPWORDS {
         let results_list = index_object_arc
@@ -1470,6 +1628,8 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
                 1000,
                 search::ResultType::TopkCount,
                 false,
+                Vec::new(),
+                query_facets.clone(),
                 Vec::new(),
             )
             .await;
@@ -1536,6 +1696,348 @@ impl Index {
         index.level_index.len()
     }
 
+    /// Get number of facets defined in the index schema.
+    pub fn get_facets_count(&self) -> usize {
+        self.facets.len()
+    }
+
+    /// get_index_string_facets: list of string facet fields, each with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
+    /// values are sorted by their occurrence count within all indexed documents in descending order
+    /// * `query_facets`: Must be set if facet fields should be returned in get_index_facets. If set to Vec::new() then no facet fields are returned.
+    ///    The prefix property of a QueryFacet allows to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///    The length property of a QueryFacet allows limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+    ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
+    ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///    Example: query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
+    pub fn get_index_string_facets(&self, query_factes: Vec<QueryFacet>) -> Option<Vec<Facet>> {
+        if self.facets.is_empty() {
+            return None;
+        }
+
+        let mut query_facets = Vec::new();
+
+        if !query_factes.is_empty() {
+            let filter_map: AHashMap<_, _> = query_factes
+                .iter()
+                .map(|filter| {
+                    (
+                        match filter {
+                            QueryFacet::U8 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::U16 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::U32 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::U64 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::I8 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::I16 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::I32 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::I64 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::F32 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::F64 {
+                                field,
+                                range_type: _,
+                                ranges: _,
+                            } => field.clone(),
+                            QueryFacet::String {
+                                field,
+                                prefix: _,
+                                length: _,
+                            } => field.clone(),
+                            _ => "_".to_string(),
+                        },
+                        filter.clone(),
+                    )
+                })
+                .collect();
+
+            for facet in self.facets.iter() {
+                if let Some(filter) = filter_map.get(&facet.name) {
+                    query_facets.push(match &filter {
+                        QueryFacet::U8 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::U8 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U8(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::U16 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::U16 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U16(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::U32 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::U32 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U32(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::U64 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::U64 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::I8 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::I8 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I8(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::I16 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::I16 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I16(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::I32 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::I32 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I32(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::I64 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::I64 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::F32 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::F32 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::F32(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::F64 {
+                            field: _,
+                            range_type,
+                            ranges,
+                        } => {
+                            if facet.field_type == FieldType::F64 {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::F64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+
+                        QueryFacet::String {
+                            field: _,
+                            prefix,
+                            length,
+                        } => {
+                            if facet.field_type == FieldType::String {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    prefix: prefix.clone(),
+                                    length: *length,
+                                    ..Default::default()
+                                }
+                            } else {
+                                ResultFacet {
+                                    field: facet.name.clone(),
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                        QueryFacet::None => ResultFacet {
+                            field: facet.name.clone(),
+                            ..Default::default()
+                        },
+                    });
+                } else {
+                    query_facets.push(ResultFacet {
+                        field: facet.name.clone(),
+                        values: AHashMap::new(),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
+        let mut facets: Vec<Facet> = Vec::new();
+        for (i, facet) in query_facets.iter().enumerate() {
+            if facet.length == 0 || self.facets[i].values.is_empty() {
+                continue;
+            }
+
+            let v = self.facets[i]
+                .values
+                .iter()
+                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                .map(|(a, c)| (a.to_string(), *c))
+                .filter(|(a, _c)| facet.prefix.is_empty() || a.starts_with(&facet.prefix))
+                .take(facet.length as usize)
+                .collect::<Vec<_>>();
+
+            if !v.is_empty() {
+                facets.push(Facet {
+                    field: facet.field.clone(),
+                    values: v,
+                });
+            }
+        }
+
+        Some(facets)
+    }
+
     /// Reset index to empty, while maintaining schema
     pub fn clear_index(&mut self) {
         let _ = self.index_file.rewind();
@@ -1563,6 +2065,16 @@ impl Index {
         let _ = self.delete_file.rewind();
         let _ = self.delete_file.set_len(0);
         self.delete_hashset.clear();
+
+        let _ = self.facets_file.rewind();
+        let _ = self
+            .facets_file
+            .set_len((self.facets_size_sum * ROARING_BLOCK_SIZE) as u64);
+        self.facets_file_mmap =
+            unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
+        let index_path = Path::new(&self.index_path_string);
+        let _ = fs::remove_file(index_path.join(FACET_VALUES_FILENAME));
+        self.facets.clear();
 
         if !self.stored_field_names.is_empty() && self.meta.access_type == AccessType::Mmap {
             self.docstore_file_mmap =
@@ -1597,6 +2109,8 @@ impl Index {
         let _ = fs::remove_file(index_path.join(SCHEMA_FILENAME));
         let _ = fs::remove_file(index_path.join(META_FILENAME));
         let _ = fs::remove_file(index_path.join(DELETE_FILENAME));
+        let _ = fs::remove_file(index_path.join(FACET_FILENAME));
+        let _ = fs::remove_file(index_path.join(FACET_VALUES_FILENAME));
         let _ = fs::remove_dir(index_path);
     }
 
@@ -1669,6 +2183,7 @@ impl DeleteDocuments for IndexArc {
 /// Delete documents from index by query
 /// Delete and search have identical parameters.
 /// It is recommended to test with search prior to delete to verify that only those documents are returned that you really want to delete.
+#[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait DeleteDocumentsByQuery {
     async fn delete_documents_by_query(
@@ -1679,6 +2194,7 @@ pub trait DeleteDocumentsByQuery {
         length: usize,
         include_uncommited: bool,
         field_filter: Vec<String>,
+        facet_filter: Vec<FacetFilter>,
     );
 }
 
@@ -1694,6 +2210,7 @@ impl DeleteDocumentsByQuery for IndexArc {
         length: usize,
         include_uncommited: bool,
         field_filter: Vec<String>,
+        facet_filter: Vec<FacetFilter>,
     ) {
         let rlo = self
             .search(
@@ -1704,6 +2221,8 @@ impl DeleteDocumentsByQuery for IndexArc {
                 ResultType::Topk,
                 include_uncommited,
                 field_filter,
+                Vec::new(),
+                facet_filter,
             )
             .await;
 
@@ -1796,7 +2315,7 @@ impl IndexDocument for IndexArc {
             let mut field_vec: Vec<(usize, u8, u32, u32)> = Vec::new();
 
             for schema_field in schema.iter() {
-                let field_name = &schema_field.field_name;
+                let field_name = &schema_field.field;
 
                 if let Some(field_value) = document.get(field_name) {
                     let mut non_unique_terms: Vec<NonUniqueTermObject> = Vec::new();
@@ -1902,6 +2421,82 @@ impl IndexDocument2 for IndexArc {
             index_mut.commit(doc_id);
 
             index_mut.block_id = doc_id >> 16;
+        }
+
+        if !index_mut.facets.is_empty() {
+            let facets_size_sum = index_mut.facets_size_sum;
+            for i in 0..index_mut.facets.len() {
+                let facet = &mut index_mut.facets[i];
+                if let Some(field_value) = document_item.document.get(&facet.name) {
+                    let address = (facets_size_sum * doc_id) + facet.offset;
+
+                    match facet.field_type {
+                        FieldType::U8 => {
+                            index_mut.facets_file_mmap[address] =
+                                field_value.as_u64().unwrap() as u8
+                        }
+                        FieldType::U16 => write_u16(
+                            field_value.as_u64().unwrap_or_default() as u16,
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::U32 => write_u32(
+                            field_value.as_u64().unwrap_or_default() as u32,
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::U64 => write_u64(
+                            field_value.as_u64().unwrap_or_default(),
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::I8 => write_i8(
+                            field_value.as_i64().unwrap() as i8,
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::I16 => write_i16(
+                            field_value.as_i64().unwrap_or_default() as i16,
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::I32 => write_i32(
+                            field_value.as_i64().unwrap_or_default() as i32,
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::I64 => write_i64(
+                            field_value.as_i64().unwrap_or_default(),
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::F32 => write_f32(
+                            field_value.as_f64().unwrap_or_default() as f32,
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::F64 => write_f64(
+                            field_value.as_f64().unwrap_or_default(),
+                            &mut index_mut.facets_file_mmap,
+                            address,
+                        ),
+                        FieldType::String => {
+                            let key = serde_json::from_str(&field_value.to_string())
+                                .unwrap_or(field_value.to_string())
+                                .to_string();
+
+                            if facet.values.len() < u16::MAX as usize {
+                                *facet.values.entry(key.clone()).or_insert(0) += 1;
+
+                                let facet_value_id =
+                                    facet.values.get_index_of(&key).unwrap() as u16;
+                                write_u16(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                            }
+                        }
+                        _ => {}
+                    };
+                }
+            }
         }
 
         if !index_mut.uncommitted {

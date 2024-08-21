@@ -1,4 +1,5 @@
 use crate::commit::KEY_HEAD_SIZE;
+use crate::index::{Facet, FieldType, ResultFacet};
 use crate::min_heap::Result;
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
@@ -18,9 +19,11 @@ use crate::{
 
 use ahash::{AHashMap, AHashSet};
 use derivative::Derivative;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::cmp::Ordering as OtherOrdering;
+use std::ops::Range;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -49,31 +52,172 @@ pub enum ResultType {
     TopkCount = 2,
 }
 
+pub(crate) struct SearchResult {
+    pub topk_candidates: MinHeap,
+    pub query_facets: Vec<ResultFacet>,
+    pub skip_facet_count: bool,
+}
+
 /// Contains the results returned when searching the index.
 #[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
-pub struct ResultList {
+pub struct ResultObject {
+    /// Search query string
     pub query: String,
+    /// Vector of search query terms. Can be used e.g. for custom highlighting.
+    pub query_terms: Vec<String>,
+    /// Number of returned search results. Identical to results.len()
     pub result_count: usize,
 
+    /// Total number of search results that match the query
+    /// result_count_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
     pub result_count_total: usize,
 
-    #[serde(skip)]
-    #[derivative(Default(value = "1"))]
-    pub start: i32,
-
-    #[serde(skip)]
-    #[derivative(Default(value = "10"))]
-    pub length: i32,
-    pub time: i64,
-    pub suggestions: Vec<String>,
-
+    /// List of search results: doc ID and BM25 score
     pub results: Vec<Result>,
-    pub query_term_strings: Vec<String>,
+    /// List of facet fields: field name and vector of unique values and their counts.
+    /// Unique values and their counts are only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
+    pub facets: Vec<Facet>,
 }
 
 /// Create query_list and non_unique_query_list
 /// blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
 /// then the intersect_docid within a single block is executed  (=segments?)
+/// specifies how to count the frequency of numerical facet field values
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+pub enum RangeType {
+    /// within the specified range
+    #[default]
+    CountWithinRange,
+    /// within the range and all ranges above
+    CountAboveRange,
+    /// within the range and all ranges below
+    CountBelowRange,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+pub enum QueryFacet {
+    U8 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, u8)>,
+    },
+    U16 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, u16)>,
+    },
+    U32 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, u32)>,
+    },
+    U64 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, u64)>,
+    },
+    I8 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, i8)>,
+    },
+    I16 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, i16)>,
+    },
+    I32 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, i32)>,
+    },
+    I64 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, i64)>,
+    },
+    F32 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, f32)>,
+    },
+    F64 {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, f64)>,
+    },
+    String {
+        field: String,
+        prefix: String,
+        length: u16,
+    },
+    #[default]
+    None,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+pub enum Ranges {
+    U8(RangeType, Vec<(String, u8)>),
+    U16(RangeType, Vec<(String, u16)>),
+    U32(RangeType, Vec<(String, u32)>),
+    U64(RangeType, Vec<(String, u64)>),
+    I8(RangeType, Vec<(String, i8)>),
+    I16(RangeType, Vec<(String, i16)>),
+    I32(RangeType, Vec<(String, i32)>),
+    I64(RangeType, Vec<(String, i64)>),
+    F32(RangeType, Vec<(String, f32)>),
+    F64(RangeType, Vec<(String, f64)>),
+    #[default]
+    None,
+}
+
+/// FacetFilter:
+/// either numerical range facet filter (range start/end) or
+/// string facet filter (vector of strings) at least one (boolean OR) must match.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum FacetFilter {
+    U8 { field: String, filter: Range<u8> },
+    U16 { field: String, filter: Range<u16> },
+    U32 { field: String, filter: Range<u32> },
+    U64 { field: String, filter: Range<u64> },
+    I8 { field: String, filter: Range<i8> },
+    I16 { field: String, filter: Range<i16> },
+    I32 { field: String, filter: Range<i32> },
+    I64 { field: String, filter: Range<i64> },
+    F32 { field: String, filter: Range<f32> },
+    F64 { field: String, filter: Range<f64> },
+    String { field: String, filter: Vec<String> },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+pub(crate) enum FilterSparse {
+    U8(Range<u8>),
+    U16(Range<u16>),
+    U32(Range<u32>),
+    U64(Range<u64>),
+    I8(Range<i8>),
+    I16(Range<i16>),
+    I32(Range<i32>),
+    I64(Range<i64>),
+    F32(Range<f32>),
+    F64(Range<f64>),
+    String(Vec<u16>),
+    #[default]
+    None,
+}
+
+#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub enum SortOrder {
+    Ascending = 0,
+    Descending = 1,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FacetResultSort {
+    pub name: String,
+    pub order: SortOrder,
+}
+
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
 /// Arguments:
@@ -84,7 +228,30 @@ pub struct ResultList {
 /// * `length`: number of search results to return.
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
-/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. Search in all indexed fields if empty (default).
+/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
+/// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
+///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+///    The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+///    Examples:
+///    query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
+///    query_facets = vec![QueryFacet::U8 {field: "age".to_string(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+/// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
+///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
+///    The facet counts depend only from the query and not which facet filters are selected.
+///    Examples:
+///    facet_filter=vec![FacetFilter::String{field:"language".to_string(),filter:vec!["german".to_string()]},FacetFilter::String{field:"brand".to_string(),filter:vec!["apple".to_string(),"google".to_string()]}];
+///    facet_filter=vec![FacetFilter::U8{field:"age".to_string(),filter: 21..65}];
+///  
+///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+///    Facets are defined in 3 different places:
+///    the facet fields are defined in schema at create_index,
+///    the facet field values are set in index_document at index time,
+///    the query_facets/facet_filter search parameters are specified at query time.
+///    Facets are then returned in the search result object.
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait Search {
@@ -97,7 +264,9 @@ pub trait Search {
         result_type: ResultType,
         include_uncommited: bool,
         field_filter: Vec<String>,
-    ) -> ResultList;
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
+    ) -> ResultObject;
 }
 
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
@@ -219,7 +388,29 @@ impl Search for IndexArc {
     /// * `length`: number of search results to return.
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
-    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. Search in all indexed fields if empty (default).
+    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
+    /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
+    ///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+    ///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///    The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The prefix and length properties can be used to improve the usability in an UI.
+    ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+    ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///    Examples:
+    ///    query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
+    ///    query_facets = vec![QueryFacet::U8 {field: "age".to_string(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80),],}];
+    /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
+    ///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+    ///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
+    ///    The facet counts depend only from the query and not which facet filters are selected.
+    ///    Examples:
+    ///    facet_filter=vec![FacetFilter::String{field:"language".to_string(),filter:vec!["german".to_string()]},FacetFilter::String{field:"brand".to_string(),filter:vec!["apple".to_string(),"google".to_string()]}];
+    ///    facet_filter=vec![FacetFilter::U8{field:"age".to_string(),filter: 21..65}];
+    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///    Facets are defined in 3 different places:
+    ///    the facet fields are defined in schema at create_index,
+    ///    the facet field values are set in index_document at index time,
+    ///    the query_facets/facet_filter search parameters are specified at query time.
+    ///    Facets are then returned in the search result object.
     async fn search(
         &self,
         query_string: String,
@@ -229,27 +420,324 @@ impl Search for IndexArc {
         result_type: ResultType,
         include_uncommited: bool,
         field_filter: Vec<String>,
-    ) -> ResultList {
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
+    ) -> ResultObject {
         let index_ref = self.read().await;
         let mut query_type_mut = query_type_default;
-        let mut topk_candidates = MinHeap::new(offset + length);
-        let mut rl: ResultList = Default::default();
+
+        let mut search_result = SearchResult {
+            topk_candidates: MinHeap::new(offset + length),
+            query_facets: Vec::new(),
+            skip_facet_count: false,
+        };
+
+        let mut result_object: ResultObject = Default::default();
 
         if index_ref.segments_index.is_empty() {
-            return rl;
+            return result_object;
         }
 
         let mut field_filter_set: AHashSet<u16> = AHashSet::new();
         for item in field_filter.iter() {
             match index_ref.schema_map.get(item) {
                 Some(value) => {
-                    if value.field_indexed {
+                    if value.indexed {
                         field_filter_set.insert(value.indexed_field_id as u16);
                     }
                 }
                 None => {
                     println!("field not found: {}", item)
                 }
+            }
+        }
+
+        let mut facet_filter_sparse: Vec<FilterSparse> = Vec::new();
+        if !facet_filter.is_empty() {
+            facet_filter_sparse = vec![FilterSparse::None; index_ref.facets.len()];
+            for facet_filter_item in facet_filter.iter() {
+                match &facet_filter_item {
+                    FacetFilter::U8 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U8 {
+                                facet_filter_sparse[*idx] = FilterSparse::U8(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::U16 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U16 {
+                                facet_filter_sparse[*idx] = FilterSparse::U16(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::U32 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U32 {
+                                facet_filter_sparse[*idx] = FilterSparse::U32(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::U64 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U64 {
+                                facet_filter_sparse[*idx] = FilterSparse::U64(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::I8 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I8 {
+                                facet_filter_sparse[*idx] = FilterSparse::I8(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::I16 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I16 {
+                                facet_filter_sparse[*idx] = FilterSparse::I16(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::I32 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I32 {
+                                facet_filter_sparse[*idx] = FilterSparse::I32(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::I64 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I64 {
+                                facet_filter_sparse[*idx] = FilterSparse::I64(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::F32 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::F32 {
+                                facet_filter_sparse[*idx] = FilterSparse::F32(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::F64 { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::F64 {
+                                facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
+                            }
+                        }
+                    }
+                    FacetFilter::String { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            let facet = &index_ref.facets[*idx];
+                            if index_ref.facets[*idx].field_type == FieldType::String {
+                                let mut string_id_vec = Vec::new();
+                                for value in filter.iter() {
+                                    let facet_value_id =
+                                        facet.values.get_index_of(value).unwrap() as u16;
+                                    string_id_vec.push(facet_value_id);
+                                }
+                                facet_filter_sparse[*idx] = FilterSparse::String(string_id_vec);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut is_range_facet = false;
+        if !query_facets.is_empty() {
+            search_result.query_facets = vec![ResultFacet::default(); index_ref.facets.len()];
+            for query_facet in query_facets.iter() {
+                match &query_facet {
+                    QueryFacet::U8 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U8 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U8(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::U16 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U16 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U16(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::U32 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U32 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U32(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::U64 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::U64 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::U64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::I8 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I8 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I8(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::I16 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I16 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I16(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::I32 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I32 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I32(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::I64 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::I64 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::I64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::F32 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::F32 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::F32(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::F64 {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::F64 {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::F64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::String {
+                        field,
+                        prefix,
+                        length,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::String {
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    prefix: prefix.clone(),
+                                    length: *length,
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                    }
+                    QueryFacet::None => {}
+                };
             }
         }
 
@@ -284,7 +772,8 @@ impl Search for IndexArc {
                     &mut query_type_mut,
                     &result_type,
                     &field_filter_set,
-                    &mut topk_candidates,
+                    &facet_filter_sparse,
+                    &mut search_result,
                     &result_count_uncommitted_arc,
                     offset + length,
                 );
@@ -574,11 +1063,15 @@ impl Search for IndexArc {
 
             for term in non_unique_terms.iter() {
                 if term.is_bigram {
-                    rl.query_term_strings.push(term.term_bigram1.to_string());
-                    rl.query_term_strings.push(term.term_bigram2.to_string());
+                    result_object
+                        .query_terms
+                        .push(term.term_bigram1.to_string());
+                    result_object
+                        .query_terms
+                        .push(term.term_bigram2.to_string());
                 }
                 {
-                    rl.query_term_strings.push(term.term.to_string());
+                    result_object.query_terms.push(term.term.to_string());
                 }
             }
 
@@ -590,28 +1083,64 @@ impl Search for IndexArc {
                     && not_query_list.is_empty()
                     && field_filter_set.is_empty()
                     && index_ref.delete_hashset.is_empty()
+                    && facet_filter_sparse.is_empty()
+                    && !is_range_facet
                 {
-                    if let Some(result_list) =
+                    if let Some(stopword_result_object) =
                         index_ref.stopword_results.get(&non_unique_terms[0].term)
                     {
-                        if result_type == ResultType::Count {
-                            rl.query_term_strings
-                                .clone_from(&result_list.query_term_strings);
-                            rl.result_count = result_list.result_count;
-                            rl.result_count_total = result_list.result_count_total;
+                        result_object.query = stopword_result_object.query.clone();
+                        result_object
+                            .query_terms
+                            .clone_from(&stopword_result_object.query_terms);
+                        result_object.result_count = stopword_result_object.result_count;
+                        result_object.result_count_total =
+                            stopword_result_object.result_count_total;
 
-                            return rl;
-                        } else {
-                            let mut rl = result_list.clone();
+                        if result_type != ResultType::Count {
+                            result_object
+                                .results
+                                .clone_from(&stopword_result_object.results);
                             if offset > 0 {
-                                rl.results.drain(..offset);
+                                result_object.results.drain(..offset);
                             }
                             if length < 1000 {
-                                rl.results.truncate(length);
+                                result_object.results.truncate(length);
                             }
-
-                            return rl;
                         }
+
+                        if !search_result.query_facets.is_empty() && result_type != ResultType::Topk
+                        {
+                            let mut facets: Vec<Facet> = Vec::new();
+                            for (i, facet) in search_result.query_facets.iter().enumerate() {
+                                if facet.length == 0
+                                    || stopword_result_object.facets[i].values.is_empty()
+                                {
+                                    continue;
+                                }
+
+                                let v = stopword_result_object.facets[i]
+                                    .values
+                                    .iter()
+                                    .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
+                                    .map(|(a, c)| (a.clone(), *c))
+                                    .filter(|(a, _c)| {
+                                        facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                                    })
+                                    .take(facet.length as usize)
+                                    .collect::<Vec<_>>();
+
+                                if !v.is_empty() {
+                                    facets.push(Facet {
+                                        field: facet.field.clone(),
+                                        values: v,
+                                    });
+                                }
+                            }
+                            result_object.facets = facets;
+                        };
+
+                        return result_object;
                     }
                 }
 
@@ -621,14 +1150,17 @@ impl Search for IndexArc {
                     &mut query_list,
                     &mut not_query_list,
                     &result_count_arc,
-                    &mut topk_candidates,
+                    &mut search_result,
                     offset + length,
                     &result_type,
                     &field_filter_set,
+                    &facet_filter_sparse,
                     &mut matching_blocks,
                 )
                 .await;
             } else if query_type_mut == QueryType::Union {
+                search_result.skip_facet_count = true;
+
                 if result_type == ResultType::Count {
                     union_blockid(
                         &index_ref,
@@ -636,23 +1168,29 @@ impl Search for IndexArc {
                         &mut query_list,
                         &mut not_query_list,
                         &result_count_arc,
-                        &mut topk_candidates,
+                        &mut search_result,
                         offset + length,
                         &result_type,
                         &field_filter_set,
+                        &facet_filter_sparse,
                     )
                     .await;
-                } else if SPEEDUP_FLAG && query_list_len == 2 {
+                } else if SPEEDUP_FLAG
+                    && query_list_len == 2
+                    && search_result.query_facets.is_empty()
+                    && facet_filter_sparse.is_empty()
+                {
                     union_docid_2(
                         &index_ref,
                         &mut non_unique_query_list,
                         &mut query_list,
                         &mut not_query_list,
                         &result_count_arc,
-                        &mut topk_candidates,
+                        &mut search_result,
                         offset + length,
                         &result_type,
                         &field_filter_set,
+                        &facet_filter_sparse,
                         &mut matching_blocks,
                     )
                     .await;
@@ -667,10 +1205,11 @@ impl Search for IndexArc {
                         }]),
                         &mut not_query_list,
                         &result_count_arc,
-                        &mut topk_candidates,
+                        &mut search_result,
                         offset + length,
                         &result_type,
                         &field_filter_set,
+                        &facet_filter_sparse,
                         &mut matching_blocks,
                     )
                     .await;
@@ -681,10 +1220,11 @@ impl Search for IndexArc {
                         &mut query_list,
                         &mut not_query_list,
                         &result_count_arc,
-                        &mut topk_candidates,
+                        &mut search_result,
                         offset + length,
                         &result_type,
                         &field_filter_set,
+                        &facet_filter_sparse,
                     )
                     .await;
                 }
@@ -695,10 +1235,11 @@ impl Search for IndexArc {
                     &mut query_list,
                     &mut not_query_list,
                     &result_count_arc,
-                    &mut topk_candidates,
+                    &mut search_result,
                     offset + length,
                     &result_type,
                     &field_filter_set,
+                    &facet_filter_sparse,
                     &mut matching_blocks,
                     query_type_mut == QueryType::Phrase && non_unique_query_list_len >= 2,
                 )
@@ -713,16 +1254,18 @@ impl Search for IndexArc {
             break;
         }
 
-        rl.result_count = topk_candidates.current_heap_size;
+        result_object.result_count = search_result.topk_candidates.current_heap_size;
 
-        if topk_candidates.current_heap_size > offset {
-            rl.results = topk_candidates._elements;
+        if search_result.topk_candidates.current_heap_size > offset {
+            result_object.results = search_result.topk_candidates._elements;
 
-            if topk_candidates.current_heap_size < offset + length {
-                rl.results.truncate(topk_candidates.current_heap_size);
+            if search_result.topk_candidates.current_heap_size < offset + length {
+                result_object
+                    .results
+                    .truncate(search_result.topk_candidates.current_heap_size);
             }
 
-            rl.results.sort_by(|a, b| {
+            result_object.results.sort_by(|a, b| {
                 let result = b.score.partial_cmp(&a.score).unwrap();
                 if result != OtherOrdering::Equal {
                     result
@@ -732,13 +1275,149 @@ impl Search for IndexArc {
             });
 
             if offset > 0 {
-                rl.results.drain(..offset);
+                result_object.results.drain(..offset);
             }
         }
 
-        rl.result_count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
+        result_object.result_count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
             + result_count_arc.load(Ordering::Relaxed);
 
-        rl
+        if !search_result.query_facets.is_empty()
+        /* !index_ref.facets.is_empty()*/
+        {
+            result_object.facets = if result_object.query_terms.is_empty() {
+                index_ref
+                    .get_index_string_facets(query_facets)
+                    .unwrap_or_default()
+            } else {
+                let mut facets: Vec<Facet> = Vec::new();
+                for (i, facet) in search_result.query_facets.iter_mut().enumerate() {
+                    if facet.length == 0 || facet.values.is_empty() {
+                        continue;
+                    }
+
+                    let v = if facet.ranges == Ranges::None {
+                        facet
+                            .values
+                            .iter()
+                            .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                            .map(|(a, c)| {
+                                (
+                                    index_ref.facets[i]
+                                        .values
+                                        .get_index((*a).into())
+                                        .unwrap()
+                                        .0
+                                        .clone(),
+                                    *c,
+                                )
+                            })
+                            .filter(|(a, _c)| {
+                                facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                            })
+                            .take(facet.length as usize)
+                            .collect::<Vec<_>>()
+                    } else {
+                        let range_type = match &facet.ranges {
+                            Ranges::U8(range_type, _ranges) => range_type.clone(),
+                            Ranges::U16(range_type, _ranges) => range_type.clone(),
+                            Ranges::U32(range_type, _ranges) => range_type.clone(),
+                            Ranges::U64(range_type, _ranges) => range_type.clone(),
+                            Ranges::I8(range_type, _ranges) => range_type.clone(),
+                            Ranges::I16(range_type, _ranges) => range_type.clone(),
+                            Ranges::I32(range_type, _ranges) => range_type.clone(),
+                            Ranges::I64(range_type, _ranges) => range_type.clone(),
+                            Ranges::F32(range_type, _ranges) => range_type.clone(),
+                            Ranges::F64(range_type, _ranges) => range_type.clone(),
+                            _ => RangeType::CountWithinRange,
+                        };
+
+                        match range_type {
+                            RangeType::CountAboveRange => {
+                                let mut sum = 0usize;
+                                for value in facet
+                                    .values
+                                    .iter_mut()
+                                    .sorted_unstable_by(|a, b| b.0.cmp(a.0))
+                                {
+                                    sum += *value.1;
+                                    *value.1 = sum;
+                                }
+                            }
+                            RangeType::CountBelowRange => {
+                                let mut sum = 0usize;
+                                for value in facet
+                                    .values
+                                    .iter_mut()
+                                    .sorted_unstable_by(|a, b| a.0.cmp(b.0))
+                                {
+                                    sum += *value.1;
+                                    *value.1 = sum;
+                                }
+                            }
+                            RangeType::CountWithinRange => {}
+                        }
+
+                        facet
+                            .values
+                            .iter()
+                            .sorted_unstable_by(|a, b| a.0.cmp(b.0))
+                            .map(|(a, c)| {
+                                (
+                                    match &facet.ranges {
+                                        Ranges::U8(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::U16(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::U32(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::U64(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::I8(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::I16(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::I32(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::I64(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::F32(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        Ranges::F64(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+                                        _ => "".to_string(),
+                                    },
+                                    *c,
+                                )
+                            })
+                            .filter(|(a, _c)| {
+                                facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                            })
+                            .take(facet.length as usize)
+                            .collect::<Vec<_>>()
+                    };
+
+                    if !v.is_empty() {
+                        facets.push(Facet {
+                            field: facet.field.clone(),
+                            values: v,
+                        });
+                    }
+                }
+                facets
+            };
+        }
+
+        result_object
     }
 }

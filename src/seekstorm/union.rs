@@ -1,6 +1,7 @@
 use crate::{
     add_result::{
-        add_result_multiterm_multifield, add_result_singleterm_multifield, PostingListObjectSingle,
+        add_result_multiterm_multifield, add_result_singleterm_multifield, is_facet_filter,
+        PostingListObjectSingle,
     },
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
@@ -8,10 +9,12 @@ use crate::{
         PostingListObjectQuery, QueueObject,
     },
     intersection::intersection_blockid,
-    min_heap::MinHeap,
-    search::ResultType,
+    search::{FilterSparse, Ranges, ResultType, SearchResult},
     single::{single_blockid, single_docid},
-    utils::{block_copy, cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16, read_u64},
+    utils::{
+        block_copy, cast_byte_ulong_slice, cast_byte_ushort_slice, read_f32, read_f64, read_i16,
+        read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
+    },
 };
 
 use ahash::AHashSet;
@@ -65,10 +68,11 @@ pub(crate) fn union_scan(
     result_count: &mut i32,
     block_id: usize,
     index: &Index,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
@@ -119,10 +123,11 @@ pub(crate) fn union_scan(
                     index,
                     (block_id << 16) | docid_min as usize,
                     result_count,
-                    result_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     &plo,
                     not_query_list,
                     query_list_item_mut.blocks[query_list_item_mut.p_block as usize]
@@ -136,10 +141,11 @@ pub(crate) fn union_scan(
                     index,
                     (block_id << 16) | docid_min as usize,
                     result_count,
-                    result_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     non_unique_query_list,
                     query_list,
                     not_query_list,
@@ -184,10 +190,11 @@ pub(crate) async fn union_docid<'a>(
     not_query_list: &mut [PostingListObjectQuery<'a>],
     block_id: usize,
     result_count: &mut i32,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
 ) {
     for plo in not_query_list.iter_mut() {
         let query_list_item_mut = plo;
@@ -319,9 +326,12 @@ pub(crate) async fn union_docid<'a>(
     }
 
     if valid_term_count == 1 {
-        if result_type == &ResultType::Count {
+        if result_type == &ResultType::Count && search_result.query_facets.is_empty() {
             *result_count += query_list[single_term_index].p_docid_count as i32;
         } else {
+            let skip_facet_count = search_result.skip_facet_count;
+            search_result.skip_facet_count = false;
+
             single_docid(
                 index,
                 query_list,
@@ -330,18 +340,30 @@ pub(crate) async fn union_docid<'a>(
                     [query_list[single_term_index].p_block as usize],
                 single_term_index,
                 result_count,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
             )
             .await;
+
+            search_result.skip_facet_count = skip_facet_count;
         }
         return;
     };
 
     if result_type == &ResultType::Count {
-        union_count(result_count, query_list, not_query_list).await;
+        union_count(
+            index,
+            result_count,
+            search_result,
+            query_list,
+            not_query_list,
+            facet_filter,
+            block_id,
+        )
+        .await;
         return;
     }
 
@@ -349,10 +371,11 @@ pub(crate) async fn union_docid<'a>(
         result_count,
         block_id,
         index,
-        topk_candidates,
+        search_result,
         top_k,
         result_type,
         field_filter_set,
+        facet_filter,
         non_unique_query_list,
         query_list,
         not_query_list,
@@ -366,10 +389,11 @@ pub(crate) async fn union_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
 ) {
     let item_0 = &query_list[0];
     let enable_inter_query_threading_multi =
@@ -437,7 +461,6 @@ pub(crate) async fn union_blockid<'a>(
             }
 
             let mut result_count_local = 0;
-
             union_docid(
                 index,
                 non_unique_query_list,
@@ -445,10 +468,11 @@ pub(crate) async fn union_blockid<'a>(
                 not_query_list,
                 block_id_min,
                 &mut result_count_local,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
             )
             .await;
 
@@ -497,9 +521,14 @@ pub(crate) async fn union_blockid<'a>(
 }
 
 pub(crate) async fn union_count<'a>(
+    index: &'a Index,
     result_count: &mut i32,
+    search_result: &mut SearchResult,
+
     query_list: &mut [PostingListObjectQuery<'a>],
     not_query_list: &mut [PostingListObjectQuery<'a>],
+    facet_filter: &[FilterSparse],
+    block_id: usize,
 ) {
     query_list.sort_unstable_by(|a, b| b.p_docid_count.partial_cmp(&a.p_docid_count).unwrap());
 
@@ -653,6 +682,149 @@ pub(crate) async fn union_count<'a>(
         }
     }
 
+    if !index.delete_hashset.is_empty() {
+        for docid in index.delete_hashset.iter() {
+            if block_id == docid >> 16 {
+                let byte_index = (docid >> 3) & 8191;
+                let bit_mask = 1 << (docid & 7);
+                if bitmap_0[byte_index] & bit_mask > 0 {
+                    bitmap_0[byte_index] &= !bit_mask;
+                    result_count_local -= 1;
+                }
+            }
+        }
+    }
+
+    if !search_result.query_facets.is_empty() || !facet_filter.is_empty() {
+        let block_id_msb = block_id << 16;
+        let ulongs0 = cast_byte_ulong_slice(&bitmap_0);
+        for (ulong_pos, intersect) in ulongs0.iter().enumerate() {
+            let ulong_pos_msb = block_id_msb | ulong_pos << 6;
+            let mut intersect: u64 = *intersect;
+            'next: while intersect != 0 {
+                let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as usize;
+                intersect = unsafe { _blsr_u64(intersect) };
+
+                let docid = ulong_pos_msb | bit_pos;
+
+                if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+                    result_count_local -= 1;
+                    continue 'next;
+                }
+
+                for (i, facet) in index.facets.iter().enumerate() {
+                    if search_result.query_facets[i].length == 0 {
+                        continue;
+                    }
+
+                    let facet_value_id = match &search_result.query_facets[i].ranges {
+                        Ranges::U8(_range_type, ranges) => {
+                            let facet_value = index.facets_file_mmap
+                                [(index.facets_size_sum * docid) + facet.offset];
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::U16(_range_type, ranges) => {
+                            let facet_value = read_u16(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::U32(_range_type, ranges) => {
+                            let facet_value = read_u32(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::U64(_range_type, ranges) => {
+                            let facet_value = read_u64(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::I8(_range_type, ranges) => {
+                            let facet_value = read_i8(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::I16(_range_type, ranges) => {
+                            let facet_value = read_i16(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::I32(_range_type, ranges) => {
+                            let facet_value = read_i32(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::I64(_range_type, ranges) => {
+                            let facet_value = read_i64(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::F32(_range_type, ranges) => {
+                            let facet_value = read_f32(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by(|range| {
+                                    range.1.partial_cmp(&facet_value).unwrap()
+                                })
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        Ranges::F64(_range_type, ranges) => {
+                            let facet_value = read_f64(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by(|range| {
+                                    range.1.partial_cmp(&facet_value).unwrap()
+                                })
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
+                        _ => read_u16(
+                            &index.facets_file_mmap,
+                            (index.facets_size_sum * docid) + facet.offset,
+                        ),
+                    };
+
+                    *search_result.query_facets[i]
+                        .values
+                        .entry(facet_value_id)
+                        .or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
     *result_count += result_count_local as i32;
 }
 
@@ -664,13 +836,14 @@ pub(crate) async fn union_docid_2<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
     result_count_arc: &Arc<AtomicUsize>,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
 ) {
-    let filtered = !not_query_list.is_empty() || field_filter_set.len() > 0;
+    let filtered = !not_query_list.is_empty() || !field_filter_set.is_empty();
     let mut count = 0;
     if filtered {
         single_blockid(
@@ -679,10 +852,11 @@ pub(crate) async fn union_docid_2<'a>(
             &mut query_list[0..1].to_vec(),
             not_query_list,
             result_count_arc,
-            topk_candidates,
+            search_result,
             top_k,
             &ResultType::Count,
             field_filter_set,
+            facet_filter,
             matching_blocks,
         )
         .await;
@@ -693,10 +867,11 @@ pub(crate) async fn union_docid_2<'a>(
             &mut query_list[1..2].to_vec(),
             not_query_list,
             result_count_arc,
-            topk_candidates,
+            search_result,
             top_k,
             &ResultType::Count,
             field_filter_set,
+            facet_filter,
             matching_blocks,
         )
         .await;
@@ -711,10 +886,11 @@ pub(crate) async fn union_docid_2<'a>(
         query_list,
         not_query_list,
         result_count_arc,
-        topk_candidates,
+        search_result,
         top_k,
         result_type,
         field_filter_set,
+        facet_filter,
         matching_blocks,
         false,
     )
@@ -731,13 +907,13 @@ pub(crate) async fn union_docid_2<'a>(
         return;
     }
 
-    if (topk_candidates.current_heap_size < top_k)
-        || (query_list[0].max_list_score > topk_candidates._elements[0].score)
+    if (search_result.topk_candidates.current_heap_size < top_k)
+        || (query_list[0].max_list_score > search_result.topk_candidates._elements[0].score)
     {
-        for i in 0..topk_candidates.current_heap_size {
-            topk_candidates.docid_hashset.insert(
-                topk_candidates._elements[i].doc_id,
-                topk_candidates._elements[i].score,
+        for i in 0..search_result.topk_candidates.current_heap_size {
+            search_result.topk_candidates.docid_hashset.insert(
+                search_result.topk_candidates._elements[i].doc_id,
+                search_result.topk_candidates._elements[i].score,
             );
         }
 
@@ -747,22 +923,23 @@ pub(crate) async fn union_docid_2<'a>(
             &mut query_list[0..1].to_vec(),
             not_query_list,
             result_count_arc,
-            topk_candidates,
+            search_result,
             top_k,
             &ResultType::Topk,
             field_filter_set,
+            facet_filter,
             matching_blocks,
         )
         .await;
     }
 
-    if (topk_candidates.current_heap_size < top_k)
-        || (query_list[1].max_list_score > topk_candidates._elements[0].score)
+    if (search_result.topk_candidates.current_heap_size < top_k)
+        || (query_list[1].max_list_score > search_result.topk_candidates._elements[0].score)
     {
-        for i in 0..topk_candidates.current_heap_size {
-            topk_candidates.docid_hashset.insert(
-                topk_candidates._elements[i].doc_id,
-                topk_candidates._elements[i].score,
+        for i in 0..search_result.topk_candidates.current_heap_size {
+            search_result.topk_candidates.docid_hashset.insert(
+                search_result.topk_candidates._elements[i].doc_id,
+                search_result.topk_candidates._elements[i].score,
             );
         }
 
@@ -772,10 +949,11 @@ pub(crate) async fn union_docid_2<'a>(
             &mut query_list[1..2].to_vec(),
             not_query_list,
             result_count_arc,
-            topk_candidates,
+            search_result,
             top_k,
             &ResultType::Topk,
             field_filter_set,
+            facet_filter,
             matching_blocks,
         )
         .await;
@@ -793,10 +971,11 @@ pub(crate) async fn union_docid_3<'a>(
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
 
     result_count_arc: &Arc<AtomicUsize>,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
 ) {
     let queue_object = query_queue.remove(0);
@@ -811,19 +990,20 @@ pub(crate) async fn union_docid_3<'a>(
                 &mut query_list,
                 not_query_list,
                 result_count_arc,
-                topk_candidates,
+                search_result,
                 top_k,
                 &ResultType::Topk,
                 field_filter_set,
+                facet_filter,
                 matching_blocks,
                 false,
             )
             .await;
 
-            for j in 0..topk_candidates.current_heap_size {
-                topk_candidates.docid_hashset.insert(
-                    topk_candidates._elements[j].doc_id,
-                    topk_candidates._elements[j].score,
+            for j in 0..search_result.topk_candidates.current_heap_size {
+                search_result.topk_candidates.docid_hashset.insert(
+                    search_result.topk_candidates._elements[j].doc_id,
+                    search_result.topk_candidates._elements[j].score,
                 );
             }
 
@@ -848,8 +1028,8 @@ pub(crate) async fn union_docid_3<'a>(
                         max_score += term.max_list_score;
                     }
 
-                    if topk_candidates.current_heap_size < top_k
-                        || max_score > topk_candidates._elements[0].score
+                    if search_result.topk_candidates.current_heap_size < top_k
+                        || max_score > search_result.topk_candidates._elements[0].score
                     {
                         if !query_queue.is_empty()
                             && max_score > query_queue[query_queue.len() - 1].max_score
@@ -887,23 +1067,25 @@ pub(crate) async fn union_docid_3<'a>(
                 &mut query_list,
                 not_query_list,
                 result_count_arc,
-                topk_candidates,
+                search_result,
                 top_k,
                 &ResultType::Topk,
                 field_filter_set,
+                facet_filter,
                 matching_blocks,
             )
             .await;
         }
 
         if !query_queue.is_empty()
-            && (topk_candidates.current_heap_size < top_k
-                || query_queue.first().unwrap().max_score > topk_candidates._elements[0].score)
+            && (search_result.topk_candidates.current_heap_size < top_k
+                || query_queue.first().unwrap().max_score
+                    > search_result.topk_candidates._elements[0].score)
         {
-            for i in 0..topk_candidates.current_heap_size {
-                topk_candidates.docid_hashset.insert(
-                    topk_candidates._elements[i].doc_id,
-                    topk_candidates._elements[i].score,
+            for i in 0..search_result.topk_candidates.current_heap_size {
+                search_result.topk_candidates.docid_hashset.insert(
+                    search_result.topk_candidates._elements[i].doc_id,
+                    search_result.topk_candidates._elements[i].score,
                 );
             }
 
@@ -913,10 +1095,11 @@ pub(crate) async fn union_docid_3<'a>(
                 query_queue,
                 not_query_list,
                 result_count_arc,
-                topk_candidates,
+                search_result,
                 top_k,
                 &ResultType::Topk,
                 field_filter_set,
+                facet_filter,
                 matching_blocks,
             )
             .await;
@@ -936,10 +1119,11 @@ pub(crate) async fn union_docid_3<'a>(
             &mut query_list,
             not_query_list,
             result_count_arc,
-            topk_candidates,
+            search_result,
             top_k,
             &ResultType::Count,
             field_filter_set,
+            facet_filter,
         )
         .await;
     }

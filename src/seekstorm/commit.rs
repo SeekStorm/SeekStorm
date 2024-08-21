@@ -1,13 +1,18 @@
 use ahash::AHashMap;
-use memmap2::Mmap;
+use memmap2::{Mmap, MmapMut};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
-use std::io::{Seek, SeekFrom, Write};
+use std::{
+    fs::File,
+    io::{Seek, SeekFrom, Write},
+    path::Path,
+};
 
 use crate::{
     add_result::{
         decode_positions_multiterm_multifield, decode_positions_multiterm_singlefield,
-        get_next_position_multifield, get_next_position_singlefield,
+        get_next_position_multifield, get_next_position_singlefield, B,
+        DOCUMENT_LENGTH_COMPRESSION, K,
     },
     compatible::{_blsr_u64, _mm_tzcnt_64},
     compress_postinglist::compress_postinglist,
@@ -15,7 +20,7 @@ use crate::{
         update_list_max_impact_score, update_stopwords_posting_counts, warmup, AccessType,
         BlockObjectIndex, CompressionType, Index, IndexArc, LevelIndex,
         NonUniquePostingListObjectQuery, PostingListObjectIndex, PostingListObjectQuery,
-        TermObject, MAX_POSITIONS_PER_TERM, ROARING_BLOCK_SIZE, STOPWORDS,
+        TermObject, FACET_VALUES_FILENAME, MAX_POSITIONS_PER_TERM, ROARING_BLOCK_SIZE, STOPWORDS,
     },
     utils::{
         block_copy, block_copy_mut, cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16,
@@ -46,8 +51,8 @@ pub trait Commit {
 /// There are only 2 reasons that justify a manual commit:
 /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-/// so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
-/// but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
+///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
 impl Commit for IndexArc {
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
@@ -65,8 +70,8 @@ impl Commit for IndexArc {
     /// There are only 2 reasons that justify a manual commit:
     /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-    /// so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
-    /// but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
+    ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+    ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
     async fn commit(&mut self) {
         let mut index_mut = self.write().await;
         let indexed_doc_count = index_mut.indexed_doc_count;
@@ -174,6 +179,12 @@ impl Index {
         self.document_length_normalized_average =
             self.positions_sum_normalized as f32 / indexed_doc_count as f32;
 
+        for (i, component) in self.bm25_component_cache.iter_mut().enumerate() {
+            let document_length_quotient =
+                DOCUMENT_LENGTH_COMPRESSION[i] as f32 / self.document_length_normalized_average;
+            *component = K * (1.0 - B + B * document_length_quotient);
+        }
+
         for k0 in 0..self.segment_number1 {
             let strip_compressed = self.commit_segment(k0);
             self.strip_compressed_sum += strip_compressed as u64;
@@ -222,6 +233,29 @@ impl Index {
         if self.meta.access_type == AccessType::Mmap {
             self.index_file_mmap =
                 unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
+        }
+
+        if !self.facets.is_empty() {
+            self.facets_file_mmap.flush().expect("Unable to flush Mmap");
+            if self.facets_file.metadata().unwrap().len()
+                != (self.facets_size_sum * (self.level_index.len() + 1) * ROARING_BLOCK_SIZE) as u64
+            {
+                self.facets_file
+                    .set_len(
+                        (self.facets_size_sum * (self.level_index.len() + 1) * ROARING_BLOCK_SIZE)
+                            as u64,
+                    )
+                    .expect("Unable to set len");
+                self.facets_file_mmap =
+                    unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
+            }
+
+            let index_path = Path::new(&self.index_path_string);
+            serde_json::to_writer(
+                &File::create(Path::new(index_path).join(FACET_VALUES_FILENAME)).unwrap(),
+                &self.facets,
+            )
+            .unwrap();
         }
 
         update_list_max_impact_score(self);
@@ -480,7 +514,7 @@ impl Index {
         let mut field_positions_vec: Vec<Vec<u16>> = vec![Vec::new(); self.indexed_field_vec.len()];
 
         if self.indexed_field_vec.len() == 1 {
-            decode_positions_multiterm_singlefield(plo, true, false);
+            decode_positions_multiterm_singlefield(plo, true, true, false);
 
             let mut plo2 = NonUniquePostingListObjectQuery {
                 positions_pointer: plo.positions_pointer as usize,
@@ -508,7 +542,7 @@ impl Index {
                 plo2.p_pos += 1;
             }
         } else {
-            decode_positions_multiterm_multifield(self, plo, true, false);
+            decode_positions_multiterm_multifield(self, plo, true, true, false);
 
             let mut plo2 = NonUniquePostingListObjectQuery {
                 positions_pointer: plo.positions_pointer as usize,

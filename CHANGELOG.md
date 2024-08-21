@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2024-08-01
+
+### Added
+
+- String & Numeric Range Facets implemented: Counting and filtering of matching results.
+- Supports u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, String types for facet.
+- Numeric RangeType CountAboveRange/CountBelowRange/CountWithinRange implemented.
+- Schema has a new field property: "field_facet":true (default=false).
+- Index has a new get_index_string_facets method: returns a list of facet fields, each with field name and a list of unique values and their count (number of times a specific value appears in the whole index).
+- The search ResultObject now has a facets property. Returns index facets (value appears in the whole index) if querystring.is_empty, otherwise query facets (values appear in docs that match the query).
+- [FACETED_SEARCH.md](https://github.com/SeekStorm/SeekStorm/blob/master/FACETED_SEARCH.md) : Introduction to faceted search
+
+### Improved
+
+- BM25 component precalculation.
+- Query performance improved.
+- Documentation improved.
+- ARCHITECTURE.md updated.
+
+### Fixed
+
+- Result count for unions fixed if the index contained deleted documents.
+
+### Changed
+
+- Schema (breaking change: properties renamed)
+
 ## [0.1.18] - 2024-07-30
 
 ### Added

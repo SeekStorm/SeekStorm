@@ -8,9 +8,11 @@ use crate::{
         NonUniquePostingListObjectQuery, PostingListObjectQuery, SimilarityType, FIELD_STOP_BIT_1,
         FIELD_STOP_BIT_2, SPEEDUP_FLAG, STOP_BIT,
     },
-    min_heap::MinHeap,
-    search::ResultType,
-    utils::{read_u16, read_u32},
+    search::{FilterSparse, Ranges, ResultType, SearchResult},
+    utils::{
+        read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
+        read_u8,
+    },
 };
 
 pub(crate) const K: f32 = 1.2;
@@ -118,31 +120,35 @@ pub(crate) fn add_result_singleterm_multifield(
     index: &Index,
     docid: usize,
     result_count: &mut i32,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
+
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
+
     plo_single: &PostingListObjectSingle,
     not_query_list: &mut [PostingListObjectQuery],
     block_score: f32,
 ) {
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
-        return;
-    }
-
     if index.indexed_field_vec.len() == 1 {
         add_result_singleterm_singlefield(
             index,
             docid,
             result_count,
-            result_candidates,
+            search_result,
             top_k,
             result_type,
             field_filter_set,
+            facet_filter,
             plo_single,
             not_query_list,
             block_score,
         );
+        return;
+    }
+
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -207,13 +213,17 @@ pub(crate) fn add_result_singleterm_multifield(
         }
     }
 
+    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+        return;
+    };
+
     let mut field_vec: SmallVec<[(u16, usize); 2]> = SmallVec::new();
     let mut field_vec_bigram1: SmallVec<[(u16, usize); 2]> = SmallVec::new();
     let mut field_vec_bigram2: SmallVec<[(u16, usize); 2]> = SmallVec::new();
 
     match *result_type {
         ResultType::Count => {
-            if field_filter_set.len() > 0 {
+            if !field_filter_set.is_empty() {
                 decode_positions_singleterm_multifield(
                     index,
                     plo_single,
@@ -235,18 +245,21 @@ pub(crate) fn add_result_singleterm_multifield(
                 }
             }
 
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
 
             return;
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
                 return;
             }
-            if field_filter_set.len() > 0 {
+
+            if !field_filter_set.is_empty() {
                 decode_positions_singleterm_multifield(
                     index,
                     plo_single,
@@ -269,7 +282,7 @@ pub(crate) fn add_result_singleterm_multifield(
             }
         }
         ResultType::TopkCount => {
-            if field_filter_set.len() > 0 {
+            if !field_filter_set.is_empty() {
                 decode_positions_singleterm_multifield(
                     index,
                     plo_single,
@@ -291,18 +304,20 @@ pub(crate) fn add_result_singleterm_multifield(
                 }
             }
 
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
 
             if SPEEDUP_FLAG
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
                 return;
             }
         }
     }
 
-    if field_filter_set.len() == 0 {
+    if field_filter_set.is_empty() {
         decode_positions_singleterm_multifield(
             index,
             plo_single,
@@ -323,7 +338,228 @@ pub(crate) fn add_result_singleterm_multifield(
 
     // !!! resultcount ist nicht global, sondern nur per block
 
-    result_candidates.add_topk(bm25f, docid, top_k);
+    search_result.topk_candidates.add_topk(bm25f, docid, top_k);
+}
+
+#[inline]
+pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], docid: usize) -> bool {
+    for (i, facet) in index.facets.iter().enumerate() {
+        match &facet_filter[i] {
+            FilterSparse::U8(range) => {
+                let facet_value_id = read_u8(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::U16(range) => {
+                let facet_value_id = read_u16(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::U32(range) => {
+                let facet_value_id = read_u32(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::U64(range) => {
+                let facet_value_id = read_u64(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::I8(range) => {
+                let facet_value_id = read_i8(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::I16(range) => {
+                let facet_value_id = read_i16(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::I32(range) => {
+                let facet_value_id = read_i32(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::I64(range) => {
+                let facet_value_id = read_i64(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::F32(range) => {
+                let facet_value_id = read_f32(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::F64(range) => {
+                let facet_value_id = read_f64(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::String(values) => {
+                let facet_value_id = read_u16(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !values.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::None => {}
+        }
+    }
+    false
+}
+
+#[inline]
+pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid: usize) {
+    if !search_result.query_facets.is_empty() && !search_result.skip_facet_count {
+        for (i, facet) in index.facets.iter().enumerate() {
+            if search_result.query_facets[i].length == 0 {
+                continue;
+            }
+
+            let facet_value_id = match &search_result.query_facets[i].ranges {
+                Ranges::U8(_range_type, ranges) => {
+                    let facet_value =
+                        index.facets_file_mmap[(index.facets_size_sum * docid) + facet.offset];
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::U16(_range_type, ranges) => {
+                    let facet_value = read_u16(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::U32(_range_type, ranges) => {
+                    let facet_value = read_u32(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::U64(_range_type, ranges) => {
+                    let facet_value = read_u64(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::I8(_range_type, ranges) => {
+                    let facet_value = read_i8(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::I16(_range_type, ranges) => {
+                    let facet_value = read_i16(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::I32(_range_type, ranges) => {
+                    let facet_value = read_i32(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+
+                Ranges::I64(_range_type, ranges) => {
+                    let facet_value = read_i64(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::F32(_range_type, ranges) => {
+                    let facet_value = read_f32(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::F64(_range_type, ranges) => {
+                    let facet_value = read_f64(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                _ => read_u16(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                ),
+            };
+
+            *search_result.query_facets[i]
+                .values
+                .entry(facet_value_id)
+                .or_insert(0) += 1;
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -332,10 +568,12 @@ pub(crate) fn add_result_singleterm_singlefield(
     index: &Index,
     docid: usize,
     result_count: &mut i32,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
+
     plo_single: &PostingListObjectSingle,
     not_query_list: &mut [PostingListObjectQuery],
     block_score: f32,
@@ -405,6 +643,10 @@ pub(crate) fn add_result_singleterm_singlefield(
         }
     }
 
+    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+        return;
+    };
+
     let mut tf_bigram1 = 0;
     let mut tf_bigram2 = 0;
     let mut positions_count = 0;
@@ -412,7 +654,7 @@ pub(crate) fn add_result_singleterm_singlefield(
 
     match *result_type {
         ResultType::Count => {
-            if field_filter_set.len() > 0 {
+            if !field_filter_set.is_empty() {
                 decode_positions_singleterm_singlefield(
                     plo_single,
                     &mut tf_bigram1,
@@ -432,6 +674,7 @@ pub(crate) fn add_result_singleterm_singlefield(
                     }
                 }
             }
+            facet_count(index, search_result, docid);
 
             *result_count += 1;
 
@@ -439,12 +682,13 @@ pub(crate) fn add_result_singleterm_singlefield(
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
                 return;
             }
-            if field_filter_set.len() > 0 {
+
+            if !field_filter_set.is_empty() {
                 decode_positions_singleterm_singlefield(
                     plo_single,
                     &mut tf_bigram1,
@@ -465,7 +709,7 @@ pub(crate) fn add_result_singleterm_singlefield(
             }
         }
         ResultType::TopkCount => {
-            if field_filter_set.len() > 0 {
+            if !field_filter_set.is_empty() {
                 decode_positions_singleterm_singlefield(
                     plo_single,
                     &mut tf_bigram1,
@@ -484,18 +728,20 @@ pub(crate) fn add_result_singleterm_singlefield(
                 }
             }
 
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
 
             if SPEEDUP_FLAG
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
                 return;
             }
         }
     }
 
-    if field_filter_set.len() == 0 {
+    if field_filter_set.is_empty() {
         decode_positions_singleterm_singlefield(
             plo_single,
             &mut tf_bigram1,
@@ -515,7 +761,7 @@ pub(crate) fn add_result_singleterm_singlefield(
 
     // !!! resultcount ist nicht global, sondern nur per block
 
-    result_candidates.add_topk(bm25f, docid, top_k);
+    search_result.topk_candidates.add_topk(bm25f, docid, top_k);
 }
 
 #[inline(always)]
@@ -531,42 +777,33 @@ pub(crate) fn get_bm25f_singleterm_multifield(
     let block_id = docid >> 16;
 
     if index.indexed_field_vec.len() == 1 {
-        let document_length_normalized =
-            DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
+        let bm25_component =
+            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
             } else {
                 index.level_index[block_id].document_length_compressed_array[0]
                     [docid & 0b11111111_11111111]
-            } as usize] as f32;
-
-        let document_length_quotient =
-            document_length_normalized / index.document_length_normalized_average;
+            } as usize];
 
         if !plo_single.is_bigram {
             let tf = field_vec[0].1 as f32;
 
-            bm25f = plo_single.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+            bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         } else {
             let tf_bigram1 = field_vec_bigram1[0].1 as f32;
             let tf_bigram2 = field_vec_bigram2[0].1 as f32;
 
             bm25f = plo_single.idf_bigram1
-                * ((tf_bigram1 * (K + 1.0)
-                    / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA)
+                * ((tf_bigram1 * (K + 1.0) / (tf_bigram1 + bm25_component)) + SIGMA)
                 + plo_single.idf_bigram2
-                    * ((tf_bigram2 * (K + 1.0)
-                        / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
-                        + SIGMA);
+                    * ((tf_bigram2 * (K + 1.0) / (tf_bigram2 + bm25_component)) + SIGMA);
         }
     } else if !plo_single.is_bigram || index.meta.similarity == SimilarityType::Bm25fProximity {
         for field in field_vec.iter() {
             let field_id = field.0 as usize;
 
-            let document_length_normalized =
-                DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
+            let bm25_component =
+                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         index,
                         field_id,
@@ -578,24 +815,18 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                         [docid & 0b11111111_11111111]
                 } as usize] as f32;
 
-            let document_length_quotient =
-                document_length_normalized / index.document_length_normalized_average;
-
             let tf = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
-            bm25f += weight
-                * plo_single.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+            bm25f += weight * plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         }
     } else {
         for field in field_vec_bigram1.iter() {
             let field_id = field.0 as usize;
 
-            let document_length_normalized =
-                DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
+            let bm25_component =
+                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         index,
                         field_id,
@@ -607,25 +838,20 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                         [docid & 0b11111111_11111111]
                 } as usize] as f32;
 
-            let document_length_quotient =
-                document_length_normalized / index.document_length_normalized_average;
-
             let tf_bigram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_bigram1
-                * ((tf_bigram1 * (K + 1.0)
-                    / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+                * ((tf_bigram1 * (K + 1.0) / (tf_bigram1 + bm25_component)) + SIGMA);
         }
 
         for field in field_vec_bigram2.iter() {
             let field_id = field.0 as usize;
 
-            let document_length_normalized =
-                DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
+            let bm25_component =
+                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         index,
                         field_id,
@@ -637,18 +863,13 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                         [docid & 0b11111111_11111111]
                 } as usize] as f32;
 
-            let document_length_quotient =
-                document_length_normalized / index.document_length_normalized_average;
-
             let tf_bigram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_bigram2
-                * ((tf_bigram2 * (K + 1.0)
-                    / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+                * ((tf_bigram2 * (K + 1.0) / (tf_bigram2 + bm25_component)) + SIGMA);
         }
     }
 
@@ -668,38 +889,30 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
     let block_id = docid >> 16;
 
     if index.indexed_field_vec.len() == 1 {
-        let document_length_normalized =
-            DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
+        let bm25_component =
+            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
             } else {
                 index.level_index[block_id].document_length_compressed_array[0]
                     [docid & 0b11111111_11111111]
-            } as usize] as f32;
-
-        let document_length_quotient =
-            document_length_normalized / index.document_length_normalized_average;
+            } as usize];
 
         if !plo_single.is_bigram {
             let tf = positions_count as f32;
 
-            bm25f = plo_single.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+            bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         } else {
             bm25f = plo_single.idf_bigram1
-                * (((tf_bigram1 as f32) * (K + 1.0)
-                    / (tf_bigram1 as f32 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA)
+                * ((tf_bigram1 as f32 * (K + 1.0) / (tf_bigram1 as f32 + bm25_component)) + SIGMA)
                 + plo_single.idf_bigram2
-                    * ((tf_bigram2 as f32 * (K + 1.0)
-                        / (tf_bigram2 as f32 + (K * (1.0 - B + (B * document_length_quotient)))))
+                    * ((tf_bigram2 as f32 * (K + 1.0) / (tf_bigram2 as f32 + bm25_component))
                         + SIGMA);
         }
     } else {
         let field_id = 0;
 
-        let document_length_normalized =
-            DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
+        let bm25_component =
+            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(
                     index,
                     field_id,
@@ -709,25 +922,17 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
             } else {
                 index.level_index[block_id].document_length_compressed_array[field_id]
                     [docid & 0b11111111_11111111]
-            } as usize] as f32;
-
-        let document_length_quotient =
-            document_length_normalized / index.document_length_normalized_average;
+            } as usize];
 
         if !plo_single.is_bigram {
             let tf = positions_count as f32;
 
-            bm25f = plo_single.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+            bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         } else {
             bm25f = plo_single.idf_bigram1
-                * (((tf_bigram1 as f32) * (K + 1.0)
-                    / (tf_bigram1 as f32 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA)
+                * ((tf_bigram1 as f32 * (K + 1.0) / (tf_bigram1 as f32 + bm25_component)) + SIGMA)
                 + plo_single.idf_bigram2
-                    * ((tf_bigram2 as f32 * (K + 1.0)
-                        / (tf_bigram2 as f32 + (K * (1.0 - B + (B * document_length_quotient)))))
+                    * ((tf_bigram2 as f32 * (K + 1.0) / (tf_bigram2 as f32 + bm25_component))
                         + SIGMA);
         }
     }
@@ -745,52 +950,36 @@ pub(crate) fn get_bm25f_multiterm_multifield(
     let block_id = docid >> 16;
 
     if index.indexed_field_vec.len() == 1 {
-        let mut document_length_quotient = 0.0;
+        let bm25_component =
+            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
+            } else {
+                index.level_index[block_id].document_length_compressed_array[0]
+                    [docid & 0b11111111_11111111]
+            } as usize];
 
         for plo in query_list.iter() {
             if !plo.bm25_flag {
                 continue;
             }
 
-            if document_length_quotient == 0.0 {
-                let document_length_normalized =
-                    DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type == AccessType::Mmap {
-                        get_document_length_compressed_mmap(
-                            index,
-                            0,
-                            block_id,
-                            docid & 0b11111111_11111111,
-                        )
-                    } else {
-                        index.level_index[block_id].document_length_compressed_array[0]
-                            [docid & 0b11111111_11111111]
-                    } as usize] as f32;
-
-                document_length_quotient =
-                    document_length_normalized / index.document_length_normalized_average;
-            }
-
             if !plo.is_bigram {
                 let tf = plo.field_vec[0].1 as f32;
 
-                bm25f += plo.idf
-                    * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                        + SIGMA);
+                bm25f += plo.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
             } else {
                 bm25f += plo.idf_bigram1
                     * ((plo.tf_bigram1 as f32 * (K + 1.0)
-                        / (plo.tf_bigram1 as f32
-                            + (K * (1.0 - B + (B * document_length_quotient)))))
+                        / (plo.tf_bigram1 as f32 + bm25_component))
                         + SIGMA)
                     + plo.idf_bigram2
                         * ((plo.tf_bigram2 as f32 * (K + 1.0)
-                            / (plo.tf_bigram2 as f32
-                                + (K * (1.0 - B + (B * document_length_quotient)))))
+                            / (plo.tf_bigram2 as f32 + bm25_component))
                             + SIGMA);
             }
         }
     } else {
-        let mut document_length_quotient_vec: SmallVec<[f32; 2]> = smallvec![0.0; 2];
+        let mut bm25_component_vec: SmallVec<[f32; 2]> = smallvec![0.0; 2];
         for plo in query_list.iter() {
             if !plo.bm25_flag {
                 continue;
@@ -799,103 +988,97 @@ pub(crate) fn get_bm25f_multiterm_multifield(
             if !plo.is_bigram {
                 for field in plo.field_vec.iter() {
                     let field_id = field.0 as usize;
-                    if document_length_quotient_vec[field_id] == 0.0 {
-                        let document_length_normalized =
-                            DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
-                                == AccessType::Mmap
-                            {
-                                get_document_length_compressed_mmap(
-                                    index,
-                                    field_id,
-                                    block_id,
-                                    docid & 0b11111111_11111111,
-                                )
-                            } else {
-                                index.level_index[block_id].document_length_compressed_array
-                                    [field_id][docid & 0b11111111_11111111]
-                            } as usize] as f32;
-
-                        document_length_quotient_vec[field_id] =
-                            document_length_normalized / index.document_length_normalized_average;
+                    if bm25_component_vec[field_id] == 0.0 {
+                        bm25_component_vec[field_id] = index.bm25_component_cache[if index
+                            .meta
+                            .access_type
+                            == AccessType::Mmap
+                        {
+                            get_document_length_compressed_mmap(
+                                index,
+                                field_id,
+                                block_id,
+                                docid & 0b11111111_11111111,
+                            )
+                        } else {
+                            index.level_index[block_id].document_length_compressed_array[field_id]
+                                [docid & 0b11111111_11111111]
+                        }
+                            as usize];
                     }
 
                     let tf = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
                     bm25f += weight
                         * plo.idf
                         * ((tf * (K + 1.0)
-                            / (tf
-                                + (K * (1.0 - B + (B * document_length_quotient_vec[field_id])))))
+                            / (tf + (K * (1.0 - B + (B * bm25_component_vec[field_id])))))
                             + SIGMA);
                 }
             } else {
                 for field in plo.field_vec_bigram1.iter() {
                     let field_id = field.0 as usize;
-                    if document_length_quotient_vec[field_id] == 0.0 {
-                        let document_length_normalized =
-                            DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
-                                == AccessType::Mmap
-                            {
-                                get_document_length_compressed_mmap(
-                                    index,
-                                    field_id,
-                                    block_id,
-                                    docid & 0b11111111_11111111,
-                                )
-                            } else {
-                                index.level_index[block_id].document_length_compressed_array
-                                    [field_id][docid & 0b11111111_11111111]
-                            } as usize] as f32;
-
-                        document_length_quotient_vec[field_id] =
-                            document_length_normalized / index.document_length_normalized_average;
+                    if bm25_component_vec[field_id] == 0.0 {
+                        bm25_component_vec[field_id] = index.bm25_component_cache[if index
+                            .meta
+                            .access_type
+                            == AccessType::Mmap
+                        {
+                            get_document_length_compressed_mmap(
+                                index,
+                                field_id,
+                                block_id,
+                                docid & 0b11111111_11111111,
+                            )
+                        } else {
+                            index.level_index[block_id].document_length_compressed_array[field_id]
+                                [docid & 0b11111111_11111111]
+                        }
+                            as usize];
                     }
 
                     let tf_bigram1 = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
                     bm25f += weight
                         * plo.idf_bigram1
                         * ((tf_bigram1 * (K + 1.0)
-                            / (tf_bigram1
-                                + (K * (1.0 - B + (B * document_length_quotient_vec[field_id])))))
+                            / (tf_bigram1 + (K * (1.0 - B + (B * bm25_component_vec[field_id])))))
                             + SIGMA);
                 }
 
                 for field in plo.field_vec_bigram2.iter() {
                     let field_id = field.0 as usize;
-                    if document_length_quotient_vec[field_id] == 0.0 {
-                        let document_length_normalized =
-                            DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
-                                == AccessType::Mmap
-                            {
-                                get_document_length_compressed_mmap(
-                                    index,
-                                    field_id,
-                                    block_id,
-                                    docid & 0b11111111_11111111,
-                                )
-                            } else {
-                                index.level_index[block_id].document_length_compressed_array
-                                    [field_id][docid & 0b11111111_11111111]
-                            } as usize] as f32;
-
-                        document_length_quotient_vec[field_id] =
-                            document_length_normalized / index.document_length_normalized_average;
+                    if bm25_component_vec[field_id] == 0.0 {
+                        bm25_component_vec[field_id] = index.bm25_component_cache[if index
+                            .meta
+                            .access_type
+                            == AccessType::Mmap
+                        {
+                            get_document_length_compressed_mmap(
+                                index,
+                                field_id,
+                                block_id,
+                                docid & 0b11111111_11111111,
+                            )
+                        } else {
+                            index.level_index[block_id].document_length_compressed_array[field_id]
+                                [docid & 0b11111111_11111111]
+                        }
+                            as usize] as f32;
                     }
 
                     let tf_bigram2 = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
                     bm25f += weight
                         * plo.idf_bigram2
                         * ((tf_bigram2 * (K + 1.0)
-                            / (tf_bigram2
-                                + (K * (1.0 - B + (B * document_length_quotient_vec[field_id])))))
+                            / (tf_bigram2 + (K * (1.0 - B + (B * bm25_component_vec[field_id])))))
                             + SIGMA);
                 }
             }
@@ -914,42 +1097,28 @@ pub(crate) fn get_bm25f_multiterm_singlefield(
     let mut bm25f = 0.0;
     let block_id = docid >> 16;
 
-    let mut document_length_quotient = 0.0;
+    let bm25_component = index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+        get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
+    } else {
+        index.level_index[block_id].document_length_compressed_array[0][docid & 0b11111111_11111111]
+    } as usize];
 
     for plo in query_list.iter() {
         if !plo.bm25_flag {
             continue;
         }
 
-        if document_length_quotient == 0.0 {
-            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
-                == AccessType::Mmap
-            {
-                get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
-            } else {
-                index.level_index[block_id].document_length_compressed_array[0]
-                    [docid & 0b11111111_11111111]
-            } as usize] as f32;
-
-            document_length_quotient =
-                document_length_normalized / index.document_length_normalized_average;
-        }
-
         if !plo.is_bigram {
             let tf = plo.positions_count as f32;
 
-            bm25f += plo.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+            bm25f += plo.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         } else {
             bm25f += plo.idf_bigram1
-                * ((plo.tf_bigram1 as f32 * (K + 1.0)
-                    / (plo.tf_bigram1 as f32 + (K * (1.0 - B + (B * document_length_quotient)))))
+                * ((plo.tf_bigram1 as f32 * (K + 1.0) / (plo.tf_bigram1 as f32 + bm25_component))
                     + SIGMA)
                 + plo.idf_bigram2
                     * ((plo.tf_bigram2 as f32 * (K + 1.0)
-                        / (plo.tf_bigram2 as f32
-                            + (K * (1.0 - B + (B * document_length_quotient)))))
+                        / (plo.tf_bigram2 as f32 + bm25_component))
                         + SIGMA);
         }
     }
@@ -961,6 +1130,7 @@ pub(crate) fn get_bm25f_multiterm_singlefield(
 pub(crate) fn decode_positions_multiterm_multifield(
     index: &Index,
     plo: &mut PostingListObjectQuery,
+    facet_filtered: bool,
     phrase_query: bool,
     all_terms_frequent: bool,
 ) -> bool {
@@ -1031,13 +1201,18 @@ pub(crate) fn decode_positions_multiterm_multifield(
             &mut positions_pointer,
         );
 
-        if SPEEDUP_FLAG && all_terms_frequent && !phrase_query && field_vec[0].1 < 10 {
+        if SPEEDUP_FLAG
+            && all_terms_frequent
+            && !phrase_query
+            && !facet_filtered
+            && field_vec[0].1 < 10
+        {
             return true;
         }
     } else {
         plo.is_embedded = true;
 
-        if SPEEDUP_FLAG && all_terms_frequent && !phrase_query {
+        if SPEEDUP_FLAG && all_terms_frequent && !phrase_query && !facet_filtered {
             return true;
         }
 
@@ -1439,6 +1614,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
 #[inline(always)]
 pub(crate) fn decode_positions_multiterm_singlefield(
     plo: &mut PostingListObjectQuery,
+    facet_filtered: bool,
     phrase_query: bool,
     all_terms_frequent: bool,
 ) -> bool {
@@ -1482,13 +1658,18 @@ pub(crate) fn decode_positions_multiterm_singlefield(
         }
         read_singlefield_value(&mut positions_count, plo.byte_array, &mut positions_pointer);
 
-        if SPEEDUP_FLAG && all_terms_frequent && !phrase_query && positions_count < 10 {
+        if SPEEDUP_FLAG
+            && all_terms_frequent
+            && !phrase_query
+            && !facet_filtered
+            && positions_count < 10
+        {
             return true;
         }
     } else {
         plo.is_embedded = true;
 
-        if SPEEDUP_FLAG && all_terms_frequent && !phrase_query {
+        if SPEEDUP_FLAG && all_terms_frequent && !phrase_query && !facet_filtered {
             return true;
         }
 
@@ -2011,7 +2192,7 @@ pub(crate) fn decode_positions_singleterm_singlefield(
                 println!("unsupported single 3 byte pointer embedded");
             }
         }
-    }
+    };
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2228,10 +2409,11 @@ pub(crate) fn add_result_multiterm_multifield(
     index: &Index,
     docid: usize,
     result_count: &mut i32,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
@@ -2239,19 +2421,16 @@ pub(crate) fn add_result_multiterm_multifield(
     block_score: f32,
     all_terms_frequent: bool,
 ) {
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
-        return;
-    }
-
     if index.indexed_field_vec.len() == 1 {
         add_result_multiterm_singlefield(
             index,
             docid,
             result_count,
-            result_candidates,
+            search_result,
             top_k,
             result_type,
             field_filter_set,
+            facet_filter,
             non_unique_query_list,
             query_list,
             not_query_list,
@@ -2259,6 +2438,10 @@ pub(crate) fn add_result_multiterm_multifield(
             block_score,
             all_terms_frequent,
         );
+        return;
+    }
+
+    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -2322,17 +2505,23 @@ pub(crate) fn add_result_multiterm_multifield(
         }
     }
 
+    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+        return;
+    };
+
     match *result_type {
         ResultType::Count => {
-            if !phrase_query && field_filter_set.len() == 0 {
+            if !phrase_query && field_filter_set.is_empty() {
+                facet_count(index, search_result, docid);
+
                 *result_count += 1;
                 return;
             }
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
                 return;
             }
@@ -2340,10 +2529,12 @@ pub(crate) fn add_result_multiterm_multifield(
         ResultType::TopkCount => {
             if SPEEDUP_FLAG
                 && !phrase_query
-                && field_filter_set.len() == 0
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && field_filter_set.is_empty()
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
+                facet_count(index, search_result, docid);
+
                 *result_count += 1;
                 return;
             }
@@ -2357,12 +2548,20 @@ pub(crate) fn add_result_multiterm_multifield(
             continue;
         }
 
-        if decode_positions_multiterm_multifield(index, plo, phrase_query, all_terms_frequent) {
+        if decode_positions_multiterm_multifield(
+            index,
+            plo,
+            !facet_filter.is_empty(),
+            phrase_query,
+            all_terms_frequent && field_filter_set.is_empty(),
+        ) {
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
             return;
         }
 
-        if field_filter_set.len() > 0
+        if !field_filter_set.is_empty()
             && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
         {
             let mut match_flag = false;
@@ -2381,8 +2580,8 @@ pub(crate) fn add_result_multiterm_multifield(
         bm25 = get_bm25f_multiterm_multifield(index, docid, query_list);
 
         if SPEEDUP_FLAG
-            && result_candidates.current_heap_size >= top_k
-            && bm25 <= result_candidates._elements[0].score
+            && search_result.topk_candidates.current_heap_size >= top_k
+            && bm25 <= search_result.topk_candidates._elements[0].score
         {
             return;
         }
@@ -2524,7 +2723,7 @@ pub(crate) fn add_result_multiterm_multifield(
                     plo.pos = get_next_position_multifield(plo);
                 }
 
-                if field_filter_set.len() > 0 && !field_filter_set.contains(&i) {
+                if !field_filter_set.is_empty() && !field_filter_set.contains(&i) {
                     continue;
                 }
 
@@ -2634,6 +2833,8 @@ pub(crate) fn add_result_multiterm_multifield(
         }
     }
 
+    facet_count(index, search_result, docid);
+
     *result_count += 1;
     if result_type == &ResultType::Count {
         return;
@@ -2645,7 +2846,7 @@ pub(crate) fn add_result_multiterm_multifield(
 
     // !!! resultcount ist nicht global, sondern nur per block
 
-    result_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(bm25, docid, top_k);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2654,14 +2855,16 @@ pub(crate) fn add_result_multiterm_singlefield(
     index: &Index,
     docid: usize,
     result_count: &mut i32,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
     phrase_query: bool,
+
     block_score: f32,
     all_terms_frequent: bool,
 ) {
@@ -2729,17 +2932,23 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
     }
 
+    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+        return;
+    };
+
     match *result_type {
         ResultType::Count => {
-            if !phrase_query && field_filter_set.len() == 0 {
+            if !phrase_query && field_filter_set.is_empty() {
+                facet_count(index, search_result, docid);
+
                 *result_count += 1;
                 return;
             }
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
                 return;
             }
@@ -2747,10 +2956,12 @@ pub(crate) fn add_result_multiterm_singlefield(
         ResultType::TopkCount => {
             if SPEEDUP_FLAG
                 && !phrase_query
-                && field_filter_set.len() == 0
-                && result_candidates.current_heap_size >= top_k
-                && block_score <= result_candidates._elements[0].score
+                && field_filter_set.is_empty()
+                && search_result.topk_candidates.current_heap_size >= top_k
+                && block_score <= search_result.topk_candidates._elements[0].score
             {
+                facet_count(index, search_result, docid);
+
                 *result_count += 1;
                 return;
             }
@@ -2764,12 +2975,19 @@ pub(crate) fn add_result_multiterm_singlefield(
             continue;
         }
 
-        if decode_positions_multiterm_singlefield(plo, phrase_query, all_terms_frequent) {
+        if decode_positions_multiterm_singlefield(
+            plo,
+            !facet_filter.is_empty(),
+            phrase_query,
+            all_terms_frequent && field_filter_set.is_empty(),
+        ) {
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
             return;
         }
 
-        if field_filter_set.len() > 0
+        if !field_filter_set.is_empty()
             && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
         {
             let mut match_flag = false;
@@ -2788,8 +3006,8 @@ pub(crate) fn add_result_multiterm_singlefield(
         bm25 = get_bm25f_multiterm_singlefield(index, docid, query_list);
 
         if SPEEDUP_FLAG
-            && result_candidates.current_heap_size >= top_k
-            && bm25 <= result_candidates._elements[0].score
+            && search_result.topk_candidates.current_heap_size >= top_k
+            && bm25 <= search_result.topk_candidates._elements[0].score
         {
             return;
         }
@@ -2897,6 +3115,8 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
     }
 
+    facet_count(index, search_result, docid);
+
     *result_count += 1;
     if result_type == &ResultType::Count {
         return;
@@ -2906,5 +3126,5 @@ pub(crate) fn add_result_multiterm_singlefield(
         bm25 = get_bm25f_multiterm_singlefield(index, docid, query_list);
     }
 
-    result_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(bm25, docid, top_k);
 }

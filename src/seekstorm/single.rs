@@ -11,8 +11,7 @@ use crate::{
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
     },
     intersection::{bitpacking32_get_delta, BlockObject},
-    min_heap::MinHeap,
-    search::ResultType,
+    search::{FilterSparse, ResultType, SearchResult},
     utils::{cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16},
 };
 
@@ -29,16 +28,20 @@ pub(crate) async fn single_docid<'a>(
     blo: &BlockObjectIndex,
     term_index: usize,
     result_count: &mut i32,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
 ) {
     let block_score = blo.max_block_score;
-    let filtered = !not_query_list.is_empty() || field_filter_set.len() > 0;
+    let filtered = !not_query_list.is_empty()
+        || !field_filter_set.is_empty()
+        || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
+            && result_type != &ResultType::Topk;
     if SPEEDUP_FLAG
-        && topk_candidates.current_heap_size == top_k
-        && block_score <= topk_candidates._elements[0].score
+        && search_result.topk_candidates.current_heap_size == top_k
+        && block_score <= search_result.topk_candidates._elements[0].score
         && (!filtered || result_type == &ResultType::Topk)
     {
         return;
@@ -165,10 +168,11 @@ pub(crate) async fn single_docid<'a>(
                     index,
                     ((blo.block_id as usize) << 16) | ushorts1[i as usize] as usize,
                     result_count,
-                    topk_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     &plo,
                     not_query_list,
                     block_score,
@@ -196,10 +200,11 @@ pub(crate) async fn single_docid<'a>(
                     index,
                     ((blo.block_id as usize) << 16) | doc_id as usize,
                     result_count,
-                    topk_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     &plo,
                     not_query_list,
                     block_score,
@@ -221,10 +226,11 @@ pub(crate) async fn single_docid<'a>(
                         index,
                         ((blo.block_id as usize) << 16) | (startdocid + j) as usize,
                         result_count,
-                        topk_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         &plo,
                         not_query_list,
                         block_score,
@@ -252,10 +258,11 @@ pub(crate) async fn single_docid<'a>(
                         index,
                         block_id_msb | ((ulong_pos << 6) + bit_pos) as usize,
                         result_count,
-                        topk_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         &plo,
                         not_query_list,
                         block_score,
@@ -277,17 +284,20 @@ pub(crate) async fn single_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
 ) {
     let term_index = 0;
 
     let filtered = !not_query_list.is_empty()
         || !field_filter_set.is_empty()
-        || !index.delete_hashset.is_empty();
+        || !index.delete_hashset.is_empty()
+        || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
+            && result_type != &ResultType::Topk;
 
     if (index.enable_single_term_topk || (result_type == &ResultType::Count))
         && (non_unique_query_list.len() <= 1)
@@ -327,8 +337,8 @@ pub(crate) async fn single_blockid<'a>(
                 block_vec.push(block_object);
             } else if !SPEEDUP_FLAG
                 || (filtered && result_type != &ResultType::Topk)
-                || topk_candidates.current_heap_size < top_k
-                || block_score > topk_candidates._elements[0].score
+                || search_result.topk_candidates.current_heap_size < top_k
+                || block_score > search_result.topk_candidates._elements[0].score
             {
                 single_docid(
                     index,
@@ -337,10 +347,11 @@ pub(crate) async fn single_blockid<'a>(
                     blo,
                     term_index,
                     &mut result_count_local,
-                    topk_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                 )
                 .await;
             }
@@ -361,16 +372,17 @@ pub(crate) async fn single_blockid<'a>(
                 blo,
                 term_index,
                 &mut result_count_local,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
             )
             .await;
 
             if (!filtered || result_type == &ResultType::Topk)
-                && (topk_candidates.current_heap_size == top_k)
-                && ((block.block_score <= topk_candidates._elements[0].score)
+                && (search_result.topk_candidates.current_heap_size == top_k)
+                && ((block.block_score <= search_result.topk_candidates._elements[0].score)
                     || (block_index == top_k))
             {
                 break;

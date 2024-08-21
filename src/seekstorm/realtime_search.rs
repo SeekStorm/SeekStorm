@@ -7,13 +7,14 @@ use ahash::{AHashMap, AHashSet};
 use smallvec::SmallVec;
 
 use crate::{
-    add_result::{read_multifield_vec, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
+    add_result::{
+        facet_count, is_facet_filter, read_multifield_vec, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA,
+    },
     index::{
         Index, NonUniquePostingListObjectQuery, NonUniqueTermObject, PostingListObjectQuery,
         SimilarityType, TermObject, DUMMY_VEC_8, STOP_BIT,
     },
-    min_heap::MinHeap,
-    search::{QueryType, ResultType},
+    search::{FilterSparse, QueryType, ResultType, SearchResult},
     utils::{read_u16, read_u16_ref, read_u32, read_u32_ref},
 };
 
@@ -53,10 +54,12 @@ pub(crate) fn add_result_singleterm_uncommitted(
     index: &Index,
     docid: usize,
     result_count: &mut i32,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
+
     plo_single: &mut PostingListObjectQuery,
     not_query_list: &mut [PostingListObjectQuery],
 ) {
@@ -64,9 +67,6 @@ pub(crate) fn add_result_singleterm_uncommitted(
         return;
     }
 
-    let filtered = !not_query_list.is_empty()
-        || !field_filter_set.is_empty()
-        || !index.delete_hashset.is_empty();
     for plo in not_query_list.iter_mut() {
         if !plo.bm25_flag {
             continue;
@@ -89,9 +89,18 @@ pub(crate) fn add_result_singleterm_uncommitted(
         }
     }
 
+    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+        return;
+    };
+
+    let filtered = !not_query_list.is_empty()
+        || !field_filter_set.is_empty()
+        || !index.delete_hashset.is_empty()
+        || !facet_filter.is_empty();
+
     index.decode_positions_uncommitted(plo_single, false);
 
-    if field_filter_set.len() > 0
+    if !field_filter_set.is_empty()
         && plo_single.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
     {
         let mut match_flag = false;
@@ -108,6 +117,8 @@ pub(crate) fn add_result_singleterm_uncommitted(
     match *result_type {
         ResultType::Count => {
             if filtered {
+                facet_count(index, search_result, docid);
+
                 *result_count += 1;
             }
             return;
@@ -115,6 +126,8 @@ pub(crate) fn add_result_singleterm_uncommitted(
         ResultType::Topk => {}
         ResultType::TopkCount => {
             if filtered {
+                facet_count(index, search_result, docid);
+
                 *result_count += 1;
             }
         }
@@ -122,7 +135,7 @@ pub(crate) fn add_result_singleterm_uncommitted(
 
     let bm25 = get_bm25f_singleterm_multifield_uncommitted(index, docid, plo_single);
 
-    result_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(bm25, docid, top_k);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -131,10 +144,11 @@ pub(crate) fn add_result_multiterm_uncommitted(
     index: &Index,
     docid: usize,
     result_count: &mut i32,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
@@ -144,7 +158,6 @@ pub(crate) fn add_result_multiterm_uncommitted(
         return;
     }
 
-    let filtered = phrase_query || !field_filter_set.is_empty() || !index.delete_hashset.is_empty();
     for plo in not_query_list.iter_mut() {
         if !plo.bm25_flag {
             continue;
@@ -167,7 +180,18 @@ pub(crate) fn add_result_multiterm_uncommitted(
         }
     }
 
-    if !filtered /* !phrase_query*/ && result_type == &ResultType::Count {
+    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+        return;
+    };
+
+    let filtered = phrase_query
+        || !field_filter_set.is_empty()
+        || !index.delete_hashset.is_empty()
+        || !facet_filter.is_empty();
+
+    if !filtered && result_type == &ResultType::Count {
+        facet_count(index, search_result, docid);
+
         *result_count += 1;
         return;
     }
@@ -175,7 +199,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
     for plo in query_list.iter_mut() {
         index.decode_positions_uncommitted(plo, phrase_query);
 
-        if field_filter_set.len() > 0
+        if !field_filter_set.is_empty()
             && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
         {
             let mut match_flag = false;
@@ -328,7 +352,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                     plo.pos = get_next_position_uncommitted(index, plo);
                 }
 
-                if field_filter_set.len() > 0 && !field_filter_set.contains(&i) {
+                if !field_filter_set.is_empty() && !field_filter_set.contains(&i) {
                     continue;
                 }
 
@@ -449,18 +473,22 @@ pub(crate) fn add_result_multiterm_uncommitted(
 
     match *result_type {
         ResultType::Count => {
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
             return;
         }
         ResultType::Topk => {}
         ResultType::TopkCount => {
+            facet_count(index, search_result, docid);
+
             *result_count += 1;
         }
     }
 
     let bm25 = get_bm25f_multiterm_multifield_uncommitted(index, docid, query_list);
 
-    result_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(bm25, docid, top_k);
 }
 
 #[inline(always)]
@@ -631,7 +659,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                     let tf = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
                     bm25f += weight
                         * plo.idf
@@ -652,7 +680,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                     let tf_bigram1 = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
                     bm25f += weight
                         * plo.idf_bigram1
@@ -673,7 +701,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                     let tf_bigram2 = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].field_boost;
+                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
                     bm25f += weight
                         * plo.idf_bigram2
@@ -709,7 +737,9 @@ impl Index {
         query_type_mut: &mut QueryType,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
-        topk_candidates: &mut MinHeap,
+        facet_filter: &[FilterSparse],
+
+        search_result: &mut SearchResult,
         result_count_arc: &Arc<AtomicUsize>,
         top_k: usize,
     ) {
@@ -866,7 +896,8 @@ impl Index {
                 0,
                 result_type,
                 field_filter_set,
-                topk_candidates,
+                facet_filter,
+                search_result,
                 result_count_arc,
                 top_k,
             );
@@ -877,10 +908,11 @@ impl Index {
                 &mut not_query_list,
                 block_id,
                 result_count_arc,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
             );
         } else {
             self.intersection_docid_uncommitted(
@@ -889,10 +921,11 @@ impl Index {
                 &mut not_query_list,
                 block_id,
                 result_count_arc,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
                 query_type_mut == &mut QueryType::Phrase && non_unique_query_list_count >= 2,
             );
         }
@@ -908,13 +941,16 @@ impl Index {
         term_index: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
-        topk_candidates: &mut MinHeap,
+        facet_filter: &[FilterSparse],
+
+        search_result: &mut SearchResult,
         result_count_arc: &Arc<AtomicUsize>,
         top_k: usize,
     ) {
         let filtered = !not_query_list.is_empty()
             || !field_filter_set.is_empty()
-            || !self.delete_hashset.is_empty();
+            || !self.delete_hashset.is_empty()
+            || !facet_filter.is_empty();
 
         if (self.enable_single_term_topk || (result_type == &ResultType::Count))
             && (non_unique_query_list.len() <= 1 && !filtered)
@@ -939,17 +975,18 @@ impl Index {
                 self,
                 (block_id << 16) | plo1.docid as usize,
                 &mut result_count_local,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
                 plo1,
                 not_query_list,
             );
         }
 
         if result_type != &ResultType::Topk {
-            let filtered = !not_query_list.is_empty() || field_filter_set.len() > 0;
+            let filtered = !not_query_list.is_empty() || !field_filter_set.is_empty();
             result_count_arc.fetch_add(
                 if filtered {
                     result_count_local as usize
@@ -1434,10 +1471,11 @@ impl Index {
         not_query_list: &mut [PostingListObjectQuery<'_>],
         block_id: usize,
         result_count_arc: &Arc<AtomicUsize>,
-        topk_candidates: &mut MinHeap,
+        search_result: &mut SearchResult,
         top_k: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
+        facet_filter: &[FilterSparse],
         phrase_query: bool,
     ) {
         let mut result_count = 0;
@@ -1482,10 +1520,11 @@ impl Index {
                         self,
                         (block_id << 16) | query_list[t1].docid as usize,
                         &mut result_count,
-                        topk_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         non_unique_query_list,
                         query_list,
                         not_query_list,
@@ -1523,10 +1562,11 @@ impl Index {
         not_query_list: &mut [PostingListObjectQuery],
         block_id: usize,
         result_count_arc: &Arc<AtomicUsize>,
-        topk_candidates: &mut MinHeap,
+        search_result: &mut SearchResult,
         top_k: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
+        facet_filter: &[FilterSparse],
     ) {
         let mut result_count: i32 = 0;
 
@@ -1539,10 +1579,11 @@ impl Index {
         self.union_scan_uncommitted(
             &mut result_count,
             block_id,
-            topk_candidates,
+            search_result,
             top_k,
             result_type,
             field_filter_set,
+            facet_filter,
             non_unique_query_list,
             query_list,
             not_query_list,
@@ -1599,10 +1640,11 @@ impl Index {
         &self,
         result_count: &mut i32,
         block_id: usize,
-        result_candidates: &mut MinHeap,
+        search_result: &mut SearchResult,
         top_k: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
+        facet_filter: &[FilterSparse],
         non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
         query_list: &mut [PostingListObjectQuery],
         not_query_list: &mut [PostingListObjectQuery],
@@ -1641,10 +1683,11 @@ impl Index {
                         self,
                         (block_id << 16) | docid_min as usize,
                         result_count,
-                        result_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         &mut query_list[term_index],
                         not_query_list,
                     );
@@ -1656,10 +1699,11 @@ impl Index {
                         self,
                         (block_id << 16) | docid_min as usize,
                         result_count,
-                        result_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         non_unique_query_list,
                         query_list,
                         not_query_list,

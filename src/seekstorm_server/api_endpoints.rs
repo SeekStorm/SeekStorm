@@ -15,10 +15,11 @@ use seekstorm::{
     highlighter::{highlighter, Highlight},
     index::{
         create_index, open_index, AccessType, DeleteDocument, DeleteDocuments,
-        DeleteDocumentsByQuery, Document, IndexArc, IndexDocument, IndexDocuments, IndexMetaObject,
-        SchemaField, SimilarityType, TokenizerType, UpdateDocument, UpdateDocuments,
+        DeleteDocumentsByQuery, Document, Facet, IndexArc, IndexDocument, IndexDocuments,
+        IndexMetaObject, SchemaField, SimilarityType, TokenizerType, UpdateDocument,
+        UpdateDocuments,
     },
-    search::{QueryType, ResultType, Search},
+    search::{FacetFilter, QueryFacet, QueryType, ResultType, Search},
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -51,20 +52,25 @@ pub struct SearchRequestObject {
     pub field_filter: Vec<String>,
     #[serde(default)]
     pub fields: Vec<String>,
+    #[serde(default)]
+    pub query_facets: Vec<QueryFacet>,
+    #[serde(default)]
+    pub facet_filter: Vec<FacetFilter>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ResultObject {
+pub struct SearchResultObject {
     pub time: u128,
     pub query: String,
     pub offset: usize,
     pub length: usize,
     pub count: usize,
     pub count_total: usize,
+    pub query_terms: Vec<String>,
     pub results: Vec<Document>,
+    pub facets: Vec<Facet>,
     pub suggestions: Vec<String>,
 }
-
 
 #[derive(Debug, Clone, Deserialize, Serialize, Derivative)]
 pub struct CreateIndexRequest {
@@ -103,7 +109,6 @@ pub(crate) struct IndexResponseObject {
     pub version: String,
 }
 
-
 /// Save file atomically
 pub(crate) fn save_file_atomically(path: &PathBuf, content: String) {
     let mut temp_path = path.clone();
@@ -130,7 +135,6 @@ pub(crate) fn create_apikey_api<'a>(
     apikey: &[u8],
     apikey_list: &'a mut HashMap<u128, ApikeyObject>,
 ) -> &'a mut ApikeyObject {
-
     let apikey_hash_u128 = calculate_hash(&apikey) as u128;
 
     let mut apikey_id: u64 = 0;
@@ -165,7 +169,6 @@ pub(crate) fn delete_apikey_api(
     apikey_list: &mut HashMap<u128, ApikeyObject>,
     apikey_hash: u128,
 ) -> Result<u64, String> {
-
     if let Some(apikey_object) = apikey_list.get(&apikey_hash) {
         let apikey_id_path = Path::new(&index_path).join(apikey_object.id.to_string());
         println!("delete path {}", apikey_id_path.to_string_lossy());
@@ -240,8 +243,6 @@ pub(crate) async fn open_all_apikeys(
     }
     test_index_flag
 }
-
-
 
 pub(crate) fn create_index_api<'a>(
     index_path: &'a PathBuf,
@@ -437,6 +438,7 @@ pub(crate) async fn delete_documents_by_query_api(
             search_request.length,
             search_request.realtime,
             search_request.field_filter,
+            search_request.facet_filter,
         )
         .await;
 
@@ -446,10 +448,10 @@ pub(crate) async fn delete_documents_by_query_api(
 pub(crate) async fn query_index_api(
     index_arc: &IndexArc,
     search_request: SearchRequestObject,
-) -> ResultObject {
+) -> SearchResultObject {
     let start_time = Instant::now();
 
-    let rlo = index_arc
+    let result_object = index_arc
         .search(
             search_request.query_string.to_owned(),
             QueryType::Intersection,
@@ -458,11 +460,12 @@ pub(crate) async fn query_index_api(
             search_request.result_type,
             search_request.realtime,
             search_request.field_filter,
+            search_request.query_facets,
+            search_request.facet_filter,
         )
         .await;
 
-    let fields_hashset = HashSet::from_iter(search_request.fields);
-
+    let return_fields_filter = HashSet::from_iter(search_request.fields);
 
     let mut results: Vec<Document> = Vec::new();
 
@@ -472,16 +475,16 @@ pub(crate) async fn query_index_api(
         } else {
             Some(highlighter(
                 search_request.highlights,
-                rlo.query_term_strings,
+                result_object.query_terms.clone(),
             ))
         };
 
-        for result in rlo.results.iter() {
+        for result in result_object.results.iter() {
             match index_arc.read().await.get_document(
                 result.doc_id,
                 search_request.realtime,
                 &highlighter_option,
-                &fields_hashset,
+                &return_fields_filter,
             ) {
                 Ok(doc) => {
                     let mut doc = doc;
@@ -490,21 +493,21 @@ pub(crate) async fn query_index_api(
 
                     results.push(doc);
                 }
-                Err(_e) => {
-                }
+                Err(_e) => {}
             }
         }
     }
 
-    ResultObject {
+    SearchResultObject {
         query: search_request.query_string.to_owned(),
         time: start_time.elapsed().as_nanos(),
         offset: search_request.offset,
         length: search_request.length,
-        count: rlo.results.len(),
-        count_total: rlo.result_count_total as usize,
+        count: result_object.results.len(),
+        count_total: result_object.result_count_total as usize,
+        query_terms: result_object.query_terms,
         results,
+        facets: result_object.facets,
         suggestions: Vec::new(),
     }
 }
-

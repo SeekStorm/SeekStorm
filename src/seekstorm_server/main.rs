@@ -35,7 +35,7 @@
 //! ---
 //! ### create index
 //! ```
-//! curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","field_stored": true,"field_name": "title","field_indexed": true,"field_boost":10.0},{"field_type": "Text","field_stored": true,"field_name": "body","field_indexed": true},{"field_type": "String","field_stored": true,"field_name": "url","field_indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
+//! curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","field_stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
 //! ```
 //! ### get index
 //! ```
@@ -94,10 +94,6 @@
 //! ```
 //! curl --request GET --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"query_terms": ["test"],"fields": ["title", "body"],"highlights": [{ "field": "title", "fragment_number": 0, "fragment_size": 1000, "highlight_markup": true},{ "field": "body", "fragment_number": 2, "fragment_size": 160, "highlight_markup": true},{ "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}]}'
 //! ```
-//! ### update document(s)
-//! not yet implemented
-//! ### delete document(s)
-//! not yet implemented
 //! ---
 //! ### query index (GET)
 //!  with URL parameter

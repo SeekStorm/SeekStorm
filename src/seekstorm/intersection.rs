@@ -6,8 +6,7 @@ use crate::{
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
     },
     intersection_simd::intersection_vector16,
-    min_heap::MinHeap,
-    search::ResultType,
+    search::{FilterSparse, ResultType, SearchResult},
     utils::{cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16, read_u64},
 };
 use ahash::AHashSet;
@@ -34,10 +33,11 @@ pub(crate) fn intersection_bitmap_2(
     result_count: &mut i32,
     block_id: usize,
     index: &Index,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
@@ -64,8 +64,8 @@ pub(crate) fn intersection_bitmap_2(
         if !filtered && result_type == &ResultType::Count {
             *result_count += u64::count_ones(intersect) as i32;
         } else if !filtered
-            && result_candidates.current_heap_size == top_k
-            && block_score <= result_candidates._elements[0].score
+            && search_result.topk_candidates.current_heap_size == top_k
+            && block_score <= search_result.topk_candidates._elements[0].score
         {
             if result_type != &ResultType::Topk {
                 *result_count += u64::count_ones(intersect) as i32;
@@ -88,10 +88,11 @@ pub(crate) fn intersection_bitmap_2(
                     index,
                     (block_id << 16) | doc_id1 as usize,
                     result_count,
-                    result_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     non_unique_query_list,
                     query_list,
                     not_query_list,
@@ -117,17 +118,23 @@ pub(crate) async fn intersection_docid(
     not_query_list: &mut [PostingListObjectQuery<'_>],
     block_id: usize,
     result_count: &mut i32,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     phrase_query: bool,
     block_score: f32,
 ) {
     let t1 = 0;
     let mut t2 = 1;
 
-    let filtered = !not_query_list.is_empty() || phrase_query || !field_filter_set.is_empty();
+    let filtered = !not_query_list.is_empty()
+        || phrase_query
+        || !field_filter_set.is_empty()
+        || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
+            && (!search_result.skip_facet_count || !facet_filter.is_empty());
+
     for plo in not_query_list.iter_mut() {
         let query_list_item_mut = plo;
 
@@ -238,8 +245,8 @@ pub(crate) async fn intersection_docid(
     if SPEEDUP_FLAG &&
     /* !phrase_query && */
     (result_type == &ResultType::Topk)
-        && (topk_candidates.current_heap_size == top_k)
-        && (block_score <= topk_candidates._elements[0].score)
+        && (search_result.topk_candidates.current_heap_size == top_k)
+        && (block_score <= search_result.topk_candidates._elements[0].score)
     {
         return;
     }
@@ -288,10 +295,11 @@ pub(crate) async fn intersection_docid(
                         result_count,
                         block_id,
                         index,
-                        topk_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         non_unique_query_list,
                         query_list,
                         not_query_list,
@@ -363,10 +371,11 @@ pub(crate) async fn intersection_docid(
                                 index,
                                 (block_id << 16) | doc_id1 as usize,
                                 result_count,
-                                topk_candidates,
+                                search_result,
                                 top_k,
                                 result_type,
                                 field_filter_set,
+                                facet_filter,
                                 non_unique_query_list,
                                 query_list,
                                 not_query_list,
@@ -481,10 +490,11 @@ pub(crate) async fn intersection_docid(
                                     index,
                                     (block_id << 16) | doc_id1 as usize,
                                     result_count,
-                                    topk_candidates,
+                                    search_result,
                                     top_k,
                                     result_type,
                                     field_filter_set,
+                                    facet_filter,
                                     non_unique_query_list,
                                     query_list,
                                     not_query_list,
@@ -535,10 +545,11 @@ pub(crate) async fn intersection_docid(
                         result_count,
                         block_id,
                         index,
-                        topk_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         non_unique_query_list,
                         query_list,
                         not_query_list,
@@ -611,8 +622,8 @@ pub(crate) async fn intersection_docid(
 
                         if SPEEDUP_FLAG
                             && !filtered
-                            && (topk_candidates.current_heap_size == top_k)
-                            && (block_score <= topk_candidates._elements[0].score)
+                            && (search_result.topk_candidates.current_heap_size == top_k)
+                            && (block_score <= search_result.topk_candidates._elements[0].score)
                         {
                             if result_type != &ResultType::Topk {
                                 *result_count += 1;
@@ -652,10 +663,11 @@ pub(crate) async fn intersection_docid(
                                 index,
                                 (block_id << 16) | doc_id1 as usize,
                                 result_count,
-                                topk_candidates,
+                                search_result,
                                 top_k,
                                 result_type,
                                 field_filter_set,
+                                facet_filter,
                                 non_unique_query_list,
                                 query_list,
                                 not_query_list,
@@ -751,10 +763,11 @@ pub(crate) async fn intersection_docid(
                                 index,
                                 block_id_bits | doc_id1 as usize,
                                 result_count,
-                                topk_candidates,
+                                search_result,
                                 top_k,
                                 result_type,
                                 field_filter_set,
+                                facet_filter,
                                 non_unique_query_list,
                                 query_list,
                                 not_query_list,
@@ -839,10 +852,11 @@ pub(crate) async fn intersection_docid(
                             index,
                             (block_id << 16) | doc_id1 as usize,
                             result_count,
-                            topk_candidates,
+                            search_result,
                             top_k,
                             result_type,
                             field_filter_set,
+                            facet_filter,
                             non_unique_query_list,
                             query_list,
                             not_query_list,
@@ -983,10 +997,11 @@ pub(crate) async fn intersection_docid(
                             index,
                             (block_id << 16) | doc_id1 as usize,
                             result_count,
-                            topk_candidates,
+                            search_result,
                             top_k,
                             result_type,
                             field_filter_set,
+                            facet_filter,
                             non_unique_query_list,
                             query_list,
                             not_query_list,
@@ -1106,10 +1121,11 @@ pub(crate) async fn intersection_docid(
                                     index,
                                     (block_id << 16) | doc_id1 as usize,
                                     result_count,
-                                    topk_candidates,
+                                    search_result,
                                     top_k,
                                     result_type,
                                     field_filter_set,
+                                    facet_filter,
                                     non_unique_query_list,
                                     query_list,
                                     not_query_list,
@@ -1179,10 +1195,11 @@ pub(crate) async fn intersection_docid(
                             index,
                             (block_id << 16) | doc_id2 as usize,
                             result_count,
-                            topk_candidates,
+                            search_result,
                             top_k,
                             result_type,
                             field_filter_set,
+                            facet_filter,
                             non_unique_query_list,
                             query_list,
                             not_query_list,
@@ -1344,10 +1361,11 @@ pub(crate) async fn intersection_docid(
                                 index,
                                 (block_id << 16) | doc_id as usize,
                                 result_count,
-                                topk_candidates,
+                                search_result,
                                 top_k,
                                 result_type,
                                 field_filter_set,
+                                facet_filter,
                                 non_unique_query_list,
                                 query_list,
                                 not_query_list,
@@ -1525,10 +1543,11 @@ pub(crate) async fn intersection_docid(
                                     index,
                                     (block_id << 16) | doc_id as usize,
                                     result_count,
-                                    topk_candidates,
+                                    search_result,
                                     top_k,
                                     result_type,
                                     field_filter_set,
+                                    facet_filter,
                                     non_unique_query_list,
                                     query_list,
                                     not_query_list,
@@ -1705,10 +1724,11 @@ pub(crate) async fn intersection_docid(
                             index,
                             (block_id << 16) | doc_id2 as usize,
                             result_count,
-                            topk_candidates,
+                            search_result,
                             top_k,
                             result_type,
                             field_filter_set,
+                            facet_filter,
                             non_unique_query_list,
                             query_list,
                             not_query_list,
@@ -1831,10 +1851,11 @@ pub(crate) async fn intersection_docid(
                                     index,
                                     (block_id << 16) | doc_id as usize,
                                     result_count,
-                                    topk_candidates,
+                                    search_result,
                                     top_k,
                                     result_type,
                                     field_filter_set,
+                                    facet_filter,
                                     non_unique_query_list,
                                     query_list,
                                     not_query_list,
@@ -1921,10 +1942,11 @@ pub(crate) async fn intersection_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    topk_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
     phrase_query: bool,
 ) {
@@ -2002,8 +2024,8 @@ pub(crate) async fn intersection_blockid<'a>(
                         block_vec.push(block_object);
                     } else if !SPEEDUP_FLAG
                         || result_type == &ResultType::Count
-                        || topk_candidates.current_heap_size < top_k
-                        || block_score > topk_candidates._elements[0].score
+                        || search_result.topk_candidates.current_heap_size < top_k
+                        || block_score > search_result.topk_candidates._elements[0].score
                     {
                         if index.meta.access_type == AccessType::Mmap {
                             for query_list_item_mut in query_list.iter_mut() {
@@ -2062,10 +2084,11 @@ pub(crate) async fn intersection_blockid<'a>(
                             not_query_list,
                             block_id1 as usize,
                             &mut result_count_local,
-                            topk_candidates,
+                            search_result,
                             top_k,
                             result_type,
                             field_filter_set,
+                            facet_filter,
                             phrase_query,
                             block_score,
                         )
@@ -2117,8 +2140,8 @@ pub(crate) async fn intersection_blockid<'a>(
         block_vec.sort_unstable_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
         for block in block_vec {
             if (result_type == &ResultType::Topk)
-                && (topk_candidates.current_heap_size == top_k)
-                && (block.block_score <= topk_candidates._elements[0].score)
+                && (search_result.topk_candidates.current_heap_size == top_k)
+                && (block.block_score <= search_result.topk_candidates._elements[0].score)
             {
                 break;
             }
@@ -2176,10 +2199,11 @@ pub(crate) async fn intersection_blockid<'a>(
                 not_query_list,
                 block.block_id,
                 &mut result_count_local,
-                topk_candidates,
+                search_result,
                 top_k,
                 result_type,
                 field_filter_set,
+                facet_filter,
                 phrase_query,
                 block.block_score,
             )

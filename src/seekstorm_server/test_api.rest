@@ -1,13 +1,15 @@
 // use with VSC extension "Rest client" to execute API calls and inspect responses
 
 ### individual API key (use create api key below to generate)
-@api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+# @api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+@api_key = VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=
 
 // WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, 
 // otherwise your generated API keys will be compromised.
 ### create api key (use master API key displayed in the server console at startup)
 POST http://127.0.0.1:80/api/v1/apikey HTTP/1.1
-apikey: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ=
+#apikey: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ=
+apikey: /iWStCpyfpd/BVlHOFtwnMgrFrmof4jGq/OQDWXQzcM=
 content-type: application/json
 
 {
@@ -30,23 +32,23 @@ content-type: application/json
 
 {
     "schema":[{
+        "field": "title", 
         "field_type": "Text", 
-        "field_stored": true, 
-        "field_name": "title", 
-        "field_indexed": true,
-        "field_boost":10.0
+        "stored": true, 
+        "indexed": true,
+        "boost":10.0
     },
         {
+        "field": "body",
         "field_type": "Text", 
-        "field_stored": true, 
-        "field_name": "body", 
-        "field_indexed": true
+        "stored": true, 
+        "indexed": true
     },
     {
+        "field": "url", 
         "field_type": "String", 
-        "field_stored": true, 
-        "field_name": "url", 
-        "field_indexed": false
+        "stored": true, 
+        "indexed": false
     }], 
     "index_name": "test_index",
     "similarity": "Bm25fProximity",
@@ -231,29 +233,29 @@ content-type: application/json
 
 {
     "schema":[{
+        "field": "title",
         "field_type": "Text", 
-        "field_stored": true, 
-        "field_name": "title", 
-        "field_indexed": true,
-        "field_boost":10.0
+        "stored": true,  
+        "indexed": true,
+        "boost":10.0
     },
         {
+        "field": "body", 
         "field_type": "Text", 
-        "field_stored": true, 
-        "field_name": "body", 
-        "field_indexed": true
+        "stored": true, 
+        "indexed": true
     },
     {
+        "field": "url", 
         "field_type": "String", 
-        "field_stored": true, 
-        "field_name": "url", 
-        "field_indexed": false
+        "stored": true, 
+        "indexed": false
     },
     {
+        "field": "number", 
         "field_type": "I64", 
-        "field_stored": true, 
-        "field_name": "number", 
-        "field_indexed": true
+        "stored": true, 
+        "indexed": true
     }],
     "index_name": "test_index",
     "similarity": "Bm25fProximity",

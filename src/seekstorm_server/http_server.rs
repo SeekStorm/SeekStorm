@@ -230,6 +230,8 @@ pub(crate) async fn http_request_handler(
                                     highlights: Vec::new(),
                                     field_filter: Vec::new(),
                                     fields: Vec::new(),
+                                    query_facets: Vec::new(),
+                                    facet_filter: Vec::new(),
                                 }
                             } else {
                                 let request_bytes = body::to_bytes(req.into_body()).await.unwrap();

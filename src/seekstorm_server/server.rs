@@ -137,9 +137,9 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         );
 
                         let wikipedia_schema_json = r#"
-                        [{"field_name":"title","field_type":"Text","field_stored":true,"field_indexed":true,"field_boost":10.0},
-                        {"field_name":"body","field_type":"Text","field_stored":true,"field_indexed":true},
-                        {"field_name":"url","field_type":"Text","field_stored":true,"field_indexed":false}]"#;
+                        [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
+                        {"field":"body","field_type":"Text","stored":true,"indexed":true},
+                        {"field":"url","field_type":"Text","stored":true,"indexed":false}]"#;
                         let schema = serde_json::from_str(wikipedia_schema_json).unwrap();
 
                         let index_id = create_index_api(

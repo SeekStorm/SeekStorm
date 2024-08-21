@@ -94,7 +94,7 @@ impl MinHeap {
 
     #[inline(always)]
     fn pop_add(&mut self, score: f32, doc_id: usize) {
-        if self.docid_hashset.len() > 0 {
+        if !self.docid_hashset.is_empty() {
             self.docid_hashset.remove(&self._elements[0].doc_id);
         }
 
