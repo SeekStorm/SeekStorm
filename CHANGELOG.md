@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Schema has a new field property: "field_facet":true (default=false).
 - Index has a new get_index_string_facets method: returns a list of facet fields, each with field name and a list of unique values and their count (number of times a specific value appears in the whole index).
 - The search ResultObject now has a facets property. Returns index facets (value appears in the whole index) if querystring.is_empty, otherwise query facets (values appear in docs that match the query).
-- [FACETED_SEARCH.md](https://github.com/SeekStorm/SeekStorm/blob/master/FACETED_SEARCH.md) : Introduction to faceted search
+- [FACETED_SEARCH.md](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md) : Introduction to faceted search
 
 ### Improved
 

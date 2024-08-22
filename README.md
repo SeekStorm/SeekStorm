@@ -23,7 +23,7 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * Compressed document store: ZStandard
 * Boolean queries: AND, OR, PHRASE, NOT
 * Field filtering
-* String & Numeric Range Facets: Counting, filtering, sorting of matching results
+* [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets
 * BM25F and BM25F_Proximity ranking
 * KWIC snippets, highlighting
 * Billion-scale index
@@ -574,7 +574,7 @@ Enter a query into the search box
 
 Open src/seekstorm_server/test_api.rest in VSC together with the VSC extension "Rest client" to execute API calls and inspect responses
 
-[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
+[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/test_api.rest)
 
 Set the 'individual API key' in test_api.rest to the api key displayed in the server console when you typed 'index' above.
 
