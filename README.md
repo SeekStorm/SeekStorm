@@ -610,7 +610,7 @@ The Rust port is not yet feature complete. The following features are currently 
 **Porting** 
 * ✅ Delete document
 * ✅ Faceted search
-* Sorting of results by any numerical field (score becomes a special field)
+* Sorting of results by any numerical facet field (score becomes a special field)
 * Autosuggestion, spelling correction, instant search
 * Fuzzy search
 * More tokenizer types (stemming, umlauts, apostrophes, CJK)

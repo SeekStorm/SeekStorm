@@ -258,6 +258,8 @@ impl Index {
             .unwrap();
         }
 
+        self.string_set_to_single_term_id();
+
         update_list_max_impact_score(self);
 
         self.committed_doc_count = indexed_doc_count;

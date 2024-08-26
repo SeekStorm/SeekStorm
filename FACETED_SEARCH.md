@@ -43,7 +43,7 @@ at least one (boolean OR) of the specified values.
 
 If the **query is changed** and/or the **facet filter is changed** then both **search results and facet counts are changed**.
 
-#### String Facets
+#### String Facets (FieldType::String)
 
 E.g. the **Language field** of a document may have different values: e.g. English, French, German, Russian, Chinese.
 
@@ -61,7 +61,12 @@ If no **sort** field is specified, then the results are sorted by rank in descen
 
 SeekStorm supports the **String** field type for **String Facet** counting, filtering &amp; sorting.
 
-#### Numerical Range Facets
+#### Multi-value string facets (FieldType::StringSet)
+
+Similar to String facets, but while string facets allow only one value per field per document, String Set facets allow to assign multiple values at the same time per field per document.
+Great for e.g. genres, authors, languages, educations, product categories, tags ..., where an item can be associated with multiple values of a field.
+
+#### Numerical Range Facets (FieldType::U8...FieldType::F64)
 
 In contrast to **string facets** which define themselves by the existing distinct values, for **range facets** we have to explicitly **define the ranges** we want to distinguish and count.
 E.g. for the **Price field** we want to define price ranges: e.g. 0..10 USD, 10..20 USD, 20..50 USD, 50..100 USD, 100..1000 USD. The ranges may be defined differently for each query. 

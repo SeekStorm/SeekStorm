@@ -151,6 +151,11 @@ pub enum QueryFacet {
         prefix: String,
         length: u16,
     },
+    StringSet {
+        field: String,
+        prefix: String,
+        length: u16,
+    },
     #[default]
     None,
 }
@@ -187,6 +192,7 @@ pub enum FacetFilter {
     F32 { field: String, filter: Range<f32> },
     F64 { field: String, filter: Range<f64> },
     String { field: String, filter: Vec<String> },
+    StringSet { field: String, filter: Vec<String> },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
@@ -533,9 +539,38 @@ impl Search for IndexArc {
                             if index_ref.facets[*idx].field_type == FieldType::String {
                                 let mut string_id_vec = Vec::new();
                                 for value in filter.iter() {
-                                    let facet_value_id =
-                                        facet.values.get_index_of(value).unwrap() as u16;
-                                    string_id_vec.push(facet_value_id);
+                                    let key = [value.clone()];
+                                    if let Some(facet_value_id) = facet.values.get_index_of(&key[0])
+                                    {
+                                        string_id_vec.push(facet_value_id as u16);
+                                    }
+                                }
+                                facet_filter_sparse[*idx] = FilterSparse::String(string_id_vec);
+                            }
+                        }
+                    }
+
+                    FacetFilter::StringSet { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            let facet = &index_ref.facets[*idx];
+                            if index_ref.facets[*idx].field_type == FieldType::StringSet {
+                                let mut string_id_vec = Vec::new();
+                                for value in filter.iter() {
+                                    let key = [value.clone()];
+                                    if let Some(facet_value_id) =
+                                        facet.values.get_index_of(&key.join("_"))
+                                    {
+                                        string_id_vec.push(facet_value_id as u16);
+                                    }
+
+                                    if let Some(facet_value_ids) = index_ref
+                                        .string_set_to_single_term_id_vec[*idx]
+                                        .get(&value.clone())
+                                    {
+                                        for code in facet_value_ids.iter() {
+                                            string_id_vec.push(*code);
+                                        }
+                                    }
                                 }
                                 facet_filter_sparse[*idx] = FilterSparse::String(string_id_vec);
                             }
@@ -736,6 +771,23 @@ impl Search for IndexArc {
                             }
                         }
                     }
+                    QueryFacet::StringSet {
+                        field,
+                        prefix,
+                        length,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::StringSet {
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    prefix: prefix.clone(),
+                                    length: *length,
+                                    ..Default::default()
+                                }
+                            }
+                        }
+                    }
+
                     QueryFacet::None => {}
                 };
             }
@@ -1297,26 +1349,50 @@ impl Search for IndexArc {
                     }
 
                     let v = if facet.ranges == Ranges::None {
-                        facet
-                            .values
-                            .iter()
-                            .sorted_unstable_by(|a, b| b.1.cmp(a.1))
-                            .map(|(a, c)| {
-                                (
-                                    index_ref.facets[i]
-                                        .values
-                                        .get_index((*a).into())
-                                        .unwrap()
-                                        .0
-                                        .clone(),
-                                    *c,
-                                )
-                            })
-                            .filter(|(a, _c)| {
-                                facet.prefix.is_empty() || a.starts_with(&facet.prefix)
-                            })
-                            .take(facet.length as usize)
-                            .collect::<Vec<_>>()
+                        if index_ref.facets[i].field_type == FieldType::StringSet {
+                            let mut hash_map: AHashMap<String, usize> = AHashMap::new();
+                            for value in facet.values.iter() {
+                                let value2 = index_ref.facets[i]
+                                    .values
+                                    .get_index((*value.0).into())
+                                    .unwrap();
+
+                                for term in value2.1 .0.iter() {
+                                    *hash_map.entry(term.clone()).or_insert(0) += value.1;
+                                }
+                            }
+
+                            hash_map
+                                .iter()
+                                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                                .map(|(a, c)| (a.clone(), *c))
+                                .filter(|(a, _c)| {
+                                    facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                                })
+                                .take(facet.length as usize)
+                                .collect::<Vec<_>>()
+                        } else {
+                            facet
+                                .values
+                                .iter()
+                                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                                .map(|(a, c)| {
+                                    (
+                                        index_ref.facets[i]
+                                            .values
+                                            .get_index((*a).into())
+                                            .unwrap()
+                                            .0
+                                            .clone(),
+                                        *c,
+                                    )
+                                })
+                                .filter(|(a, _c)| {
+                                    facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                                })
+                                .take(facet.length as usize)
+                                .collect::<Vec<_>>()
+                        }
                     } else {
                         let range_type = match &facet.ranges {
                             Ranges::U8(range_type, _ranges) => range_type.clone(),
@@ -1395,7 +1471,7 @@ impl Search for IndexArc {
                                         Ranges::F64(_range_type, ranges) => {
                                             ranges[*a as usize].0.clone()
                                         }
-                                        _ => "".to_string(),
+                                        _ => "".into(),
                                     },
                                     *c,
                                 )

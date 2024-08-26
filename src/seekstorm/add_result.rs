@@ -2192,7 +2192,7 @@ pub(crate) fn decode_positions_singleterm_singlefield(
                 println!("unsupported single 3 byte pointer embedded");
             }
         }
-    };
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
