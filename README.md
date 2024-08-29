@@ -1,5 +1,5 @@
 
-<img src="assets/logo.svg" width="450" alt="Logo"><br>
+<img src="assets/logo.png" width="450" alt="Logo"><br>
 [![Crates.io](https://img.shields.io/crates/v/seekstorm.svg)](https://crates.io/crates/seekstorm)
 [![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
 [![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
