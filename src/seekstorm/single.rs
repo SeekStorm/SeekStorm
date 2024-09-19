@@ -28,15 +28,17 @@ pub(crate) async fn single_docid<'a>(
     blo: &BlockObjectIndex,
     term_index: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
     facet_filter: &[FilterSparse],
 ) {
     let block_score = blo.max_block_score;
+
     let filtered = !not_query_list.is_empty()
         || !field_filter_set.is_empty()
+        || !search_result.topk_candidates.result_sort.is_empty()
         || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
             && result_type != &ResultType::Topk;
     if SPEEDUP_FLAG
@@ -284,7 +286,7 @@ pub(crate) async fn single_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -292,10 +294,10 @@ pub(crate) async fn single_blockid<'a>(
     matching_blocks: &mut i32,
 ) {
     let term_index = 0;
-
     let filtered = !not_query_list.is_empty()
         || !field_filter_set.is_empty()
         || !index.delete_hashset.is_empty()
+        || !search_result.topk_candidates.result_sort.is_empty()
         || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
             && result_type != &ResultType::Topk;
 

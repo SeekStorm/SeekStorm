@@ -28,7 +28,8 @@ use utils::{read_u32, write_u16};
 use crate::{
     add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
     commit::KEY_HEAD_SIZE,
-    search::{self, FacetFilter, QueryFacet, Ranges, ResultObject, ResultType},
+    geo_search::encode_morton_2_d,
+    search::{self, FacetFilter, Point, QueryFacet, Ranges, ResultObject, ResultSort, ResultType},
     tokenizer::tokenizer,
     utils::{
         self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref, write_f32,
@@ -326,6 +327,13 @@ pub enum FieldType {
     #[default]
     String,
     StringSet,
+    /// Point is a geographic field type: A Vec<f64> with two coordinate values (latitude and longitude) are internally encoded into a single u64 value (Morton code).
+    /// Morton codes enable efficient range queries.
+    /// Latitude and longitude are a pair of numbers (coordinates) used to describe a position on the plane of a geographic coordinate system.
+    /// The numbers are in decimal degrees format and range from -90 to 90 for latitude and -180 to 180 for longitude.
+    /// Coordinates are internally stored as u64 morton code: both f64 values are multiplied by 10_000_000, converted to i32 and bitwise interleaved into a single u64 morton code
+    /// The conversion between longitude/latitude coordinates and Morton code is lossy due to rounding errors.
+    Point,
     Text,
     Bytes,
     Json,
@@ -405,6 +413,31 @@ pub(crate) struct ResultFacet {
     pub prefix: String,
     pub length: u16,
     pub ranges: Ranges,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub enum DistanceUnit {
+    Kilometers,
+    Miles,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DistanceField {
+    pub field: String,
+    pub distance: String,
+    pub base: Point,
+    pub unit: DistanceUnit,
+}
+
+impl Default for DistanceField {
+    fn default() -> Self {
+        DistanceField {
+            field: String::new(),
+            distance: String::new(),
+            base: Vec::new(),
+            unit: DistanceUnit::Kilometers,
+        }
+    }
 }
 
 /// Facet field, with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
@@ -623,6 +656,7 @@ pub fn create_index(
                         FieldType::F64 => 8,
                         FieldType::String => 2,
                         FieldType::StringSet => 2,
+                        FieldType::Point => 8,
                         _ => 1,
                     };
 
@@ -1645,6 +1679,7 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
                 Vec::new(),
                 query_facets.clone(),
                 Vec::new(),
+                Vec::new(),
             )
             .await;
 
@@ -1992,6 +2027,7 @@ pub trait DeleteDocumentsByQuery {
         include_uncommited: bool,
         field_filter: Vec<String>,
         facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
     );
 }
 
@@ -2008,6 +2044,7 @@ impl DeleteDocumentsByQuery for IndexArc {
         include_uncommited: bool,
         field_filter: Vec<String>,
         facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
     ) {
         let rlo = self
             .search(
@@ -2020,6 +2057,7 @@ impl DeleteDocumentsByQuery for IndexArc {
                 field_filter,
                 Vec::new(),
                 facet_filter,
+                result_sort,
             )
             .await;
 
@@ -2306,6 +2344,30 @@ impl IndexDocument2 for IndexArc {
                                 let facet_value_id =
                                     facet.values.get_index_of(&key_string).unwrap() as u16;
                                 write_u16(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                            }
+                        }
+                        FieldType::Point => {
+                            if let Ok(point) = serde_json::from_value::<Point>(field_value.clone())
+                            {
+                                if point.len() == 2 {
+                                    if point[0] >= -90.0
+                                        && point[0] <= 90.0
+                                        && point[1] >= -180.0
+                                        && point[1] <= 180.0
+                                    {
+                                        let morton_code = encode_morton_2_d(&point);
+                                        write_u64(
+                                            morton_code,
+                                            &mut index_mut.facets_file_mmap,
+                                            address,
+                                        )
+                                    } else {
+                                        println!(
+                                            "outside valid coordinate range: {} {}",
+                                            point[0], point[1]
+                                        );
+                                    }
+                                }
                             }
                         }
 

@@ -14,6 +14,7 @@ use crate::{
         Index, NonUniquePostingListObjectQuery, NonUniqueTermObject, PostingListObjectQuery,
         SimilarityType, TermObject, DUMMY_VEC_8, STOP_BIT,
     },
+    min_heap,
     search::{FilterSparse, QueryType, ResultType, SearchResult},
     utils::{read_u16, read_u16_ref, read_u32, read_u32_ref},
 };
@@ -135,7 +136,13 @@ pub(crate) fn add_result_singleterm_uncommitted(
 
     let bm25 = get_bm25f_singleterm_multifield_uncommitted(index, docid, plo_single);
 
-    search_result.topk_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(
+        min_heap::Result {
+            doc_id: docid,
+            score: bm25,
+        },
+        top_k,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -214,9 +221,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
         }
     }
 
-    if
-    /* !SEARCH_BENCHMARK_GAME_FLAG || */
-    phrase_query {
+    if phrase_query {
         let len = query_list.len();
         let mut index_transpose = vec![0; len];
         for i in 0..len {
@@ -488,7 +493,13 @@ pub(crate) fn add_result_multiterm_uncommitted(
 
     let bm25 = get_bm25f_multiterm_multifield_uncommitted(index, docid, query_list);
 
-    search_result.topk_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(
+        min_heap::Result {
+            doc_id: docid,
+            score: bm25,
+        },
+        top_k,
+    );
 }
 
 #[inline(always)]

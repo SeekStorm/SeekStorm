@@ -1,9 +1,13 @@
 use crate::commit::KEY_HEAD_SIZE;
-use crate::index::{Facet, FieldType, ResultFacet};
+use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
+use crate::index::{DistanceUnit, Facet, FieldType, ResultFacet};
 use crate::min_heap::Result;
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
-use crate::utils::{read_u16, read_u32, read_u64, read_u8};
+use crate::utils::{
+    read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
+    read_u8,
+};
 use crate::{
     index::{
         get_max_score, AccessType, BlockObjectIndex, Index, IndexArc,
@@ -22,7 +26,7 @@ use derivative::Derivative;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::cmp::Ordering as OtherOrdering;
+use std::mem;
 use std::ops::Range;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -52,8 +56,8 @@ pub enum ResultType {
     TopkCount = 2,
 }
 
-pub(crate) struct SearchResult {
-    pub topk_candidates: MinHeap,
+pub(crate) struct SearchResult<'a> {
+    pub topk_candidates: MinHeap<'a>,
     pub query_facets: Vec<ResultFacet>,
     pub skip_facet_count: bool,
 }
@@ -176,23 +180,208 @@ pub enum Ranges {
     None,
 }
 
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub enum FacetValue {
+    Bool(bool),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+    String(String),
+    StringSet(Vec<String>),
+    Point(Point),
+    None,
+}
+
+impl Index {
+    /// get_facet_value: Returns value from facet field for a doc_id even if schema stored=false (field not stored in document JSON).  
+    /// Facet fields are more compact than fields stored in document JSON.
+    /// Strings are stored more compact as indices to a unique term dictionary. Numbers are stored binary, not as strings.
+    /// Facet fields are faster because no document loading, decompression and JSON decoding is required.  
+    /// Facet fields are always memory mapped, internally always stored with fixed byte length layout, regardless of string size.
+    #[inline]
+    pub fn get_facet_value(self: &Index, field: &str, doc_id: usize) -> FacetValue {
+        if let Some(field_idx) = self.facets_map.get(field) {
+            match &self.facets[*field_idx].field_type {
+                FieldType::U8 => {
+                    let facet_value = &self.facets_file_mmap
+                        [(self.facets_size_sum * doc_id) + self.facets[*field_idx].offset];
+                    FacetValue::U8(*facet_value)
+                }
+                FieldType::U16 => {
+                    let facet_value = read_u16(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::U16(facet_value)
+                }
+                FieldType::U32 => {
+                    let facet_value = read_u32(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::U32(facet_value)
+                }
+                FieldType::U64 => {
+                    let facet_value = read_u64(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::U64(facet_value)
+                }
+                FieldType::I8 => {
+                    let facet_value = read_i8(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::I8(facet_value)
+                }
+                FieldType::I16 => {
+                    let facet_value = read_i16(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::I16(facet_value)
+                }
+                FieldType::I32 => {
+                    let facet_value = read_i32(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::I32(facet_value)
+                }
+                FieldType::I64 => {
+                    let facet_value = read_i64(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::I64(facet_value)
+                }
+                FieldType::F32 => {
+                    let facet_value = read_f32(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::F32(facet_value)
+                }
+                FieldType::F64 => {
+                    let facet_value = read_f64(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::F64(facet_value)
+                }
+
+                FieldType::String => {
+                    let facet_id = read_u16(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+
+                    let facet_value = self.facets[*field_idx]
+                        .values
+                        .get_index((facet_id).into())
+                        .unwrap();
+
+                    FacetValue::String(facet_value.1 .0[0].clone())
+                }
+
+                FieldType::StringSet => {
+                    let facet_id = read_u16(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+
+                    let facet_value = self.facets[*field_idx]
+                        .values
+                        .get_index((facet_id).into())
+                        .unwrap();
+
+                    FacetValue::StringSet(facet_value.1 .0.clone())
+                }
+
+                FieldType::Point => {
+                    let code = read_u64(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+
+                    let x = decode_morton_2_d(code);
+
+                    FacetValue::Point(x.clone())
+                }
+
+                _ => FacetValue::None,
+            }
+        } else {
+            FacetValue::None
+        }
+    }
+}
+
 /// FacetFilter:
 /// either numerical range facet filter (range start/end) or
 /// string facet filter (vector of strings) at least one (boolean OR) must match.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum FacetFilter {
-    U8 { field: String, filter: Range<u8> },
-    U16 { field: String, filter: Range<u16> },
-    U32 { field: String, filter: Range<u32> },
-    U64 { field: String, filter: Range<u64> },
-    I8 { field: String, filter: Range<i8> },
-    I16 { field: String, filter: Range<i16> },
-    I32 { field: String, filter: Range<i32> },
-    I64 { field: String, filter: Range<i64> },
-    F32 { field: String, filter: Range<f32> },
-    F64 { field: String, filter: Range<f64> },
-    String { field: String, filter: Vec<String> },
-    StringSet { field: String, filter: Vec<String> },
+    U8 {
+        field: String,
+        filter: Range<u8>,
+    },
+    U16 {
+        field: String,
+        filter: Range<u16>,
+    },
+    U32 {
+        field: String,
+        filter: Range<u32>,
+    },
+    U64 {
+        field: String,
+        filter: Range<u64>,
+    },
+    I8 {
+        field: String,
+        filter: Range<i8>,
+    },
+    I16 {
+        field: String,
+        filter: Range<i16>,
+    },
+    I32 {
+        field: String,
+        filter: Range<i32>,
+    },
+    I64 {
+        field: String,
+        filter: Range<i64>,
+    },
+    F32 {
+        field: String,
+        filter: Range<f32>,
+    },
+    F64 {
+        field: String,
+        filter: Range<f64>,
+    },
+    String {
+        field: String,
+        filter: Vec<String>,
+    },
+    StringSet {
+        field: String,
+        filter: Vec<String>,
+    },
+    Point {
+        field: String,
+        filter: (Point, f64, DistanceUnit),
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
@@ -208,6 +397,7 @@ pub(crate) enum FilterSparse {
     F32(Range<f32>),
     F64(Range<f64>),
     String(Vec<u16>),
+    Point(Point, f64, DistanceUnit, Range<u64>),
     #[default]
     None,
 }
@@ -218,11 +408,23 @@ pub enum SortOrder {
     Descending = 1,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct FacetResultSort {
-    pub name: String,
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ResultSort {
+    pub field: String,
     pub order: SortOrder,
+    pub base: FacetValue,
 }
+
+#[derive(Clone, Serialize)]
+pub struct ResultSortIndex<'a> {
+    pub idx: usize,
+    pub order: SortOrder,
+    pub base: &'a FacetValue,
+}
+
+/// latitude lat
+/// longitude lon
+pub type Point = Vec<f64>;
 
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
@@ -251,6 +453,14 @@ pub struct FacetResultSort {
 ///    Examples:
 ///    facet_filter=vec![FacetFilter::String{field:"language".to_string(),filter:vec!["german".to_string()]},FacetFilter::String{field:"brand".to_string(),filter:vec!["apple".to_string(),"google".to_string()]}];
 ///    facet_filter=vec![FacetFilter::U8{field:"age".to_string(),filter: 21..65}];
+/// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
+///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
+///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+///    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+///    until the n-th field value is either not equal or the last field is reached.
+///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+///    Sort is only enabled on facet fields that are defined in schema at create_index!
+///    Example: "sort":[{"field":"price","order":"desc"},{"field":"language","order":"asc"}]
 ///  
 ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
 ///    Facets are defined in 3 different places:
@@ -272,6 +482,7 @@ pub trait Search {
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
     ) -> ResultObject;
 }
 
@@ -411,6 +622,14 @@ impl Search for IndexArc {
     ///    Examples:
     ///    facet_filter=vec![FacetFilter::String{field:"language".to_string(),filter:vec!["german".to_string()]},FacetFilter::String{field:"brand".to_string(),filter:vec!["apple".to_string(),"google".to_string()]}];
     ///    facet_filter=vec![FacetFilter::U8{field:"age".to_string(),filter: 21..65}];
+    /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
+    ///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
+    ///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+    ///    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+    ///    until the n-th field value is either not equal or the last field is reached.
+    ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+    ///    Sort is only enabled on facet fields that are defined in schema at create_index!   
+    ///    Example: "sort":[{"field":"price","order":"desc"},{"field":"language","order":"asc"}]
     ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
     ///    Facets are defined in 3 different places:
     ///    the facet fields are defined in schema at create_index,
@@ -428,15 +647,10 @@ impl Search for IndexArc {
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
     ) -> ResultObject {
         let index_ref = self.read().await;
         let mut query_type_mut = query_type_default;
-
-        let mut search_result = SearchResult {
-            topk_candidates: MinHeap::new(offset + length),
-            query_facets: Vec::new(),
-            skip_facet_count: false,
-        };
 
         let mut result_object: ResultObject = Default::default();
 
@@ -457,6 +671,25 @@ impl Search for IndexArc {
                 }
             }
         }
+
+        let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
+        if !result_sort.is_empty() && result_type != ResultType::Count {
+            for rs in result_sort.iter() {
+                if let Some(idx) = index_ref.facets_map.get(&rs.field) {
+                    result_sort_index.push(ResultSortIndex {
+                        idx: *idx,
+                        order: rs.order.clone(),
+                        base: &rs.base,
+                    });
+                }
+            }
+        }
+
+        let mut search_result = SearchResult {
+            topk_candidates: MinHeap::new(offset + length, &index_ref, &result_sort_index),
+            query_facets: Vec::new(),
+            skip_facet_count: false,
+        };
 
         let mut facet_filter_sparse: Vec<FilterSparse> = Vec::new();
         if !facet_filter.is_empty() {
@@ -573,6 +806,19 @@ impl Search for IndexArc {
                                     }
                                 }
                                 facet_filter_sparse[*idx] = FilterSparse::String(string_id_vec);
+                            }
+                        }
+                    }
+
+                    FacetFilter::Point { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::Point {
+                                facet_filter_sparse[*idx] = FilterSparse::Point(
+                                    filter.0.clone(),
+                                    filter.1,
+                                    filter.2.clone(),
+                                    point_distance_to_morton_range(&filter.0, filter.1, &filter.2),
+                                );
                             }
                         }
                     }
@@ -1137,6 +1383,7 @@ impl Search for IndexArc {
                     && index_ref.delete_hashset.is_empty()
                     && facet_filter_sparse.is_empty()
                     && !is_range_facet
+                    && result_sort_index.is_empty()
                 {
                     if let Some(stopword_result_object) =
                         index_ref.stopword_results.get(&non_unique_terms[0].term)
@@ -1231,6 +1478,7 @@ impl Search for IndexArc {
                     && query_list_len == 2
                     && search_result.query_facets.is_empty()
                     && facet_filter_sparse.is_empty()
+                    && search_result.topk_candidates.result_sort.is_empty()
                 {
                     union_docid_2(
                         &index_ref,
@@ -1246,7 +1494,7 @@ impl Search for IndexArc {
                         &mut matching_blocks,
                     )
                     .await;
-                } else if SPEEDUP_FLAG {
+                } else if SPEEDUP_FLAG && search_result.topk_candidates.result_sort.is_empty() {
                     union_docid_3(
                         &index_ref,
                         &mut non_unique_query_list,
@@ -1309,7 +1557,7 @@ impl Search for IndexArc {
         result_object.result_count = search_result.topk_candidates.current_heap_size;
 
         if search_result.topk_candidates.current_heap_size > offset {
-            result_object.results = search_result.topk_candidates._elements;
+            result_object.results = mem::take(&mut search_result.topk_candidates._elements);
 
             if search_result.topk_candidates.current_heap_size < offset + length {
                 result_object
@@ -1317,14 +1565,9 @@ impl Search for IndexArc {
                     .truncate(search_result.topk_candidates.current_heap_size);
             }
 
-            result_object.results.sort_by(|a, b| {
-                let result = b.score.partial_cmp(&a.score).unwrap();
-                if result != OtherOrdering::Equal {
-                    result
-                } else {
-                    a.doc_id.partial_cmp(&b.doc_id).unwrap()
-                }
-            });
+            result_object
+                .results
+                .sort_by(|a, b| search_result.topk_candidates.result_ordering(*b, *a));
 
             if offset > 0 {
                 result_object.results.drain(..offset);
@@ -1334,9 +1577,7 @@ impl Search for IndexArc {
         result_object.result_count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
             + result_count_arc.load(Ordering::Relaxed);
 
-        if !search_result.query_facets.is_empty()
-        /* !index_ref.facets.is_empty()*/
-        {
+        if !search_result.query_facets.is_empty() {
             result_object.facets = if result_object.query_terms.is_empty() {
                 index_ref
                     .get_index_string_facets(query_facets)

@@ -1,10 +1,12 @@
 use memmap2::Mmap;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Seek, SeekFrom, Write};
 
+use crate::geo_search::euclidian_distance;
 use crate::highlighter::{top_fragments_from_field, Highlighter};
-use crate::index::{AccessType, Document, Index, ROARING_BLOCK_SIZE};
+use crate::index::{AccessType, DistanceField, Document, FieldType, Index, ROARING_BLOCK_SIZE};
+use crate::search::FacetValue;
 use crate::utils::{read_u32, write_u32};
 
 impl Index {
@@ -135,12 +137,15 @@ impl Index {
     /// * `include_uncommited`: Return also documents which have not yet been committed.
     /// * `highlighter_option`: Specifies the extraction of keyword-in-context (KWIC) fragments from fields in documents, and the highlighting of the query terms within.
     /// * `fields`: Specifies which of the stored fields to return with each document. Default: If empty return all stoed fields
+    /// * `distance_fields`: insert distance fields into result documents, calculating the distance between a specified facet field of type Point and a base Point, in kilometers or miles.
+    ///   using Euclidian distance (Pythagoras theorem) with Equirectangular approximation.
     pub fn get_document(
         &self,
         doc_id: usize,
         include_uncommited: bool,
         highlighter_option: &Option<Highlighter>,
         fields: &HashSet<String>,
+        distance_fields: &[DistanceField],
     ) -> Result<Document, String> {
         if !self.delete_hashset.is_empty() && self.delete_hashset.contains(&doc_id) {
             return Err("not found".to_owned());
@@ -236,8 +241,23 @@ impl Index {
                         &highlight.name
                     })
                     .to_string(),
-                    serde_json::Value::String(kwic),
+                    json!(kwic),
                 );
+            }
+        }
+
+        for distance_field in distance_fields.iter() {
+            if let Some(idx) = self.facets_map.get(&distance_field.field) {
+                if self.facets[*idx].field_type == FieldType::Point {
+                    if let FacetValue::Point(point) =
+                        self.get_facet_value(&distance_field.field, doc_id)
+                    {
+                        let distance =
+                            euclidian_distance(&point, &distance_field.base, &distance_field.unit);
+
+                        doc.insert(distance_field.distance.clone(), json!(distance));
+                    }
+                }
             }
         }
 

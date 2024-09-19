@@ -23,9 +23,11 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * Unlimited field number, field length & index size
 * Compressed document store: ZStandard
 * Boolean queries: AND, OR, PHRASE, NOT
+* BM25F and BM25F_Proximity ranking
 * Field filtering
 * [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets
-* BM25F and BM25F_Proximity ranking
+* Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
+* Geo proximity search, filtering and sorting. 
 * KWIC snippets, highlighting
 * Billion-scale index
 * Language independent
@@ -611,7 +613,7 @@ The Rust port is not yet feature complete. The following features are currently 
 **Porting** 
 * ✅ Delete document
 * ✅ Faceted search
-* Sorting of results by any numerical facet field (score becomes a special field)
+* ✅ Sorting of results by any field
 * Autosuggestion, spelling correction, instant search
 * Fuzzy search
 * More tokenizer types (stemming, umlauts, apostrophes, CJK)

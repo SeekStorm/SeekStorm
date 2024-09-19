@@ -157,7 +157,8 @@ index_arc.index_documents(documents_vec).await;
 ```
 
 In addition to the facet functionality (counting, filtering, sorting) the facet value can be also indexed to full-text search.<br>
-The number of distinct values per stringFacet field, across the whole index, is limited to 65,535.<br>
+The number of distinct values per string facet field, across the whole index, is limited to 65,535.<br>
+The number of distinct value combinations per string set facet field, across the whole index, is limited to 65,535.<br>
 The string length of a stringFacet value is limited to 100 characters.
 
 

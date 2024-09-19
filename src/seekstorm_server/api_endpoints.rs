@@ -15,11 +15,11 @@ use seekstorm::{
     highlighter::{highlighter, Highlight},
     index::{
         create_index, open_index, AccessType, DeleteDocument, DeleteDocuments,
-        DeleteDocumentsByQuery, Document, Facet, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, SchemaField, SimilarityType, TokenizerType, UpdateDocument,
-        UpdateDocuments,
+        DeleteDocumentsByQuery, DistanceField, Document, Facet, IndexArc, IndexDocument,
+        IndexDocuments, IndexMetaObject, SchemaField, SimilarityType, TokenizerType,
+        UpdateDocument, UpdateDocuments,
     },
-    search::{FacetFilter, QueryFacet, QueryType, ResultType, Search},
+    search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -32,7 +32,7 @@ use crate::{
 
 const APIKEY_PATH: &str = "apikey.json";
 
-#[derive(Debug, Deserialize, Serialize, Clone, Derivative)]
+#[derive(Deserialize, Serialize, Clone, Derivative)]
 pub struct SearchRequestObject {
     #[serde(rename = "query")]
     pub query_string: String,
@@ -53,9 +53,13 @@ pub struct SearchRequestObject {
     #[serde(default)]
     pub fields: Vec<String>,
     #[serde(default)]
+    pub distance_fields: Vec<DistanceField>,
+    #[serde(default)]
     pub query_facets: Vec<QueryFacet>,
     #[serde(default)]
     pub facet_filter: Vec<FacetFilter>,
+    #[serde(default)]
+    pub result_sort: Vec<ResultSort>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -96,6 +100,8 @@ pub struct GetDocumentRequest {
     pub highlights: Vec<Highlight>,
     #[serde(default)]
     pub fields: Vec<String>,
+    #[serde(default)]
+    pub distance_fields: Vec<DistanceField>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -385,6 +391,7 @@ pub(crate) async fn get_document_api(
             true,
             &highlighter_option,
             &HashSet::from_iter(get_document_request.fields),
+            &get_document_request.distance_fields,
         ) {
             Ok(doc) => Some(doc),
             Err(_e) => None,
@@ -439,6 +446,7 @@ pub(crate) async fn delete_documents_by_query_api(
             search_request.realtime,
             search_request.field_filter,
             search_request.facet_filter,
+            search_request.result_sort,
         )
         .await;
 
@@ -462,6 +470,7 @@ pub(crate) async fn query_index_api(
             search_request.field_filter,
             search_request.query_facets,
             search_request.facet_filter,
+            search_request.result_sort,
         )
         .await;
 
@@ -485,6 +494,7 @@ pub(crate) async fn query_index_api(
                 search_request.realtime,
                 &highlighter_option,
                 &return_fields_filter,
+                &search_request.distance_fields,
             ) {
                 Ok(doc) => {
                     let mut doc = doc;

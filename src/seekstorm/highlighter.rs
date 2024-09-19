@@ -1,5 +1,5 @@
 use crate::index::{Document, FieldType, Index};
-use crate::min_heap::MinHeap;
+use crate::min_heap::{self, MinHeap};
 use aho_corasick::AhoCorasick;
 use serde::{Deserialize, Serialize};
 
@@ -137,7 +137,13 @@ pub(crate) fn add_fragment<'a>(
 
     let mut added = false;
     if score > 0.0 {
-        added = topk_candidates.add_topk(score, section_index, fragment_number);
+        added = topk_candidates.add_topk(
+            min_heap::Result {
+                doc_id: section_index,
+                score,
+            },
+            fragment_number,
+        );
     }
     if fragments.is_empty() || added {
         fragments.push(fragment);
@@ -176,7 +182,8 @@ pub(crate) fn top_fragments_from_field(
             } else {
                 highlight.fragment_number
             };
-            let mut topk_candidates = MinHeap::new(fragment_number);
+            let result_sort = Vec::new();
+            let mut topk_candidates = MinHeap::new(fragment_number, index, &result_sort);
 
             if let Some(schema_field) = index.schema_map.get(&highlight.field) {
                 let text = match schema_field.field_type {

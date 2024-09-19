@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2024-09-20
+
+### Added
+
+- **Sorting of results by any facet field** stated in the result_sort search parameter, ascending or descending.  
+  Multiple sort fields are combined by "sort by, then sort by" ("tie-breaking"-algorithm).  
+  After all sort fields are considered, the results are sorted by BM25 score as last clause.  
+  If no sort fields are stated, then the results are just sorted by BM25 score.
+  Currently, sorting by fields is more expensive, as it prevents WAND search acceleration.
+
+- **Geo proximity search**
+  - New field type Point: array of 2 * f64 coordinate values (longitude and latitude) as defined in https://geojson.org.  
+    Internally encoded into a single 64 bit Morton code for efficient range queries.  
+    get_facet_value decodes Morton code back to Point.  
+  - New public methods: encode_morton_2_d(point:&Point)->u64, decode_morton_2_d(code: u64)->Point,  
+    euclidian_distance(point1: &Point, point2: &Point, unit: &DistanceUnit)->f64,  
+    point_distance_to_morton_range(point: &Point,distance: f64,unit: &DistanceUnit)-> Range<u64>  
+  - New property ResultSort.base that allows to specify a query base value (e.g. of type Point for current location coordinate) during search.  
+    Then results won't be ordered by the field values but by the distance between the field value and query base value, e.g. for geo proximity search.
+  - New parameter distance_fields: &Vec<DistanceField> for the get_document method allows to insert distance fields into result documents,  
+    calculating the distance between a specified facet field of type Point and a base Point, in kilometers or miles,  
+    using Euclidian distance (Pythagoras theorem) with Equirectangular approximation.
+  - SearchRequestObject in query_index_api and GetDocumentRequest in get_document_api (server REST API) have a new property distance_fields: Vec<DistanceField>.
+
+- **get_facet_value()** : Returns value from facet field for a doc_id even if schema stored=false (field not stored in document JSON).  
+  Facet fields are more compact than fields stored in document JSON.
+  Facet fields are faster because no document loading, decompression and JSON decoding is required.  
+  Facet fields are always memory mapped, internally always stored with fixed byte length layout.
+  Facet fields are instantly updatable without re-indexing the whole document.
+
 ## [0.3.0] - 2024-08-26
 
 ### Added

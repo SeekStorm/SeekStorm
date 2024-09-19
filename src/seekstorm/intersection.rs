@@ -118,7 +118,7 @@ pub(crate) async fn intersection_docid(
     not_query_list: &mut [PostingListObjectQuery<'_>],
     block_id: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -132,6 +132,7 @@ pub(crate) async fn intersection_docid(
     let filtered = !not_query_list.is_empty()
         || phrase_query
         || !field_filter_set.is_empty()
+        || !search_result.topk_candidates.result_sort.is_empty()
         || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
             && (!search_result.skip_facet_count || !facet_filter.is_empty());
 
@@ -242,9 +243,9 @@ pub(crate) async fn intersection_docid(
             };
     }
 
-    if SPEEDUP_FLAG &&
-    /* !phrase_query && */
-    (result_type == &ResultType::Topk)
+    if SPEEDUP_FLAG
+        && search_result.topk_candidates.result_sort.is_empty()
+        && (result_type == &ResultType::Topk)
         && (search_result.topk_candidates.current_heap_size == top_k)
         && (block_score <= search_result.topk_candidates._elements[0].score)
     {
@@ -1942,7 +1943,7 @@ pub(crate) async fn intersection_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -2140,6 +2141,7 @@ pub(crate) async fn intersection_blockid<'a>(
         block_vec.sort_unstable_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
         for block in block_vec {
             if (result_type == &ResultType::Topk)
+                && search_result.topk_candidates.result_sort.is_empty()
                 && (search_result.topk_candidates.current_heap_size == top_k)
                 && (block.block_score <= search_result.topk_candidates._elements[0].score)
             {

@@ -247,6 +247,7 @@ pub mod commit;
 pub(crate) mod compatible;
 pub(crate) mod compress_postinglist;
 pub(crate) mod doc_store;
+pub mod geo_search;
 /// Extracts the most relevant fragments (snippets, summaries) from specified fields of the document to provide a "keyword in context" (KWIC) functionality.
 /// With highlight_markup the matching query terms within the fragments can be highlighted with HTML markup.
 pub mod highlighter;

@@ -3,11 +3,13 @@ use smallvec::{smallvec, SmallVec};
 use std::cmp::Ordering;
 
 use crate::{
+    geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
         get_document_length_compressed_mmap, AccessType, CompressionType, Index,
         NonUniquePostingListObjectQuery, PostingListObjectQuery, SimilarityType, FIELD_STOP_BIT_1,
         FIELD_STOP_BIT_2, SPEEDUP_FLAG, STOP_BIT,
     },
+    min_heap,
     search::{FilterSparse, Ranges, ResultType, SearchResult},
     utils::{
         read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
@@ -253,6 +255,7 @@ pub(crate) fn add_result_singleterm_multifield(
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -309,6 +312,7 @@ pub(crate) fn add_result_singleterm_multifield(
             *result_count += 1;
 
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -338,7 +342,13 @@ pub(crate) fn add_result_singleterm_multifield(
 
     // !!! resultcount ist nicht global, sondern nur per block
 
-    search_result.topk_candidates.add_topk(bm25f, docid, top_k);
+    search_result.topk_candidates.add_topk(
+        min_heap::Result {
+            doc_id: docid,
+            score: bm25f,
+        },
+        top_k,
+    );
 }
 
 #[inline]
@@ -444,6 +454,22 @@ pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], doci
                     return true;
                 }
             }
+
+            FilterSparse::Point(point, distance, unit, range) => {
+                let morton_code = read_u64(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if range.contains(&morton_code) {
+                    if euclidian_distance(point, &decode_morton_2_d(morton_code), unit) > *distance
+                    {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+
             FilterSparse::None => {}
         }
     }
@@ -682,6 +708,7 @@ pub(crate) fn add_result_singleterm_singlefield(
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -733,6 +760,7 @@ pub(crate) fn add_result_singleterm_singlefield(
             *result_count += 1;
 
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -761,7 +789,13 @@ pub(crate) fn add_result_singleterm_singlefield(
 
     // !!! resultcount ist nicht global, sondern nur per block
 
-    search_result.topk_candidates.add_topk(bm25f, docid, top_k);
+    search_result.topk_candidates.add_topk(
+        min_heap::Result {
+            doc_id: docid,
+            score: bm25f,
+        },
+        top_k,
+    );
 }
 
 #[inline(always)]
@@ -2520,6 +2554,7 @@ pub(crate) fn add_result_multiterm_multifield(
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -2528,6 +2563,7 @@ pub(crate) fn add_result_multiterm_multifield(
         }
         ResultType::TopkCount => {
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && !phrase_query
                 && field_filter_set.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
@@ -2580,6 +2616,7 @@ pub(crate) fn add_result_multiterm_multifield(
         bm25 = get_bm25f_multiterm_multifield(index, docid, query_list);
 
         if SPEEDUP_FLAG
+            && search_result.topk_candidates.result_sort.is_empty()
             && search_result.topk_candidates.current_heap_size >= top_k
             && bm25 <= search_result.topk_candidates._elements[0].score
         {
@@ -2587,9 +2624,7 @@ pub(crate) fn add_result_multiterm_multifield(
         }
     }
 
-    if
-    /* !SEARCH_BENCHMARK_GAME_FLAG || */
-    phrase_query {
+    if phrase_query {
         let len = query_list.len();
         let mut index_transpose = vec![0; len];
         for i in 0..len {
@@ -2846,7 +2881,13 @@ pub(crate) fn add_result_multiterm_multifield(
 
     // !!! resultcount ist nicht global, sondern nur per block
 
-    search_result.topk_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(
+        min_heap::Result {
+            doc_id: docid,
+            score: bm25,
+        },
+        top_k,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2947,6 +2988,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
         ResultType::Topk => {
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -2955,6 +2997,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
         ResultType::TopkCount => {
             if SPEEDUP_FLAG
+                && search_result.topk_candidates.result_sort.is_empty()
                 && !phrase_query
                 && field_filter_set.is_empty()
                 && search_result.topk_candidates.current_heap_size >= top_k
@@ -3006,6 +3049,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         bm25 = get_bm25f_multiterm_singlefield(index, docid, query_list);
 
         if SPEEDUP_FLAG
+            && search_result.topk_candidates.result_sort.is_empty()
             && search_result.topk_candidates.current_heap_size >= top_k
             && bm25 <= search_result.topk_candidates._elements[0].score
         {
@@ -3013,9 +3057,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
     }
 
-    if
-    /* !SEARCH_BENCHMARK_GAME_FLAG || */
-    phrase_query {
+    if phrase_query {
         let len = query_list.len();
         let mut index_transpose = vec![0; len];
         for i in 0..len {
@@ -3126,5 +3168,11 @@ pub(crate) fn add_result_multiterm_singlefield(
         bm25 = get_bm25f_multiterm_singlefield(index, docid, query_list);
     }
 
-    search_result.topk_candidates.add_topk(bm25, docid, top_k);
+    search_result.topk_candidates.add_topk(
+        min_heap::Result {
+            doc_id: docid,
+            score: bm25,
+        },
+        top_k,
+    );
 }

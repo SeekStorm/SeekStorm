@@ -1,12 +1,9 @@
 use crate::{
-    add_result::{
-        add_result_multiterm_multifield, add_result_singleterm_multifield, is_facet_filter,
-        PostingListObjectSingle,
-    },
+    add_result::{add_result_multiterm_multifield, is_facet_filter},
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
         AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
-        PostingListObjectQuery, QueueObject,
+        PostingListObjectQuery, QueueObject, ROARING_BLOCK_SIZE,
     },
     intersection::intersection_blockid,
     search::{FilterSparse, Ranges, ResultType, SearchResult},
@@ -19,167 +16,13 @@ use crate::{
 
 use ahash::AHashSet;
 use num_traits::FromPrimitive;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::{
+    cmp,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use async_recursion::async_recursion;
-
-pub(crate) fn get_next_docid(plo: &mut PostingListObjectQuery) {
-    unsafe {
-        if plo.compression_type == CompressionType::Array {
-            plo.docid = read_u16(
-                plo.byte_array,
-                plo.compressed_doc_id_range + (plo.p_docid << 1),
-            ) as i32
-        } else if plo.compression_type == CompressionType::Bitmap {
-            while plo.intersect == 0 {
-                plo.intersect = read_u64(
-                    plo.byte_array,
-                    plo.compressed_doc_id_range + (plo.ulong_pos << 3),
-                );
-                plo.ulong_pos += 1;
-            }
-            let bit_pos = _mm_tzcnt_64(plo.intersect);
-            plo.intersect = _blsr_u64(plo.intersect);
-            plo.docid = (((plo.ulong_pos - 1) << 6) + bit_pos as usize) as i32
-        } else if plo.docid < plo.run_end {
-            plo.docid += 1;
-        } else {
-            plo.p_run += 4;
-            let startdocid = read_u16(
-                plo.byte_array,
-                plo.compressed_doc_id_range + plo.p_run as usize,
-            );
-            let runlength = read_u16(
-                plo.byte_array,
-                plo.compressed_doc_id_range + (plo.p_run + 2) as usize,
-            );
-            plo.run_end = (startdocid + runlength) as i32;
-            plo.docid = startdocid as i32;
-        };
-    }
-}
-
-/// Horizontal scan algorithm
-/// scan for minimal docid, increase p_docid for terms with minimal docid
-/// allows unlimited number of terms
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn union_scan(
-    result_count: &mut i32,
-    block_id: usize,
-    index: &Index,
-    search_result: &mut SearchResult,
-    top_k: usize,
-    result_type: &ResultType,
-    field_filter_set: &AHashSet<u16>,
-    facet_filter: &[FilterSparse],
-    non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
-    query_list: &mut [PostingListObjectQuery],
-    not_query_list: &mut [PostingListObjectQuery],
-) {
-    for plo in query_list.iter_mut() {
-        if !plo.end_flag {
-            get_next_docid(plo);
-        }
-    }
-
-    loop {
-        let mut break_loop = true;
-        let mut docid_min = u16::MAX;
-
-        for plo in query_list.iter_mut() {
-            if !plo.end_flag && (plo.docid as u16) < docid_min {
-                docid_min = plo.docid as u16;
-            }
-        }
-
-        if result_type != &ResultType::Count {
-            let mut term_match_count = 0;
-            let mut term_index = 0;
-            for (i, plo) in query_list.iter_mut().enumerate() {
-                if !plo.end_flag && (plo.docid as u16 == docid_min) {
-                    plo.bm25_flag = true;
-                    term_match_count += 1;
-                    term_index = i;
-                } else {
-                    plo.bm25_flag = false;
-                }
-            }
-
-            if term_match_count == 1 {
-                let query_list_item_mut = &mut query_list[term_index];
-                let plo = PostingListObjectSingle {
-                    rank_position_pointer_range: query_list_item_mut.rank_position_pointer_range,
-                    pointer_pivot_p_docid: query_list_item_mut.pointer_pivot_p_docid,
-                    byte_array: query_list_item_mut.byte_array,
-                    p_docid: query_list_item_mut.p_docid as i32,
-                    idf: query_list_item_mut.idf,
-                    idf_bigram1: query_list_item_mut.idf_bigram1,
-                    idf_bigram2: query_list_item_mut.idf_bigram2,
-                    is_bigram: query_list_item_mut.is_bigram,
-                };
-
-                add_result_singleterm_multifield(
-                    index,
-                    (block_id << 16) | docid_min as usize,
-                    result_count,
-                    search_result,
-                    top_k,
-                    result_type,
-                    field_filter_set,
-                    facet_filter,
-                    &plo,
-                    not_query_list,
-                    query_list_item_mut.blocks[query_list_item_mut.p_block as usize]
-                        .max_block_score,
-                );
-                if not_query_list.is_empty() && result_type != &ResultType::Topk {
-                    *result_count += 1;
-                }
-            } else {
-                add_result_multiterm_multifield(
-                    index,
-                    (block_id << 16) | docid_min as usize,
-                    result_count,
-                    search_result,
-                    top_k,
-                    result_type,
-                    field_filter_set,
-                    facet_filter,
-                    non_unique_query_list,
-                    query_list,
-                    not_query_list,
-                    false,
-                    f32::MAX,
-                    false,
-                );
-            }
-        } else {
-            *result_count += 1;
-        }
-
-        for plo in query_list.iter_mut() {
-            if !plo.end_flag {
-                let doc_id = plo.docid as u16;
-                if doc_id == docid_min {
-                    if plo.p_docid < plo.p_docid_count - 1 {
-                        plo.p_docid += 1;
-                        get_next_docid(plo);
-                        break_loop = false; // !!!! auch bei denen docid > docid_min
-                    } else {
-                        plo.end_flag = true;
-                    }
-                } else {
-                    break_loop = false;
-                }
-            }
-        }
-
-        if break_loop {
-            break;
-        }
-    }
-}
 
 /// Union for a single block
 #[allow(clippy::too_many_arguments)]
@@ -190,7 +33,7 @@ pub(crate) async fn union_docid<'a>(
     not_query_list: &mut [PostingListObjectQuery<'a>],
     block_id: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -368,18 +211,19 @@ pub(crate) async fn union_docid<'a>(
     }
 
     union_scan(
-        result_count,
-        block_id,
         index,
+        non_unique_query_list,
+        query_list,
+        not_query_list,
+        block_id,
+        result_count,
         search_result,
         top_k,
         result_type,
         field_filter_set,
         facet_filter,
-        non_unique_query_list,
-        query_list,
-        not_query_list,
-    );
+    )
+    .await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -389,7 +233,7 @@ pub(crate) async fn union_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -520,10 +364,196 @@ pub(crate) async fn union_blockid<'a>(
     }
 }
 
+const MASK_ARRAY: [u8; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn union_scan<'a>(
+    index: &'a Index,
+    non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
+    query_list: &mut [PostingListObjectQuery<'a>],
+    not_query_list: &mut [PostingListObjectQuery<'a>],
+    block_id: usize,
+    result_count: &mut i32,
+    search_result: &mut SearchResult<'_>,
+    top_k: usize,
+    result_type: &ResultType,
+    field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
+) {
+    let mut query_terms_bitset_table: [u8; ROARING_BLOCK_SIZE] = [0u8; ROARING_BLOCK_SIZE];
+    let mut result_count_local = 0;
+
+    query_list.sort_by(|a, b| b.p_docid_count.partial_cmp(&a.p_docid_count).unwrap());
+
+    let mut max_score = 0.0;
+
+    for (i, plo) in query_list.iter_mut().enumerate() {
+        if plo.end_flag {
+            continue;
+        }
+
+        plo.p_docid = 0;
+        let mask = 1 << i;
+        max_score += plo.blocks[plo.p_block as usize].max_block_score;
+
+        if plo.compression_type == CompressionType::Bitmap {
+            let ulongs0 = cast_byte_ulong_slice(
+                &plo.byte_array[plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
+            );
+
+            for ulong_pos in 0u64..1024 {
+                let mut intersect: u64 = ulongs0[ulong_pos as usize];
+
+                while intersect != 0 {
+                    let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;
+                    intersect = unsafe { _blsr_u64(intersect) };
+
+                    let docid = ((ulong_pos << 6) + bit_pos) as usize;
+                    query_terms_bitset_table[docid] |= mask;
+                }
+            }
+        } else if plo.compression_type == CompressionType::Array {
+            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
+
+            for item in &ushorts1[0..plo.p_docid_count] {
+                let docid = *item as usize;
+
+                query_terms_bitset_table[docid] |= mask;
+            }
+        } else {
+            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
+            let runs_count = ushorts1[0] as i32;
+
+            for ii in (1..(runs_count << 1) + 1).step_by(2) {
+                let startdocid = ushorts1[ii as usize] as usize;
+                let runlength = ushorts1[(ii + 1) as usize] as usize;
+
+                for j in 0..=runlength {
+                    let docid = (startdocid + j) as usize;
+
+                    query_terms_bitset_table[docid] |= mask;
+                }
+            }
+        }
+    }
+
+    for plo in not_query_list.iter_mut() {
+        if !plo.bm25_flag {
+            continue;
+        }
+
+        if plo.compression_type == CompressionType::Bitmap {
+            let ulongs0 = cast_byte_ulong_slice(
+                &plo.byte_array[plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
+            );
+
+            for ulong_pos in 0u64..1024 {
+                let mut intersect: u64 = ulongs0[ulong_pos as usize];
+
+                while intersect != 0 {
+                    let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;
+                    intersect = unsafe { _blsr_u64(intersect) };
+
+                    let docid = ((ulong_pos << 6) + bit_pos) as usize;
+                    query_terms_bitset_table[docid] = 0;
+                }
+            }
+        } else if plo.compression_type == CompressionType::Array {
+            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
+
+            for item in &ushorts1[0..plo.p_docid_count] {
+                let docid = *item as usize;
+
+                query_terms_bitset_table[docid] = 0;
+            }
+        } else {
+            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
+            let runs_count = ushorts1[0] as i32;
+
+            for ii in (1..(runs_count << 1) + 1).step_by(2) {
+                let startdocid = ushorts1[ii as usize] as usize;
+                let runlength = ushorts1[(ii + 1) as usize] as usize;
+
+                for j in 0..=runlength {
+                    let docid = (startdocid + j) as usize;
+
+                    query_terms_bitset_table[docid] = 0;
+                }
+            }
+        }
+    }
+
+    let block_skip = search_result.topk_candidates.current_heap_size >= top_k
+        && max_score <= search_result.topk_candidates._elements[0].score
+        && search_result.topk_candidates.result_sort.is_empty();
+
+    let query_list_len = cmp::min(query_list.len(), 8);
+
+    let query_combination_count = 1 << query_list_len;
+    let mut query_terms_max_score_sum_table: Vec<f32> = vec![0.0; query_combination_count];
+    for (i, max_score) in query_terms_max_score_sum_table.iter_mut().enumerate() {
+        for (j, term) in query_list.iter().enumerate().take(query_list_len) {
+            if ((1 << j) & i) > 0 {
+                *max_score += term.blocks[term.p_block as usize].max_block_score
+            }
+        }
+    }
+
+    let mut p_docid_array: [u16; 8] = [0; 8];
+
+    let mut _result_count = 0;
+    let block_id_msb = block_id << 16;
+
+    for (i, query_terms_bitset) in query_terms_bitset_table.iter().enumerate() {
+        if *query_terms_bitset > 0 {
+            result_count_local += 1;
+
+            if !block_skip
+                && (search_result.topk_candidates.current_heap_size < top_k
+                    || query_terms_max_score_sum_table[*query_terms_bitset as usize]
+                        > search_result.topk_candidates._elements[0].score)
+            {
+                for (j, query_term) in query_list.iter_mut().take(query_list_len).enumerate() {
+                    query_term.bm25_flag = (query_terms_bitset & MASK_ARRAY[j]) > 0;
+
+                    query_term.p_docid = p_docid_array[j] as usize;
+                }
+
+                add_result_multiterm_multifield(
+                    index,
+                    block_id_msb | i,
+                    &mut _result_count,
+                    search_result,
+                    top_k,
+                    result_type,
+                    field_filter_set,
+                    facet_filter,
+                    non_unique_query_list,
+                    query_list,
+                    not_query_list,
+                    false,
+                    f32::MAX,
+                    false,
+                );
+            }
+
+            if !block_skip {
+                for j in 0..query_list_len {
+                    if (query_terms_bitset & MASK_ARRAY[j]) > 0 {
+                        p_docid_array[j] += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    *result_count += result_count_local;
+}
+
 pub(crate) async fn union_count<'a>(
     index: &'a Index,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
 
     query_list: &mut [PostingListObjectQuery<'a>],
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -836,7 +866,7 @@ pub(crate) async fn union_docid_2<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResult<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
