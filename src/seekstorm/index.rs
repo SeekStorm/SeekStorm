@@ -327,7 +327,7 @@ pub enum FieldType {
     #[default]
     String,
     StringSet,
-    /// Point is a geographic field type: A Vec<f64> with two coordinate values (latitude and longitude) are internally encoded into a single u64 value (Morton code).
+    /// Point is a geographic field type: A `Vec<f64>` with two coordinate values (latitude and longitude) are internally encoded into a single u64 value (Morton code).
     /// Morton codes enable efficient range queries.
     /// Latitude and longitude are a pair of numbers (coordinates) used to describe a position on the plane of a geographic coordinate system.
     /// The numbers are in decimal degrees format and range from -90 to 90 for latitude and -180 to 180 for longitude.
