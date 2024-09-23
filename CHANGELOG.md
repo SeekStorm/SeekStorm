@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2024-09-24
+
+### Added
+
+- **New Unicode character folding/normalization tokenizer** (diacritics, accents, umlauts, bold, italic, full-width ...)  
+  **'TokenizerType::UnicodeAlphanumericFolded'** and method **fold_diacritics_accents_zalgo_umlaut()** 
+  convert text with **diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters** into its basic representation.  
+  Unicode UTF-8 has made life so much easier compared to the old code pages, but its endless possibilities also pose challenges in parsing and indexing.  
+  The challenge is that the same basic letter might be represented by different UTF8 characters if they contain diacritics, accents, or are bold, italic, or full-width.  
+  Sometimes, users can't search because the keyboard doesn't have these letters or they don't know how to enter, or they even don't know what that letter looks like.  
+  Sometimes the document to be ingested is already written without diacritics for the same reasons.  
+  We don't want to search for every variant separately, most often we even don't know that they exist in the index.  
+  We want to have all results, for every variant, no matter which variant is entered in the query, 
+  e.g. for indexing LinkedIn posts that make use of external bold/italic formatters or for indexing documents in accented languages.  
+  It is important that the search engine supports the character folding rather than external preprocessing, as we want to have both:  
+  **enter the query in any character form**, **receive all results independent from their character form**, but **have them returned in their original, unaltered characters**.
+- **New apostroph handling** in **'TokenizerType::UnicodeAlphanumericFolded'** prevents that short meaningless term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's") or become part of the query.
+
 ## [0.4.0] - 2024-09-20
 
 ### Added

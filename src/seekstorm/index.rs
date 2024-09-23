@@ -85,8 +85,15 @@ pub enum SimilarityType {
 /// Defines tokenizer behavior: AsciiAlphabetic (for benchmark compatibility) or UnicodeAlphanumeric (all Unicode alphanumeric chars are recognized as token)
 #[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy)]
 pub enum TokenizerType {
+    /// Only ASCII alphabetic chars are recognized as token
     AsciiAlphabetic = 0,
+    /// All Unicode alphanumeric chars are recognized as token
     UnicodeAlphanumeric = 1,
+    /// all Unicode alphanumeric chars are recognized as token,
+    /// but diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
+    /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
+    /// Tokenizing might be slower due to folding and apostroph processing.
+    UnicodeAlphanumericFolded = 2,
 }
 
 pub(crate) struct LevelIndex {

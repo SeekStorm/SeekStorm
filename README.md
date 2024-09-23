@@ -614,9 +614,10 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Delete document
 * ✅ Faceted search
 * ✅ Sorting of results by any field
+* ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
 * Autosuggestion, spelling correction, instant search
 * Fuzzy search
-* More tokenizer types (stemming, umlauts, apostrophes, CJK)
+* More tokenizer types (stemming, CJK)
 * Intra-query concurrency
 
 **Improvements**

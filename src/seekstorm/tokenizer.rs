@@ -1,6 +1,7 @@
 use std::cmp;
 
 use ahash::AHashMap;
+use finl_unicode::categories::{CharacterCategories, MinorCategory};
 
 use crate::{
     index::{
@@ -8,6 +9,86 @@ use crate::{
     },
     search::QueryType,
 };
+
+const APOSTROPH: [char; 2] = ['\u{2019}', '\u{0027}'];
+const ZALGO_CHAR_CATEGORIES: [MinorCategory; 2] = [MinorCategory::Mn, MinorCategory::Me];
+
+/// fold_diacritics_accents_zalgo_umlaut() (used by TokenizerType::UnicodeAlphanumericFolded):
+/// Converts text with diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters into its basic representation.
+/// Unicode UTF-8 has made life so much easier compared to the old code pages, but its endless possibilities also pose challenges in parsing and indexing.
+/// The challenge is that the same basic letter might be represented by different UTF8 characters if they contain diacritics, accents, or are bold, italic, or full-width.
+/// Sometimes, users can't search because the keyboard doesn't have these letters or they don't know how to enter, or they even don't know what that letter looks like.
+/// Sometimes the document to be ingested is already written without diacritics for the same reasons.
+/// We don't want to search for every variant separately, most often we even don't know that they exist in the index.
+/// We want to have all results, for every variant, no matter which variant is entered in the query,
+/// e.g. for indexing LinkedIn posts that make use of external bold/italic formatters or for indexing documents in accented languages.
+/// It is important that the search engine supports the character folding rather than external preprocessing, as we want to have both: enter the query in any character form, receive all results independent from their character form, but have them returned in their original, unaltered characters.
+pub fn fold_diacritics_accents_zalgo_umlaut(string: &str) -> String {
+    string
+        .to_lowercase()
+        .chars()
+        .fold(String::with_capacity(string.len()), |mut folded, cc| {
+            let mut base_char = None;
+            let mut base_char2 = None;
+
+            match cc {
+                'ä' => folded.push_str("ae"),
+                'ö' => folded.push_str("oe"),
+                'ü' => folded.push_str("ue"),
+                'ß' => folded.push_str("ss"),
+                'ł' => folded.push('l'),
+                'æ' => folded.push('a'),
+                'œ' => folded.push('o'),
+                'ø' => folded.push('o'),
+                'ð' => folded.push('d'),
+                'þ' => folded.push('t'),
+                'đ' => folded.push('d'),
+                'ɖ' => folded.push('d'),
+                'ħ' => folded.push('h'),
+                'ı' => folded.push('i'),
+                'ƿ' => folded.push('w'),
+                'ȝ' => folded.push('g'),
+                'Ƿ' => folded.push('w'),
+                'Ȝ' => folded.push('g'),
+
+                _ => {
+                    unicode_normalization::char::decompose_canonical(cc, |c| {
+                        base_char.get_or_insert(c);
+                    });
+                    unicode_normalization::char::decompose_compatible(base_char.unwrap(), |c| {
+                        if c.is_alphanumeric() {
+                            base_char2.get_or_insert(c);
+                        }
+                    });
+                    if base_char2.is_none() {
+                        base_char2 = base_char
+                    }
+
+                    if !ZALGO_CHAR_CATEGORIES.contains(&base_char2.unwrap().get_minor_category()) {
+                        match base_char2.unwrap() {
+                            'ł' => folded.push('l'),
+                            'æ' => folded.push('a'),
+                            'œ' => folded.push('o'),
+                            'ø' => folded.push('o'),
+                            'ð' => folded.push('d'),
+                            'þ' => folded.push('t'),
+                            'đ' => folded.push('d'),
+                            'ɖ' => folded.push('d'),
+                            'ħ' => folded.push('h'),
+                            'ı' => folded.push('i'),
+                            'ƿ' => folded.push('w'),
+                            'ȝ' => folded.push('g'),
+                            'Ƿ' => folded.push('w'),
+                            'Ȝ' => folded.push('g'),
+
+                            _ => folded.push(base_char2.unwrap()),
+                        }
+                    }
+                }
+            }
+            folded
+        })
+}
 
 /// Tokenizer splits text to terms
 #[allow(clippy::too_many_arguments)]
@@ -35,94 +116,182 @@ pub(crate) fn tokenizer(
 
     let mut start = false;
     let mut start_pos = 0;
+    let mut first_part = &text[0..0];
 
     if is_query {
-        if tokenizer == TokenizerType::AsciiAlphabetic {
-            text_normalized = text.to_ascii_lowercase();
-            for char in text_normalized.char_indices() {
-                start = match char.1 {
-                    'a'..='z' | '"' | '+' | '-' => {
-                        if !start {
-                            start_pos = char.0;
+        match tokenizer {
+            TokenizerType::AsciiAlphabetic => {
+                text_normalized = text.to_ascii_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        'a'..='z' | '"' | '+' | '-' => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
                         }
-                        true
-                    }
-                    //end of term
-                    _ => {
-                        if start {
-                            non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
                         }
-                        false
-                    }
-                };
-            }
-        } else {
-            text_normalized = text.to_lowercase();
-            for char in text_normalized.char_indices() {
-                start = match char.1 {
-                    //start of term
-                    token if regex_syntax::is_word_character(token) => {
-                        if !start {
-                            start_pos = char.0;
-                        }
-                        true
-                    }
-                    '"' | '+' | '-' => {
-                        if !start {
-                            start_pos = char.0;
-                        }
-                        true
-                    }
-                    _ => {
-                        if start {
-                            non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
-                        }
-                        false
-                    }
-                };
-            }
-        }
-    } else if tokenizer == TokenizerType::AsciiAlphabetic {
-        text_normalized = text.to_ascii_lowercase();
-        for char in text_normalized.char_indices() {
-            start = match char.1 {
-                'a'..='z' => {
-                    if !start {
-                        start_pos = char.0;
-                    }
-                    true
+                    };
                 }
-                _ => {
-                    if start {
-                        non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
-                    }
-                    false
+            }
+            TokenizerType::UnicodeAlphanumeric => {
+                text_normalized = text.to_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if regex_syntax::is_word_character(token) => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        '"' | '+' | '-' => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
                 }
-            };
+            }
+            TokenizerType::UnicodeAlphanumericFolded => {
+                text_normalized = fold_diacritics_accents_zalgo_umlaut(text);
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if regex_syntax::is_word_character(token) => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        '"' | '+' | '-' => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            let apostroph = APOSTROPH.contains(&char.1);
+                            if start {
+                                if apostroph {
+                                    first_part = &text_normalized[start_pos..char.0];
+                                } else {
+                                    if first_part.len() >= 2 {
+                                        non_unique_terms_line.push(first_part)
+                                    } else {
+                                        non_unique_terms_line
+                                            .push(&text_normalized[start_pos..char.0]);
+                                    }
+                                    first_part = &text_normalized[0..0];
+                                }
+                            } else if !apostroph && !first_part.is_empty() {
+                                non_unique_terms_line.push(first_part);
+                                first_part = &text_normalized[0..0];
+                            }
+
+                            false
+                        }
+                    };
+                }
+            }
         }
     } else {
-        text_normalized = text.to_lowercase();
-        for char in text_normalized.char_indices() {
-            start = match char.1 {
-                token if regex_syntax::is_word_character(token) => {
-                    if !start {
-                        start_pos = char.0;
-                    }
-                    true
+        match tokenizer {
+            TokenizerType::AsciiAlphabetic => {
+                text_normalized = text.to_ascii_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        'a'..='z' => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
                 }
-                _ => {
-                    if start {
-                        non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
-                    }
-                    false
+            }
+            TokenizerType::UnicodeAlphanumeric => {
+                text_normalized = text.to_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if regex_syntax::is_word_character(token) => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
                 }
-            };
+            }
+
+            TokenizerType::UnicodeAlphanumericFolded => {
+                text_normalized = fold_diacritics_accents_zalgo_umlaut(text);
+
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if regex_syntax::is_word_character(token) => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            let apostroph = APOSTROPH.contains(&char.1);
+                            if start {
+                                if apostroph {
+                                    first_part = &text_normalized[start_pos..char.0];
+                                } else {
+                                    if first_part.len() >= 2 {
+                                        non_unique_terms_line.push(first_part)
+                                    } else {
+                                        non_unique_terms_line
+                                            .push(&text_normalized[start_pos..char.0]);
+                                    }
+                                    first_part = &text_normalized[0..0];
+                                }
+                            } else if !apostroph && !first_part.is_empty() {
+                                non_unique_terms_line.push(first_part);
+                                first_part = &text_normalized[0..0];
+                            }
+
+                            false
+                        }
+                    };
+                }
+            }
         }
     }
-
     if start {
-        non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
-    };
+        if first_part.len() >= 2 {
+            non_unique_terms_line.push(first_part)
+        } else {
+            non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
+        }
+    } else if !first_part.is_empty() {
+        non_unique_terms_line.push(first_part);
+    }
 
     let mut position: u32 = 0;
     let mut is_phrase = query_type == &QueryType::Phrase;

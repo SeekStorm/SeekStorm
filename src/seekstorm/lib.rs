@@ -262,6 +262,6 @@ pub(crate) mod realtime_search;
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
 pub mod search;
 pub(crate) mod single;
-pub(crate) mod tokenizer;
+pub mod tokenizer;
 pub(crate) mod union;
 pub(crate) mod utils;
