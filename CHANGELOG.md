@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - 2024-09-24
+## [0.6.0] - 2024-09-30
+
+### Added
+
+- Range query facets for Point field type added: Calculating the distance between a specified facet field of type Point and a base Point, in kilometers or miles,  
+  using Euclidian distance (Pythagoras theorem) with Equirectangular approximation. The distance ranges are equivalent to concentric circles of different radius around the base point.
+  The numbers of matching results that fall into the defined range query facet buckets are counted and returned in the ResultObject facets property.
+
+### Changed
+
+- Filtering of facet field type Point changed from distance to distance range, to make behaviour equivalent to the other numerical field types.
+
+### Fixed
+
+- Search query_facets, facets_filter, result_sort parameter documentation fixed.
+
+## [0.5.0] - 2024-09-25
 
 ### Added
 

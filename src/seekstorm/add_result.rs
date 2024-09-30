@@ -455,14 +455,17 @@ pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], doci
                 }
             }
 
-            FilterSparse::Point(point, distance, unit, range) => {
+            FilterSparse::Point(point, distance_range, unit, range) => {
                 let morton_code = read_u64(
                     &index.facets_file_mmap,
                     (index.facets_size_sum * docid) + facet.offset,
                 );
                 if range.contains(&morton_code) {
-                    if euclidian_distance(point, &decode_morton_2_d(morton_code), unit) > *distance
-                    {
+                    if !distance_range.contains(&euclidian_distance(
+                        point,
+                        &decode_morton_2_d(morton_code),
+                        unit,
+                    )) {
                         return true;
                     }
                 } else {
@@ -574,6 +577,21 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                         .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
                 }
+
+                Ranges::Point(_range_type, ranges, base, unit) => {
+                    let facet_value = read_u64(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    let facet_value_distance =
+                        euclidian_distance(base, &decode_morton_2_d(facet_value), unit);
+                    ranges
+                        .binary_search_by(|range| {
+                            range.1.partial_cmp(&facet_value_distance).unwrap()
+                        })
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+
                 _ => read_u16(
                     &index.facets_file_mmap,
                     (index.facets_size_sum * docid) + facet.offset,

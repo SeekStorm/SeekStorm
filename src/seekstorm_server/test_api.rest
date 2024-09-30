@@ -1,15 +1,13 @@
 // use with VSC extension "Rest client" to execute API calls and inspect responses
 
 ### individual API key (use create api key below to generate)
-# @api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-@api_key = VF9vcy0U1l19VQWYEKD+eeyX+RxuOLsj19EPuIWGc6A=
+@api_key = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
 // WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, 
 // otherwise your generated API keys will be compromised.
 ### create api key (use master API key displayed in the server console at startup)
 POST http://127.0.0.1:80/api/v1/apikey HTTP/1.1
-#apikey: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ=
-apikey: /iWStCpyfpd/BVlHOFtwnMgrFrmof4jGq/OQDWXQzcM=
+apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
 content-type: application/json
 
 {

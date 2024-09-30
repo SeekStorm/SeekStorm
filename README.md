@@ -12,7 +12,7 @@ Development started in 2015, in [production](https://seekstorm.com) since 2020, 
 
 SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
-Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
+Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/) and [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
 
 ### SeekStorm high-performance search library
 
@@ -35,8 +35,10 @@ Blog Posts: https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
 * RESTful API with CORS
 * Index either in RAM or memory mapped files
 * Cross-platform (Windows, Linux, MacOS)
-* SIMD (Single Instruction, Multiple Data) hardware acceleration support, 
-<br>both for x86-64 (AMD64 and Intel 64) and AArch64 (ARM, Apple Silicon).
+* SIMD (Single Instruction, Multiple Data) hardware acceleration support,  
+  both for x86-64 (AMD64 and Intel 64) and AArch64 (ARM, Apple Silicon).
+* Single-machine scalability: serving thousands of concurrent queries with low latency from a single commodity server  
+  without needing clusters or proprietary hardware accelerators.
 
 Query types
 + OR  disjunction  union
@@ -64,7 +66,8 @@ Result types
 **Performance**  
 Lower latency, higher throughput, lower cost & energy consumption, esp. for multi-field and concurrent queries.  
 Low tail latencies ensure a smooth user experience and prevent loss of customers and revenue.  
-While some rely on proprietary hardware accelerators (FPGA/ASIC) to improve performance, SeekStorm achieves a similar boost algorithmically on commodity hardware.
+While some rely on proprietary hardware accelerators (FPGA/ASIC) or clusters to improve performance,  
+SeekStorm achieves a similar boost algorithmically on a single commodity server.
 
 **Consistency**  
 No unpredictable query latency during and after large-volume indexing as SeekStorm doesn't require resource-intensive segment merges.  
@@ -104,7 +107,7 @@ https://seekstorm.github.io/search-benchmark-game/
 **Benchmark code repository**
 https://github.com/SeekStorm/search-benchmark-game/
 
-See our blog post for more detailed information https://seekstorm.com/blog/sneak-peek-seekstorm-rust/
+See our **blog posts** for more detailed information: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/) and [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
 
 ### Why latency matters
 

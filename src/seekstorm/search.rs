@@ -160,6 +160,13 @@ pub enum QueryFacet {
         prefix: String,
         length: u16,
     },
+    Point {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, f64)>,
+        base: Point,
+        unit: DistanceUnit,
+    },
     #[default]
     None,
 }
@@ -176,6 +183,7 @@ pub enum Ranges {
     I64(RangeType, Vec<(String, i64)>),
     F32(RangeType, Vec<(String, f32)>),
     F64(RangeType, Vec<(String, f64)>),
+    Point(RangeType, Vec<(String, f64)>, Point, DistanceUnit),
     #[default]
     None,
 }
@@ -380,7 +388,7 @@ pub enum FacetFilter {
     },
     Point {
         field: String,
-        filter: (Point, f64, DistanceUnit),
+        filter: (Point, Range<f64>, DistanceUnit),
     },
 }
 
@@ -397,7 +405,7 @@ pub(crate) enum FilterSparse {
     F32(Range<f32>),
     F64(Range<f64>),
     String(Vec<u16>),
-    Point(Point, f64, DistanceUnit, Range<u64>),
+    Point(Point, Range<f64>, DistanceUnit, Range<u64>),
     #[default]
     None,
 }
@@ -444,15 +452,17 @@ pub type Point = Vec<f64>;
 ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
 ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
 ///    Examples:
-///    query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
-///    query_facets = vec![QueryFacet::U8 {field: "age".to_string(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+///    query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
+///    query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+///    query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
 /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
 ///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
 ///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
 ///    The facet counts depend only from the query and not which facet filters are selected.
 ///    Examples:
-///    facet_filter=vec![FacetFilter::String{field:"language".to_string(),filter:vec!["german".to_string()]},FacetFilter::String{field:"brand".to_string(),filter:vec!["apple".to_string(),"google".to_string()]}];
-///    facet_filter=vec![FacetFilter::U8{field:"age".to_string(),filter: 21..65}];
+///    facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+///    facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+///    facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
 /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
 ///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
 ///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -460,7 +470,9 @@ pub type Point = Vec<f64>;
 ///    until the n-th field value is either not equal or the last field is reached.
 ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
 ///    Sort is only enabled on facet fields that are defined in schema at create_index!
-///    Example: "sort":[{"field":"price","order":"desc"},{"field":"language","order":"asc"}]
+///    Examples:
+///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "lamguage".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
 ///  
 ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
 ///    Facets are defined in 3 different places:
@@ -613,15 +625,17 @@ impl Search for IndexArc {
     ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
     ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
     ///    Examples:
-    ///    query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
-    ///    query_facets = vec![QueryFacet::U8 {field: "age".to_string(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80),],}];
+    ///    query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
+    ///    query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+    ///    query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
     /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
     ///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
     ///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
     ///    The facet counts depend only from the query and not which facet filters are selected.
     ///    Examples:
-    ///    facet_filter=vec![FacetFilter::String{field:"language".to_string(),filter:vec!["german".to_string()]},FacetFilter::String{field:"brand".to_string(),filter:vec!["apple".to_string(),"google".to_string()]}];
-    ///    facet_filter=vec![FacetFilter::U8{field:"age".to_string(),filter: 21..65}];
+    ///    facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+    ///    facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+    ///    facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
     /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
     ///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
     ///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -629,7 +643,9 @@ impl Search for IndexArc {
     ///    until the n-th field value is either not equal or the last field is reached.
     ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
     ///    Sort is only enabled on facet fields that are defined in schema at create_index!   
-    ///    Example: "sort":[{"field":"price","order":"desc"},{"field":"language","order":"asc"}]
+    ///    Examples:
+    ///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "lamguage".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+    ///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
     ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
     ///    Facets are defined in 3 different places:
     ///    the facet fields are defined in schema at create_index,
@@ -815,9 +831,13 @@ impl Search for IndexArc {
                             if index_ref.facets[*idx].field_type == FieldType::Point {
                                 facet_filter_sparse[*idx] = FilterSparse::Point(
                                     filter.0.clone(),
-                                    filter.1,
+                                    filter.1.clone(),
                                     filter.2.clone(),
-                                    point_distance_to_morton_range(&filter.0, filter.1, &filter.2),
+                                    point_distance_to_morton_range(
+                                        &filter.0,
+                                        filter.1.end,
+                                        &filter.2,
+                                    ),
                                 );
                             }
                         }
@@ -1030,6 +1050,31 @@ impl Search for IndexArc {
                                     length: *length,
                                     ..Default::default()
                                 }
+                            }
+                        }
+                    }
+
+                    QueryFacet::Point {
+                        field,
+                        range_type,
+                        ranges,
+                        base,
+                        unit,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::Point {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::Point(
+                                        range_type.clone(),
+                                        ranges.clone(),
+                                        base.clone(),
+                                        unit.clone(),
+                                    ),
+                                    ..Default::default()
+                                };
                             }
                         }
                     }
@@ -1646,6 +1691,7 @@ impl Search for IndexArc {
                             Ranges::I64(range_type, _ranges) => range_type.clone(),
                             Ranges::F32(range_type, _ranges) => range_type.clone(),
                             Ranges::F64(range_type, _ranges) => range_type.clone(),
+                            Ranges::Point(range_type, _ranges, _base, _unit) => range_type.clone(),
                             _ => RangeType::CountWithinRange,
                         };
 
@@ -1712,6 +1758,11 @@ impl Search for IndexArc {
                                         Ranges::F64(_range_type, ranges) => {
                                             ranges[*a as usize].0.clone()
                                         }
+
+                                        Ranges::Point(_range_type, ranges, _base, _unit) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
+
                                         _ => "".into(),
                                     },
                                     *c,

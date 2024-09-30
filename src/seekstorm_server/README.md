@@ -88,11 +88,37 @@ curl --request GET --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey:
 ```
 ### update document(s) 
 
-not yet implemented
+update document
+```
+curl --request PATCH --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[0,{"title":"title1 test","body":"body1","url":"url1"}]'
+```
+
+update documents
+```
+curl --request PATCH --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[[1,{"title":"title1 test","body":"body1","url":"url1"}],[2,{"title":"title3 test","body":"body3 test","url":"url3"}]]'
+```
 
 ### delete document(s) 
 
-not yet implemented
+delete document, by single document ID in URL parameter
+```
+curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
+```
+
+delete document, by single document ID in JSON request object
+```
+curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data 0
+```
+
+delete documents, by vector of document IDs in JSON request object
+```
+curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[0,1]'
+```
+
+delete documents, by query in JSON request object
+```
+curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"query":"test","offset":0,"length":10,"realtime": true,"field_filter": ["title", "body"]}'
+```
 
 --- 
 

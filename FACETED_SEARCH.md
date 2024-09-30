@@ -348,27 +348,35 @@ If the **query is changed** and/or the **facet filter is changed** then both **s
 
 **String facet filter**
 ```rust
-        let facet_filter = vec![FacetFilter::String {
-            field: "age".into(),
-            filter: vec!["62".into()],
-        }];
+let facet_filter = vec![FacetFilter::String {
+    field: "age".into(),
+    filter: vec!["62".into()],
+}];
 ```
 
 **Numerical range facet filter**
 ```rust
-        let facet_filter = vec![FacetFilter::U8 {
-            field: "age".into(),
-            filter: 21..65,
-        }];
+let facet_filter = vec![FacetFilter::U8 {
+    field: "age".into(),
+    filter: 21..65,
+}];
 ```
 
 
-**facet_result_sort**: [Not yet ported] Search results can be sorted by any numerical facet field, either in ascending or descending order.
+**result_sort**: Search results can be sorted by any numerical facet field, either in ascending or descending order.
 
 If no sort field is specified, then the search results are sorted by rank in descending order per default.<br>
 If there are multiple sort field specified, then the results are ordered by the first field, and then by the second field (tie-break).<br>
 A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th sort criterion.
 
+**Result sort**
+```rust
+let result_sort = vec![ResultSort {
+    field: "age".into(),
+    order: SortOrder::Ascending,
+    base: FacetValue::None,
+}];
+```
 
 **Query facets result object**: Query facets with counts for all distinct values are returned in **facets** property of the search result.
 
