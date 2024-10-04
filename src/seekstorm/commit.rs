@@ -202,8 +202,8 @@ impl Index {
             }
 
             self.level_index.push(LevelIndex {
-                document_length_compressed_array, // !!! merged in merge_incomplete_index_level_to_level0
-                document_length_compressed_array_pointer, // !!!
+                document_length_compressed_array,
+                document_length_compressed_array_pointer,
                 docstore_pointer_docs: Vec::new(),
                 docstore_pointer_docs_pointer: 0,
             });
@@ -781,9 +781,6 @@ impl Index {
                 );
             }
         }
-
-        //  !no, dont move hashmap: key exists in both level0 and levelx: we need to merge it
-        //  !check key in strip_object0.segment (before iterate_docid): set key_already_exists_flag, save pointer, wie wird rootpointer detected/set?
 
         for key0 in 0..self.segment_number1 {
             if self.meta.access_type == AccessType::Mmap {

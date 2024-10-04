@@ -233,6 +233,11 @@ pub(crate) async fn intersection_docid(
 
         query_list_item_mut.p_run_sum =
             if query_list_item_mut.compression_type == CompressionType::Rle {
+                query_list_item_mut.p_run_count = read_u16(
+                    query_list_item_mut.byte_array,
+                    query_list_item_mut.compressed_doc_id_range,
+                ) as i32;
+
                 read_u16(
                     query_list_item_mut.byte_array,
                     query_list_item_mut.compressed_doc_id_range + 4,
@@ -428,118 +433,113 @@ pub(crate) async fn intersection_docid(
                 break;
             },
 
-            (CompressionType::Array, CompressionType::Delta) => {
-                'exit: loop {
-                    // !!!kein galopping für delta side!!!
+            (CompressionType::Array, CompressionType::Delta) => 'exit: loop {
+                let ushorts1 = cast_byte_ushort_slice(
+                    &query_list[t1].byte_array[query_list[t1].compressed_doc_id_range..],
+                );
+                let mut doc_id1: u16 = ushorts1[query_list[t1].p_docid];
+                let mut doc_id2: u16 = query_list[t2].docid as u16;
 
-                    let ushorts1 = cast_byte_ushort_slice(
-                        &query_list[t1].byte_array[query_list[t1].compressed_doc_id_range..],
-                    );
-                    let mut doc_id1: u16 = ushorts1[query_list[t1].p_docid];
-                    let mut doc_id2: u16 = query_list[t2].docid as u16;
-
-                    loop {
-                        match doc_id1.cmp(&doc_id2) {
-                            std::cmp::Ordering::Less => {
-                                if t2 > 1 {
-                                    t2 = 1;
-                                    if query_list[t2].compression_type != CompressionType::Delta {
-                                        query_list[t1].p_docid += 1;
-                                        if query_list[t1].p_docid == query_list[t1].p_docid_count {
-                                            break;
-                                        }
-                                        continue 'restart;
-                                    } else {
-                                        doc_id2 = query_list[t2].docid as u16;
-                                    }
-                                }
-
-                                query_list[t1].p_docid += 1;
-                                if query_list[t1].p_docid == query_list[t1].p_docid_count {
-                                    break;
-                                }
-                                doc_id1 = ushorts1[query_list[t1].p_docid];
-                            }
-                            std::cmp::Ordering::Greater => {
-                                query_list[t2].p_docid += 1;
-                                if query_list[t2].p_docid == query_list[t2].p_docid_count {
-                                    break;
-                                }
-
-                                query_list[t2].bitposition += query_list[t2].rangebits as u32;
-                                doc_id2 = query_list[t2].docid as u16
-                                    + bitpacking32_get_delta(
-                                        query_list[t2].byte_array,
-                                        query_list[t2].bitposition,
-                                        query_list[t2].rangebits as u32,
-                                    )
-                                    + 1;
-                                query_list[t2].docid = doc_id2 as i32;
-                            }
-                            std::cmp::Ordering::Equal => {
-                                if t2 + 1 < query_list.len() {
-                                    t2 += 1;
-                                    if query_list[t2].compression_type != CompressionType::Delta {
-                                        continue 'restart;
-                                    } else {
-                                        doc_id2 = query_list[t2].docid as u16;
-                                        continue;
-                                    }
-                                }
-
-                                add_result_multiterm_multifield(
-                                    index,
-                                    (block_id << 16) | doc_id1 as usize,
-                                    result_count,
-                                    search_result,
-                                    top_k,
-                                    result_type,
-                                    field_filter_set,
-                                    facet_filter,
-                                    non_unique_query_list,
-                                    query_list,
-                                    not_query_list,
-                                    phrase_query,
-                                    block_score,
-                                    all_terms_frequent,
-                                );
-
-                                for item in query_list.iter_mut() {
-                                    if item.compression_type == CompressionType::Array {
-                                        item.p_docid += 1;
-                                        if item.p_docid == item.p_docid_count {
-                                            break 'exit;
-                                        }
-                                    } else if (item.compression_type == CompressionType::Rle)
-                                        && (doc_id1 == item.run_end as u16)
-                                    {
-                                        item.p_run += 1;
-                                        if item.p_run == item.p_run_count {
-                                            break 'exit;
-                                        }
-                                        item.p_run_sum += read_u16(
-                                            item.byte_array,
-                                            item.compressed_doc_id_range
-                                                + 4
-                                                + (item.p_run << 2) as usize,
-                                        )
-                                            as i32;
-                                    }
-                                }
-
+                loop {
+                    match doc_id1.cmp(&doc_id2) {
+                        std::cmp::Ordering::Less => {
+                            if t2 > 1 {
                                 t2 = 1;
                                 if query_list[t2].compression_type != CompressionType::Delta {
+                                    query_list[t1].p_docid += 1;
+                                    if query_list[t1].p_docid == query_list[t1].p_docid_count {
+                                        break;
+                                    }
                                     continue 'restart;
+                                } else {
+                                    doc_id2 = query_list[t2].docid as u16;
                                 }
-                                doc_id1 = ushorts1[query_list[t1].p_docid];
-                                doc_id2 = query_list[t2].docid as u16;
                             }
+
+                            query_list[t1].p_docid += 1;
+                            if query_list[t1].p_docid == query_list[t1].p_docid_count {
+                                break;
+                            }
+                            doc_id1 = ushorts1[query_list[t1].p_docid];
+                        }
+                        std::cmp::Ordering::Greater => {
+                            query_list[t2].p_docid += 1;
+                            if query_list[t2].p_docid == query_list[t2].p_docid_count {
+                                break;
+                            }
+
+                            query_list[t2].bitposition += query_list[t2].rangebits as u32;
+                            doc_id2 = query_list[t2].docid as u16
+                                + bitpacking32_get_delta(
+                                    query_list[t2].byte_array,
+                                    query_list[t2].bitposition,
+                                    query_list[t2].rangebits as u32,
+                                )
+                                + 1;
+                            query_list[t2].docid = doc_id2 as i32;
+                        }
+                        std::cmp::Ordering::Equal => {
+                            if t2 + 1 < query_list.len() {
+                                t2 += 1;
+                                if query_list[t2].compression_type != CompressionType::Delta {
+                                    continue 'restart;
+                                } else {
+                                    doc_id2 = query_list[t2].docid as u16;
+                                    continue;
+                                }
+                            }
+
+                            add_result_multiterm_multifield(
+                                index,
+                                (block_id << 16) | doc_id1 as usize,
+                                result_count,
+                                search_result,
+                                top_k,
+                                result_type,
+                                field_filter_set,
+                                facet_filter,
+                                non_unique_query_list,
+                                query_list,
+                                not_query_list,
+                                phrase_query,
+                                block_score,
+                                all_terms_frequent,
+                            );
+
+                            for item in query_list.iter_mut() {
+                                if item.compression_type == CompressionType::Array {
+                                    item.p_docid += 1;
+                                    if item.p_docid == item.p_docid_count {
+                                        break 'exit;
+                                    }
+                                } else if (item.compression_type == CompressionType::Rle)
+                                    && (doc_id1 == item.run_end as u16)
+                                {
+                                    item.p_run += 1;
+                                    if item.p_run == item.p_run_count {
+                                        break 'exit;
+                                    }
+                                    item.p_run_sum += read_u16(
+                                        item.byte_array,
+                                        item.compressed_doc_id_range
+                                            + 4
+                                            + (item.p_run << 2) as usize,
+                                    ) as i32;
+                                }
+                            }
+
+                            t2 = 1;
+                            if query_list[t2].compression_type != CompressionType::Delta {
+                                continue 'restart;
+                            }
+                            doc_id1 = ushorts1[query_list[t1].p_docid];
+                            doc_id2 = query_list[t2].docid as u16;
                         }
                     }
-
-                    break;
                 }
-            }
+
+                break;
+            },
             (CompressionType::Bitmap, CompressionType::Bitmap) => 'exit: loop {
                 if query_list.len() == 2 && SPEEDUP_FLAG {
                     intersection_bitmap_2(
@@ -1053,124 +1053,119 @@ pub(crate) async fn intersection_docid(
                 break;
             },
 
-            (CompressionType::Delta, CompressionType::Delta) => {
-                'exit: loop {
-                    // !!!kein galopping für delta side!!!
+            (CompressionType::Delta, CompressionType::Delta) => 'exit: loop {
+                let mut doc_id1: u16 = query_list[t1].docid as u16;
+                let mut doc_id2: u16 = query_list[t2].docid as u16;
 
-                    let mut doc_id1: u16 = query_list[t1].docid as u16;
-                    let mut doc_id2: u16 = query_list[t2].docid as u16;
-
-                    loop {
-                        match doc_id1.cmp(&doc_id2) {
-                            std::cmp::Ordering::Less => {
-                                if t2 > 1 {
-                                    t2 = 1;
-                                    if query_list[t2].compression_type != CompressionType::Delta {
-                                        query_list[t1].p_docid += 1;
-                                        if query_list[t1].p_docid == query_list[t1].p_docid_count {
-                                            break;
-                                        }
-                                        continue 'restart;
-                                    } else {
-                                        doc_id2 = query_list[t2].docid as u16;
-                                    }
-                                }
-
-                                query_list[t1].p_docid += 1;
-                                if query_list[t1].p_docid == query_list[t1].p_docid_count {
-                                    break;
-                                }
-
-                                query_list[t1].bitposition += query_list[t1].rangebits as u32;
-                                doc_id1 = query_list[t1].docid as u16
-                                    + bitpacking32_get_delta(
-                                        query_list[t1].byte_array,
-                                        query_list[t1].bitposition,
-                                        query_list[t1].rangebits as u32,
-                                    )
-                                    + 1;
-                                query_list[t1].docid = doc_id1 as i32;
-                            }
-                            std::cmp::Ordering::Greater => {
-                                query_list[t2].p_docid += 1;
-                                if query_list[t2].p_docid == query_list[t2].p_docid_count {
-                                    break;
-                                }
-
-                                query_list[t2].bitposition += query_list[t2].rangebits as u32;
-                                doc_id2 = query_list[t2].docid as u16
-                                    + bitpacking32_get_delta(
-                                        query_list[t2].byte_array,
-                                        query_list[t2].bitposition,
-                                        query_list[t2].rangebits as u32,
-                                    )
-                                    + 1;
-                                query_list[t2].docid = doc_id2 as i32;
-                            }
-                            std::cmp::Ordering::Equal => {
-                                if t2 + 1 < query_list.len() {
-                                    t2 += 1;
-                                    if query_list[t2].compression_type != CompressionType::Delta {
-                                        continue 'restart;
-                                    } else {
-                                        doc_id2 = query_list[t2].docid as u16;
-                                        continue;
-                                    }
-                                }
-
-                                add_result_multiterm_multifield(
-                                    index,
-                                    (block_id << 16) | doc_id1 as usize,
-                                    result_count,
-                                    search_result,
-                                    top_k,
-                                    result_type,
-                                    field_filter_set,
-                                    facet_filter,
-                                    non_unique_query_list,
-                                    query_list,
-                                    not_query_list,
-                                    phrase_query,
-                                    block_score,
-                                    all_terms_frequent,
-                                );
-
-                                for item in query_list.iter_mut() {
-                                    if item.compression_type == CompressionType::Array {
-                                        item.p_docid += 1;
-                                        if item.p_docid == item.p_docid_count {
-                                            break 'exit;
-                                        }
-                                    } else if (item.compression_type == CompressionType::Rle)
-                                        && (doc_id1 == item.run_end as u16)
-                                    {
-                                        item.p_run += 1;
-                                        if item.p_run == item.p_run_count {
-                                            break 'exit;
-                                        }
-                                        item.p_run_sum += read_u16(
-                                            item.byte_array,
-                                            item.compressed_doc_id_range
-                                                + 4
-                                                + (item.p_run << 2) as usize,
-                                        )
-                                            as i32;
-                                    }
-                                }
-
+                loop {
+                    match doc_id1.cmp(&doc_id2) {
+                        std::cmp::Ordering::Less => {
+                            if t2 > 1 {
                                 t2 = 1;
                                 if query_list[t2].compression_type != CompressionType::Delta {
+                                    query_list[t1].p_docid += 1;
+                                    if query_list[t1].p_docid == query_list[t1].p_docid_count {
+                                        break;
+                                    }
                                     continue 'restart;
+                                } else {
+                                    doc_id2 = query_list[t2].docid as u16;
                                 }
-                                doc_id1 = query_list[t1].docid as u16;
-                                doc_id2 = query_list[t2].docid as u16;
                             }
+
+                            query_list[t1].p_docid += 1;
+                            if query_list[t1].p_docid == query_list[t1].p_docid_count {
+                                break;
+                            }
+
+                            query_list[t1].bitposition += query_list[t1].rangebits as u32;
+                            doc_id1 = query_list[t1].docid as u16
+                                + bitpacking32_get_delta(
+                                    query_list[t1].byte_array,
+                                    query_list[t1].bitposition,
+                                    query_list[t1].rangebits as u32,
+                                )
+                                + 1;
+                            query_list[t1].docid = doc_id1 as i32;
+                        }
+                        std::cmp::Ordering::Greater => {
+                            query_list[t2].p_docid += 1;
+                            if query_list[t2].p_docid == query_list[t2].p_docid_count {
+                                break;
+                            }
+
+                            query_list[t2].bitposition += query_list[t2].rangebits as u32;
+                            doc_id2 = query_list[t2].docid as u16
+                                + bitpacking32_get_delta(
+                                    query_list[t2].byte_array,
+                                    query_list[t2].bitposition,
+                                    query_list[t2].rangebits as u32,
+                                )
+                                + 1;
+                            query_list[t2].docid = doc_id2 as i32;
+                        }
+                        std::cmp::Ordering::Equal => {
+                            if t2 + 1 < query_list.len() {
+                                t2 += 1;
+                                if query_list[t2].compression_type != CompressionType::Delta {
+                                    continue 'restart;
+                                } else {
+                                    doc_id2 = query_list[t2].docid as u16;
+                                    continue;
+                                }
+                            }
+
+                            add_result_multiterm_multifield(
+                                index,
+                                (block_id << 16) | doc_id1 as usize,
+                                result_count,
+                                search_result,
+                                top_k,
+                                result_type,
+                                field_filter_set,
+                                facet_filter,
+                                non_unique_query_list,
+                                query_list,
+                                not_query_list,
+                                phrase_query,
+                                block_score,
+                                all_terms_frequent,
+                            );
+
+                            for item in query_list.iter_mut() {
+                                if item.compression_type == CompressionType::Array {
+                                    item.p_docid += 1;
+                                    if item.p_docid == item.p_docid_count {
+                                        break 'exit;
+                                    }
+                                } else if (item.compression_type == CompressionType::Rle)
+                                    && (doc_id1 == item.run_end as u16)
+                                {
+                                    item.p_run += 1;
+                                    if item.p_run == item.p_run_count {
+                                        break 'exit;
+                                    }
+                                    item.p_run_sum += read_u16(
+                                        item.byte_array,
+                                        item.compressed_doc_id_range
+                                            + 4
+                                            + (item.p_run << 2) as usize,
+                                    ) as i32;
+                                }
+                            }
+
+                            t2 = 1;
+                            if query_list[t2].compression_type != CompressionType::Delta {
+                                continue 'restart;
+                            }
+                            doc_id1 = query_list[t1].docid as u16;
+                            doc_id2 = query_list[t2].docid as u16;
                         }
                     }
-
-                    break;
                 }
-            }
+
+                break;
+            },
 
             (CompressionType::Bitmap, CompressionType::Delta) => 'exit: loop {
                 loop {
@@ -1265,7 +1260,7 @@ pub(crate) async fn intersection_docid(
                 runstart1 = cmp::max(runstart1, query_list[t1].docid as u16);
                 runstart2 = cmp::max(runstart2, query_list[t1].docid as u16);
 
-                'start: loop {
+                loop {
                     if runstart1 > runend2 {
                         query_list[t2].p_run += 1;
                         if query_list[t2].p_run == query_list[t2].p_run_count {
@@ -1344,7 +1339,7 @@ pub(crate) async fn intersection_docid(
                                     runend2 = runstart2 + runlength2;
                                     query_list[t2].run_end = runend2 as i32;
 
-                                    continue 'start;
+                                    continue 'restart;
                                 }
                             }
 
@@ -1435,94 +1430,54 @@ pub(crate) async fn intersection_docid(
                 break;
             },
 
-            (CompressionType::Rle, CompressionType::Bitmap) => {
-                'exit: loop {
-                    let ushorts1 = cast_byte_ushort_slice(
-                        &query_list[t1].byte_array[query_list[t1].compressed_doc_id_range..],
-                    );
-                    let mut ulongs2 = cast_byte_ulong_slice(
-                        &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
-                    );
+            (CompressionType::Rle, CompressionType::Bitmap) => 'exit: loop {
+                let ushorts1 = cast_byte_ushort_slice(
+                    &query_list[t1].byte_array[query_list[t1].compressed_doc_id_range..],
+                );
+                let mut ulongs2 = cast_byte_ulong_slice(
+                    &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
+                );
 
-                    query_list[t1].p_run_count = ushorts1[0] as i32;
+                query_list[t1].p_run_count = ushorts1[0] as i32;
 
-                    loop {
-                        let mut runstart1 = ushorts1[1 + (query_list[t1].p_run * 2) as usize];
-                        let runlength1 = ushorts1[2 + (query_list[t1].p_run * 2) as usize];
-                        let runend1 = runstart1 + runlength1;
-                        query_list[t1].run_end = runend1 as i32;
+                loop {
+                    let mut runstart1 = ushorts1[1 + (query_list[t1].p_run * 2) as usize];
+                    let runlength1 = ushorts1[2 + (query_list[t1].p_run * 2) as usize];
+                    let runend1 = runstart1 + runlength1;
+                    query_list[t1].run_end = runend1 as i32;
 
-                        runstart1 = cmp::max(runstart1, query_list[t1].docid as u16);
-                        let mut intersect_mask: u64 = if (query_list[t1].docid as u16) < runstart1 {
-                            u64::MAX
-                        } else {
-                            u64::MAX << (query_list[t1].docid & 63)
-                        };
+                    runstart1 = cmp::max(runstart1, query_list[t1].docid as u16);
+                    let mut intersect_mask: u64 = if (query_list[t1].docid as u16) < runstart1 {
+                        u64::MAX
+                    } else {
+                        u64::MAX << (query_list[t1].docid & 63)
+                    };
 
-                        let byte_pos_start = runstart1 >> 6;
-                        let byte_pos_end = runend1 >> 6;
+                    let byte_pos_start = runstart1 >> 6;
+                    let byte_pos_end = runend1 >> 6;
 
-                        for ulong_pos in byte_pos_start..=byte_pos_end {
-                            let mut intersect: u64 = ulongs2[ulong_pos as usize] & intersect_mask;
+                    for ulong_pos in byte_pos_start..=byte_pos_end {
+                        let mut intersect: u64 = ulongs2[ulong_pos as usize] & intersect_mask;
 
-                            if ulong_pos == byte_pos_start {
-                                intersect &= u64::MAX << (runstart1 & 63);
-                            }
-                            if ulong_pos == byte_pos_end {
-                                intersect &= u64::MAX >> (63 - (runend1 & 63));
-                            }
+                        if ulong_pos == byte_pos_start {
+                            intersect &= u64::MAX << (runstart1 & 63);
+                        }
+                        if ulong_pos == byte_pos_end {
+                            intersect &= u64::MAX >> (63 - (runend1 & 63));
+                        }
 
-                            while intersect != 0 {
-                                let bit_pos = unsafe { _mm_tzcnt_64(intersect) };
-                                let doc_id = ((ulong_pos as u32) << 6) + bit_pos as u32;
+                        while intersect != 0 {
+                            let bit_pos = unsafe { _mm_tzcnt_64(intersect) };
+                            let doc_id = ((ulong_pos as u32) << 6) + bit_pos as u32;
 
-                                if (query_list[t1].docid as u32 != doc_id) && (t2 > 1) {
-                                    t2 = 1;
-                                    query_list[t1].docid = doc_id as i32;
-                                    continue 'restart;
-                                }
+                            if (query_list[t1].docid as u32 != doc_id) && (t2 > 1) {
+                                t2 = 1;
                                 query_list[t1].docid = doc_id as i32;
+                                continue 'restart;
+                            }
+                            query_list[t1].docid = doc_id as i32;
 
-                                if t2 + 1 < query_list.len() {
-                                    for item in ulongs2
-                                        .iter()
-                                        .take(ulong_pos as usize)
-                                        .skip(query_list[t2].p_run as usize)
-                                    {
-                                        query_list[t2].p_run_sum += item.count_ones() as i32
-                                    }
-                                    query_list[t2].p_docid = if bit_pos == 0 {
-                                        query_list[t2].p_run_sum as usize
-                                    } else {
-                                        query_list[t2].p_run_sum as usize
-                                            + (ulongs2[ulong_pos as usize] << (64 - bit_pos))
-                                                .count_ones()
-                                                as usize
-                                    };
-                                    query_list[t2].p_run = ulong_pos as i32;
-
-                                    t2 += 1;
-                                    if query_list[t2].compression_type != CompressionType::Bitmap {
-                                        query_list[t1].docid = doc_id as i32;
-                                        continue 'restart;
-                                    } else {
-                                        ulongs2 = cast_byte_ulong_slice(
-                                            &query_list[t2].byte_array
-                                                [query_list[t2].compressed_doc_id_range..],
-                                        );
-                                        intersect &= ulongs2[ulong_pos as usize];
-                                        continue;
-                                    }
-                                }
-
-                                intersect = unsafe { _blsr_u64(intersect) };
-
-                                query_list[t1].p_docid = query_list[t1].p_run_sum as usize
-                                    - runlength1 as usize
-                                    + doc_id as usize
-                                    - ushorts1[1 + (query_list[t1].p_run * 2) as usize] as usize
-                                    + query_list[t1].p_run as usize;
-
+                            if t2 + 1 < query_list.len() {
                                 for item in ulongs2
                                     .iter()
                                     .take(ulong_pos as usize)
@@ -1540,94 +1495,127 @@ pub(crate) async fn intersection_docid(
                                 };
                                 query_list[t2].p_run = ulong_pos as i32;
 
-                                add_result_multiterm_multifield(
-                                    index,
-                                    (block_id << 16) | doc_id as usize,
-                                    result_count,
-                                    search_result,
-                                    top_k,
-                                    result_type,
-                                    field_filter_set,
-                                    facet_filter,
-                                    non_unique_query_list,
-                                    query_list,
-                                    not_query_list,
-                                    phrase_query,
-                                    block_score,
-                                    all_terms_frequent,
-                                );
-                                query_list[t1].docid = doc_id as i32 + 1;
-
-                                for item in query_list.iter_mut().skip(1) {
-                                    if item.compression_type == CompressionType::Array {
-                                        item.p_docid += 1;
-                                        if item.p_docid == item.p_docid_count {
-                                            break 'exit;
-                                        };
-                                    } else if (item.compression_type == CompressionType::Rle)
-                                        && (doc_id == item.run_end as u32)
-                                    {
-                                        item.p_run = 1;
-                                        if item.p_run == item.p_run_count {
-                                            break 'exit;
-                                        };
-
-                                        item.p_run_sum += read_u16(
-                                            item.byte_array,
-                                            item.compressed_doc_id_range
-                                                + 4
-                                                + (item.p_run << 2) as usize,
-                                        )
-                                            as i32;
-                                    }
-                                }
-
-                                t2 = 1;
+                                t2 += 1;
                                 if query_list[t2].compression_type != CompressionType::Bitmap {
-                                    // !!! bevor er restart macht muss er docid1 erhöhen und evtl schleife mit exit beenden
-                                    if doc_id == query_list[t1].run_end as u32 {
-                                        query_list[t1].p_run += 1;
-                                        if query_list[t1].p_run == query_list[t1].p_run_count {
-                                            break 'exit;
-                                        }
-                                        query_list[t1].p_run_sum += ushorts1
-                                            [2 + (query_list[t1].p_run * 2) as usize]
-                                            as i32;
-                                    }
-                                    query_list[t1].docid = doc_id as i32 + 1;
+                                    query_list[t1].docid = doc_id as i32;
                                     continue 'restart;
+                                } else {
+                                    ulongs2 = cast_byte_ulong_slice(
+                                        &query_list[t2].byte_array
+                                            [query_list[t2].compressed_doc_id_range..],
+                                    );
+                                    intersect &= ulongs2[ulong_pos as usize];
+                                    continue;
                                 }
-                                ulongs2 = cast_byte_ulong_slice(
-                                    &query_list[t2].byte_array
-                                        [query_list[t2].compressed_doc_id_range..],
-                                );
-                                intersect &= ulongs2[ulong_pos as usize];
+                            }
 
-                                intersect_mask = u64::MAX;
+                            intersect = unsafe { _blsr_u64(intersect) };
+
+                            query_list[t1].p_docid = query_list[t1].p_run_sum as usize
+                                - runlength1 as usize
+                                + doc_id as usize
+                                - ushorts1[1 + (query_list[t1].p_run * 2) as usize] as usize
+                                + query_list[t1].p_run as usize;
+
+                            for item in ulongs2
+                                .iter()
+                                .take(ulong_pos as usize)
+                                .skip(query_list[t2].p_run as usize)
+                            {
+                                query_list[t2].p_run_sum += item.count_ones() as i32
+                            }
+                            query_list[t2].p_docid = if bit_pos == 0 {
+                                query_list[t2].p_run_sum as usize
+                            } else {
+                                query_list[t2].p_run_sum as usize
+                                    + (ulongs2[ulong_pos as usize] << (64 - bit_pos)).count_ones()
+                                        as usize
+                            };
+                            query_list[t2].p_run = ulong_pos as i32;
+
+                            add_result_multiterm_multifield(
+                                index,
+                                (block_id << 16) | doc_id as usize,
+                                result_count,
+                                search_result,
+                                top_k,
+                                result_type,
+                                field_filter_set,
+                                facet_filter,
+                                non_unique_query_list,
+                                query_list,
+                                not_query_list,
+                                phrase_query,
+                                block_score,
+                                all_terms_frequent,
+                            );
+                            query_list[t1].docid = doc_id as i32 + 1;
+
+                            for item in query_list.iter_mut().skip(1) {
+                                if item.compression_type == CompressionType::Array {
+                                    item.p_docid += 1;
+                                    if item.p_docid == item.p_docid_count {
+                                        break 'exit;
+                                    };
+                                } else if (item.compression_type == CompressionType::Rle)
+                                    && (doc_id == item.run_end as u32)
+                                {
+                                    item.p_run = 1;
+                                    if item.p_run == item.p_run_count {
+                                        break 'exit;
+                                    };
+
+                                    item.p_run_sum += read_u16(
+                                        item.byte_array,
+                                        item.compressed_doc_id_range
+                                            + 4
+                                            + (item.p_run << 2) as usize,
+                                    ) as i32;
+                                }
                             }
 
                             t2 = 1;
                             if query_list[t2].compression_type != CompressionType::Bitmap {
-                                query_list[t1].docid =
-                                    cmp::min(((ulong_pos + 1) << 6) as i32, runend1 as i32 + 1);
-
+                                if doc_id == query_list[t1].run_end as u32 {
+                                    query_list[t1].p_run += 1;
+                                    if query_list[t1].p_run == query_list[t1].p_run_count {
+                                        break 'exit;
+                                    }
+                                    query_list[t1].p_run_sum +=
+                                        ushorts1[2 + (query_list[t1].p_run * 2) as usize] as i32;
+                                }
+                                query_list[t1].docid = doc_id as i32 + 1;
                                 continue 'restart;
                             }
                             ulongs2 = cast_byte_ulong_slice(
                                 &query_list[t2].byte_array
                                     [query_list[t2].compressed_doc_id_range..],
                             );
+                            intersect &= ulongs2[ulong_pos as usize];
+
+                            intersect_mask = u64::MAX;
                         }
 
-                        query_list[t1].p_run += 1;
-                        if query_list[t1].p_run == query_list[t1].p_run_count {
-                            break 'exit;
-                        } // !!!!!!! wird p_docid_count nicht überall gesetzt
-                        query_list[t1].p_run_sum +=
-                            ushorts1[2 + (query_list[t1].p_run * 2) as usize] as i32;
+                        t2 = 1;
+                        if query_list[t2].compression_type != CompressionType::Bitmap {
+                            query_list[t1].docid =
+                                cmp::min(((ulong_pos + 1) << 6) as i32, runend1 as i32 + 1);
+
+                            continue 'restart;
+                        }
+                        ulongs2 = cast_byte_ulong_slice(
+                            &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
+                        );
                     }
+
+                    query_list[t1].p_run += 1;
+                    if query_list[t1].p_run == query_list[t1].p_run_count {
+                        break 'exit;
+                    }
+                    query_list[t1].p_run_sum +=
+                        ushorts1[2 + (query_list[t1].p_run * 2) as usize] as i32;
                 }
-            }
+            },
 
             (CompressionType::Rle, CompressionType::Array) => 'exit: loop {
                 let ushorts1 = cast_byte_ushort_slice(
@@ -1785,138 +1773,133 @@ pub(crate) async fn intersection_docid(
 
             (CompressionType::Bitmap, CompressionType::Array) => {}
 
-            (CompressionType::Bitmap, CompressionType::Rle) => {
-                'exit: loop {
-                    let ulongs1 = cast_byte_ulong_slice(
-                        &query_list[t1].byte_array[query_list[t1].compressed_doc_id_range..],
-                    );
-                    let mut ushorts2 = cast_byte_ushort_slice(
-                        &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
-                    );
-                    query_list[t2].p_docid_count = ushorts2[0] as usize;
+            (CompressionType::Bitmap, CompressionType::Rle) => 'exit: loop {
+                let ulongs1 = cast_byte_ulong_slice(
+                    &query_list[t1].byte_array[query_list[t1].compressed_doc_id_range..],
+                );
+                let mut ushorts2 = cast_byte_ushort_slice(
+                    &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
+                );
+                query_list[t2].p_docid_count = ushorts2[0] as usize;
 
-                    loop {
-                        let mut run_start2 = ushorts2[1 + (query_list[t2].p_docid * 2)];
-                        let run_length2 = ushorts2[2 + (query_list[t2].p_docid * 2)];
-                        let run_end2 = run_start2 + run_length2;
-                        query_list[t2].run_end = run_end2 as i32;
+                loop {
+                    let mut run_start2 = ushorts2[1 + (query_list[t2].p_docid * 2)];
+                    let run_length2 = ushorts2[2 + (query_list[t2].p_docid * 2)];
+                    let run_end2 = run_start2 + run_length2;
+                    query_list[t2].run_end = run_end2 as i32;
 
-                        run_start2 = cmp::max(run_start2, query_list[t1].docid as u16);
-                        let mut intersect_mask: u64 = if (query_list[t1].docid as u16) < run_start2
-                        {
-                            u64::MAX
-                        } else {
-                            u64::MAX << (query_list[t1].docid & 63)
-                        };
+                    run_start2 = cmp::max(run_start2, query_list[t1].docid as u16);
+                    let mut intersect_mask: u64 = if (query_list[t1].docid as u16) < run_start2 {
+                        u64::MAX
+                    } else {
+                        u64::MAX << (query_list[t1].docid & 63)
+                    };
 
-                        let byte_pos_start = run_start2 >> 6;
-                        let byte_pos_end = run_end2 >> 6;
+                    let byte_pos_start = run_start2 >> 6;
+                    let byte_pos_end = run_end2 >> 6;
 
-                        for ulong_pos in byte_pos_start..=byte_pos_end {
-                            let mut intersect: u64 = ulongs1[ulong_pos as usize] & intersect_mask;
+                    for ulong_pos in byte_pos_start..=byte_pos_end {
+                        let mut intersect: u64 = ulongs1[ulong_pos as usize] & intersect_mask;
 
-                            if ulong_pos == byte_pos_start {
-                                intersect &= u64::MAX << (run_start2 & 63);
-                            }
-                            if ulong_pos == byte_pos_end {
-                                intersect &= u64::MAX >> (63 - (run_end2 & 63));
-                            }
+                        if ulong_pos == byte_pos_start {
+                            intersect &= u64::MAX << (run_start2 & 63);
+                        }
+                        if ulong_pos == byte_pos_end {
+                            intersect &= u64::MAX >> (63 - (run_end2 & 63));
+                        }
 
-                            while intersect != 0 {
-                                let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u16;
-                                let doc_id = ((ulong_pos as u32) << 6) + bit_pos as u32;
+                        while intersect != 0 {
+                            let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u16;
+                            let doc_id = ((ulong_pos as u32) << 6) + bit_pos as u32;
 
-                                if t2 + 1 < query_list.len() {
-                                    query_list[t2].p_docid = query_list[t2].p_run_sum as usize
-                                        - run_length2 as usize
-                                        + doc_id as usize
-                                        - run_start2 as usize
-                                        + query_list[t2].p_run as usize;
-
-                                    t2 += 1;
-                                    if query_list[t2].compression_type != CompressionType::Rle {
-                                        query_list[t1].docid = doc_id as i32;
-                                        continue 'restart;
-                                    } else {
-                                        continue;
-                                    }
-                                }
-
-                                intersect = unsafe { _blsr_u64(intersect) };
+                            if t2 + 1 < query_list.len() {
                                 query_list[t2].p_docid = query_list[t2].p_run_sum as usize
                                     - run_length2 as usize
                                     + doc_id as usize
                                     - run_start2 as usize
                                     + query_list[t2].p_run as usize;
-                                add_result_multiterm_multifield(
-                                    index,
-                                    (block_id << 16) | doc_id as usize,
-                                    result_count,
-                                    search_result,
-                                    top_k,
-                                    result_type,
-                                    field_filter_set,
-                                    facet_filter,
-                                    non_unique_query_list,
-                                    query_list,
-                                    not_query_list,
-                                    phrase_query,
-                                    block_score,
-                                    all_terms_frequent,
-                                );
 
-                                for item in query_list.iter_mut().skip(1) {
-                                    if item.compression_type != CompressionType::Rle {
-                                        if item.compression_type != CompressionType::Bitmap {
-                                            item.p_docid += 1;
-                                            if item.p_docid == item.p_docid_count {
-                                                break 'exit;
-                                            }
-                                        }
-                                    } else if doc_id == item.run_end as u32 {
-                                        item.p_run += 1;
-                                        if item.p_run == item.p_run_count {
+                                t2 += 1;
+                                if query_list[t2].compression_type != CompressionType::Rle {
+                                    query_list[t1].docid = doc_id as i32;
+                                    continue 'restart;
+                                } else {
+                                    continue;
+                                }
+                            }
+
+                            intersect = unsafe { _blsr_u64(intersect) };
+                            query_list[t2].p_docid = query_list[t2].p_run_sum as usize
+                                - run_length2 as usize
+                                + doc_id as usize
+                                - run_start2 as usize
+                                + query_list[t2].p_run as usize;
+                            add_result_multiterm_multifield(
+                                index,
+                                (block_id << 16) | doc_id as usize,
+                                result_count,
+                                search_result,
+                                top_k,
+                                result_type,
+                                field_filter_set,
+                                facet_filter,
+                                non_unique_query_list,
+                                query_list,
+                                not_query_list,
+                                phrase_query,
+                                block_score,
+                                all_terms_frequent,
+                            );
+
+                            for item in query_list.iter_mut().skip(1) {
+                                if item.compression_type != CompressionType::Rle {
+                                    if item.compression_type != CompressionType::Bitmap {
+                                        item.p_docid += 1;
+                                        if item.p_docid == item.p_docid_count {
                                             break 'exit;
                                         }
-                                        item.p_run_sum += read_u16(
-                                            item.byte_array,
-                                            item.compressed_doc_id_range
-                                                + 4
-                                                + (item.p_run << 2) as usize,
-                                        )
-                                            as i32;
                                     }
+                                } else if doc_id == item.run_end as u32 {
+                                    item.p_run += 1;
+                                    if item.p_run == item.p_run_count {
+                                        break 'exit;
+                                    }
+                                    item.p_run_sum += read_u16(
+                                        item.byte_array,
+                                        item.compressed_doc_id_range
+                                            + 4
+                                            + (item.p_run << 2) as usize,
+                                    ) as i32;
                                 }
-
-                                t2 = 1;
-                                if query_list[t2].compression_type != CompressionType::Rle {
-                                    query_list[t1].docid = doc_id as i32 + 1;
-                                    continue 'restart;
-                                }
-                                intersect &= ulongs1[ulong_pos as usize];
-
-                                intersect_mask = u64::MAX;
                             }
 
                             t2 = 1;
                             if query_list[t2].compression_type != CompressionType::Rle {
-                                query_list[t1].docid = ((ulong_pos + 1) as i32) << 6;
+                                query_list[t1].docid = doc_id as i32 + 1;
                                 continue 'restart;
                             }
-                            ushorts2 = cast_byte_ushort_slice(
-                                &query_list[t2].byte_array
-                                    [query_list[t2].compressed_doc_id_range..],
-                            );
+                            intersect &= ulongs1[ulong_pos as usize];
+
+                            intersect_mask = u64::MAX;
                         }
 
-                        query_list[t2].p_docid += 1;
+                        t2 = 1;
+                        if query_list[t2].compression_type != CompressionType::Rle {
+                            query_list[t1].docid = ((ulong_pos + 1) as i32) << 6;
+                            continue 'restart;
+                        }
+                        ushorts2 = cast_byte_ushort_slice(
+                            &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
+                        );
+                    }
 
-                        if query_list[t2].p_docid == query_list[t2].p_docid_count {
-                            break 'exit;
-                        } // !!!!!!! wird p_docid_count nicht überall gesetzt?
+                    query_list[t2].p_docid += 1;
+
+                    if query_list[t2].p_docid == query_list[t2].p_docid_count {
+                        break 'exit;
                     }
                 }
-            }
+            },
 
             _ => {
                 println!("forbidden compression combination:  block: {}  t1: {} {} {} {:?}   t2: {} {} {} {:?} {} ",  block_id , 

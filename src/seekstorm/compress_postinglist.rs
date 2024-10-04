@@ -71,7 +71,7 @@ pub(crate) fn compress_postinglist(
                     (delta_compression_size_byte >> 2) as u16
                 } else {
                     u16::MAX
-                }, // !!
+                },
             );
             compress_postinglist_rle(
                 index,
@@ -111,7 +111,7 @@ pub(crate) fn compress_postinglist(
                 } else {
                     u16::MAX
                 },
-            ); // !!
+            );
             compress_postinglist_rle(
                 index,
                 roaring_offset,

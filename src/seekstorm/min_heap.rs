@@ -545,9 +545,7 @@ impl<'a> MinHeap<'a> {
                 } else {
                     return false;
                 }
-            }
-            // != position0: find the item, replace the score, swap it with the lowest item, heapify
-            else {
+            } else {
                 if self
                     .result_ordering(
                         Result {

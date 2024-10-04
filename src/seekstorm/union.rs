@@ -349,7 +349,7 @@ pub(crate) async fn union_blockid<'a>(
                 if block_id == block_id_min {
                     if plo.p_block < plo.p_block_max - 1 {
                         plo.p_block += 1;
-                        break_loop = false; // !!!! auch bei denen docid > docid_min
+                        break_loop = false;
                     } else {
                         plo.end_flag_block = true;
                     }
