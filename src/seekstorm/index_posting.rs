@@ -143,12 +143,13 @@ impl Index {
             }
         }
 
-        let mut posting_pointer_size = if value.size_compressed_positions_key < 32_768 {
-            value.pointer_pivot_p_docid = value.posting_count as u16 + 1;
-            2u8
-        } else {
-            3u8
-        };
+        let mut posting_pointer_size =
+            if value.size_compressed_positions_key < 32_768 && value.posting_count < 65_535 {
+                value.pointer_pivot_p_docid = value.posting_count as u16 + 1;
+                2u8
+            } else {
+                3u8
+            };
 
         let mut nonempty_field_count = 0;
         let mut only_longest_field = true;

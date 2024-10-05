@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Exception fixed that occurred when intersecting more than two terms, including two terms with RLE compressed posting list [(#5)](https://github.com/SeekStorm/SeekStorm/issues/5). 
+- Exception fixed that occurred when searching terms with 65.536 postings per block. The fix requires reindexing if your index has been affected!
 
 ## [0.6.0] - 2024-09-30
 
