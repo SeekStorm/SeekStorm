@@ -965,11 +965,14 @@ pub(crate) async fn intersection_docid(
                         doc_id1 = ushorts1[query_list[t1].p_docid];
                     } else {
                         if t2 + 1 < query_list.len() {
+                            run_length2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
+
                             query_list[t2].p_docid = query_list[t2].p_run_sum as usize
                                 - run_length2 as usize
                                 + doc_id1 as usize
                                 - run_start2 as usize
                                 + query_list[t2].p_run as usize;
+
                             t2 += 1;
                             if query_list[t2].compression_type != CompressionType::Rle {
                                 continue 'restart;
@@ -979,7 +982,7 @@ pub(crate) async fn intersection_docid(
                                         [query_list[t2].compressed_doc_id_range..],
                                 );
 
-                                query_list[t2].p_docid_count = ushorts2[0] as usize;
+                                query_list[t2].p_run_count = ushorts2[0] as i32;
                                 run_start2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
                                 run_length2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
                                 run_end2 = run_start2 + run_length2;
@@ -994,6 +997,7 @@ pub(crate) async fn intersection_docid(
                             + doc_id1 as usize
                             - run_start2 as usize
                             + query_list[t2].p_run as usize;
+
                         add_result_multiterm_multifield(
                             index,
                             (block_id << 16) | doc_id1 as usize,
@@ -1039,6 +1043,7 @@ pub(crate) async fn intersection_docid(
                         if query_list[t2].compression_type != CompressionType::Rle {
                             continue 'restart;
                         }
+
                         doc_id1 = ushorts1[query_list[t1].p_docid];
                         ushorts2 = cast_byte_ushort_slice(
                             &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
@@ -1257,10 +1262,7 @@ pub(crate) async fn intersection_docid(
                 let mut runend2 = runstart2 + runlength2;
                 query_list[t2].run_end = runend2 as i32;
 
-                runstart1 = cmp::max(runstart1, query_list[t1].docid as u16);
-                runstart2 = cmp::max(runstart2, query_list[t1].docid as u16);
-
-                loop {
+                'start: loop {
                     if runstart1 > runend2 {
                         query_list[t2].p_run += 1;
                         if query_list[t2].p_run == query_list[t2].p_run_count {
@@ -1270,6 +1272,7 @@ pub(crate) async fn intersection_docid(
                         runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
                         runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
                         runend2 = runstart2 + runlength2;
+
                         query_list[t2].p_run_sum += runlength2 as i32;
                         query_list[t2].run_end = runend2 as i32;
                     } else if runend1 < runstart2 {
@@ -1309,6 +1312,7 @@ pub(crate) async fn intersection_docid(
                         runstart1 = ushorts1[(1 + query_list[t1].p_run * 2) as usize];
                         runlength1 = ushorts1[(2 + query_list[t1].p_run * 2) as usize];
                         runend1 = runstart1 + runlength1;
+
                         query_list[t1].p_run_sum += runlength1 as i32;
                         query_list[t1].run_end = runend1 as i32;
                     } else {
@@ -1324,8 +1328,9 @@ pub(crate) async fn intersection_docid(
                                     + doc_id as usize
                                     - ushorts2[(1 + query_list[t2].p_run * 2) as usize] as usize
                                     + query_list[t2].p_run as usize;
+
                                 t2 += 1;
-                                if query_list[t2].compression_type == CompressionType::Rle {
+                                if query_list[t2].compression_type != CompressionType::Rle {
                                     query_list[t1].docid = doc_id;
                                     continue 'restart;
                                 } else {
@@ -1333,13 +1338,14 @@ pub(crate) async fn intersection_docid(
                                         &query_list[t2].byte_array
                                             [query_list[t2].compressed_doc_id_range..],
                                     );
-                                    query_list[t2].p_docid_count = ushorts2[0] as usize;
+
+                                    query_list[t2].p_run_count = ushorts2[0] as i32;
                                     runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
                                     runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
                                     runend2 = runstart2 + runlength2;
                                     query_list[t2].run_end = runend2 as i32;
 
-                                    continue 'restart;
+                                    continue 'start;
                                 }
                             }
 
@@ -1348,11 +1354,13 @@ pub(crate) async fn intersection_docid(
                                 + doc_id as usize
                                 - ushorts1[(1 + query_list[t1].p_run * 2) as usize] as usize
                                 + query_list[t1].p_run as usize;
+
                             query_list[t2].p_docid = query_list[t2].p_run_sum as usize
                                 - runlength2 as usize
                                 + doc_id as usize
                                 - ushorts2[(1 + query_list[t2].p_run * 2) as usize] as usize
                                 + query_list[t2].p_run as usize;
+
                             add_result_multiterm_multifield(
                                 index,
                                 (block_id << 16) | doc_id as usize,
@@ -1385,6 +1393,7 @@ pub(crate) async fn intersection_docid(
                                     if item.p_run == item.p_run_count {
                                         break 'exit;
                                     }
+
                                     item.p_run_sum += read_u16(
                                         item.byte_array,
                                         item.compressed_doc_id_range
@@ -1397,6 +1406,7 @@ pub(crate) async fn intersection_docid(
                             t2 = 1;
                             if query_list[t2].compression_type != CompressionType::Rle {
                                 query_list[t1].docid = doc_id + 1;
+
                                 continue 'restart;
                             }
 
@@ -1531,6 +1541,7 @@ pub(crate) async fn intersection_docid(
                                     + (ulongs2[ulong_pos as usize] << (64 - bit_pos)).count_ones()
                                         as usize
                             };
+
                             query_list[t2].p_run = ulong_pos as i32;
 
                             add_result_multiterm_multifield(
@@ -1560,7 +1571,7 @@ pub(crate) async fn intersection_docid(
                                 } else if (item.compression_type == CompressionType::Rle)
                                     && (doc_id == item.run_end as u32)
                                 {
-                                    item.p_run = 1;
+                                    item.p_run += 1;
                                     if item.p_run == item.p_run_count {
                                         break 'exit;
                                     };
@@ -1709,6 +1720,7 @@ pub(crate) async fn intersection_docid(
                             + doc_id2 as usize
                             - runstart1 as usize
                             + query_list[t1].p_run as usize;
+
                         add_result_multiterm_multifield(
                             index,
                             (block_id << 16) | doc_id2 as usize,
@@ -1753,6 +1765,10 @@ pub(crate) async fn intersection_docid(
                             continue 'restart;
                         }
 
+                        ushorts2 = cast_byte_ushort_slice(
+                            &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
+                        );
+
                         if doc_id2 == query_list[t1].run_end as u16 {
                             query_list[t1].p_run += 1;
                             if query_list[t1].p_run == query_list[t1].p_run_count {
@@ -1780,7 +1796,6 @@ pub(crate) async fn intersection_docid(
                 let mut ushorts2 = cast_byte_ushort_slice(
                     &query_list[t2].byte_array[query_list[t2].compressed_doc_id_range..],
                 );
-                query_list[t2].p_docid_count = ushorts2[0] as usize;
 
                 loop {
                     let mut run_start2 = ushorts2[1 + (query_list[t2].p_docid * 2)];

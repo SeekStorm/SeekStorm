@@ -37,8 +37,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Cross-platform (Windows, Linux, MacOS)
 * SIMD (Single Instruction, Multiple Data) hardware acceleration support,  
   both for x86-64 (AMD64 and Intel 64) and AArch64 (ARM, Apple Silicon).
-* Single-machine scalability: serving thousands of concurrent queries with low latency from a single commodity server  
-  without needing clusters or proprietary hardware accelerators.
+* Single-machine scalability: serving thousands of concurrent queries with low latency from a single commodity server without needing clusters or proprietary hardware accelerators.
 
 Query types
 + OR  disjunction  union
