@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.6.2"
+version = "0.7.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -38,7 +38,7 @@ num-derive = "0.4.2"
 num-traits = "0.2.19"
 regex = "1.11.0"
 lazy_static = "1.5.0"
-hyper = { version = "0.14.30", features = ["full"] }
+hyper = { version = "0.14.31", features = ["full"] }
 url = "2.5.2"
 sha2 = "0.10.8"
 itertools = "0.13.0"

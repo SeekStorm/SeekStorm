@@ -299,6 +299,7 @@ pub(crate) fn tokenizer(
     let mut previous_term_hash = 0;
 
     let mut bigrams: Vec<TermObject> = Vec::new();
+
     for term_string in non_unique_terms_line.iter_mut() {
         if is_query {
             let mut query_type_term = if is_phrase {
@@ -306,6 +307,7 @@ pub(crate) fn tokenizer(
             } else {
                 QueryType::Union
             };
+
             if term_string.starts_with('+') {
                 if query_type != &QueryType::Phrase {
                     *query_type = QueryType::Intersection;

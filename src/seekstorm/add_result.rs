@@ -1637,14 +1637,22 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
                 (false, 0b10111) => {
                     if phrase_query {
-                        println!("unsupported 3 byte pointer embedded 111");
+                        println!(
+                            "unsupported 3 byte pointer embedded 111 {} {:032b}",
+                            index.indexed_field_vec.len() == 1,
+                            (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
+                        );
                         plo.embedded_positions = [0, 0, 0, 0]
                     };
                 }
 
                 (_, _) => {
                     if phrase_query {
-                        println!("unsupported 3 byte pointer embedded");
+                        println!(
+                            "unsupported 3 byte pointer embedded {} {:032b}",
+                            index.indexed_field_vec.len() == 1,
+                            (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
+                        );
                         plo.embedded_positions = [0, 0, 0, 0]
                     };
                 }
@@ -2033,7 +2041,11 @@ pub(crate) fn decode_positions_singleterm_multifield(
                 }
 
                 (_, _) => {
-                    println!("unsupported single 2 byte pointer embedded");
+                    println!(
+                        "unsupported single 2 byte pointer embedded {} {:032b}",
+                        index.indexed_field_vec.len() == 1,
+                        rank_position_pointer >> 12
+                    );
                 }
             }
         } else {
@@ -2130,11 +2142,19 @@ pub(crate) fn decode_positions_singleterm_multifield(
                     field_vec.extend([(field_id, 2), (field_id_2, 1)]);
                 }
                 (false, 0b10111) => {
-                    println!("unsupported single 3 byte pointer embedded 111");
+                    println!(
+                        "unsupported single 3 byte pointer embedded 111 {} {:032b}",
+                        index.indexed_field_vec.len() == 1,
+                        (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
+                    );
                 }
 
                 (_, _) => {
-                    println!("unsupported single 3 byte pointer embedded");
+                    println!(
+                        "unsupported single 3 byte pointer embedded {} {:032b}",
+                        index.indexed_field_vec.len() == 1,
+                        (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
+                    );
                 }
             }
         };
@@ -2218,7 +2238,10 @@ pub(crate) fn decode_positions_singleterm_singlefield(
             }
 
             _ => {
-                println!("unsupported single 2 byte pointer embedded");
+                println!(
+                    "unsupported single 2 byte pointer embedded {:032b}",
+                    rank_position_pointer >> 14
+                );
             }
         }
     } else {
@@ -2237,7 +2260,10 @@ pub(crate) fn decode_positions_singleterm_singlefield(
             }
 
             _ => {
-                println!("unsupported single 3 byte pointer embedded");
+                println!(
+                    "unsupported single 3 byte pointer embedded {:032b}",
+                    (rank_position_pointer & 0b11111111_11111111_11111111) >> 21
+                );
             }
         }
     }
@@ -2348,7 +2374,11 @@ pub(crate) fn decode_positions_commit(
                 }
 
                 (_, _) => {
-                    println!("unsupported single 2 byte pointer embedded");
+                    println!(
+                        "unsupported single 2 byte pointer embedded {} {:032b}",
+                        indexed_field_vec_len == 1,
+                        rank_position_pointer >> 12
+                    );
                 }
             }
         } else {
@@ -2436,11 +2466,19 @@ pub(crate) fn decode_positions_commit(
                     field_vec.extend([(field_id, 2), (field_id_2, 1)]);
                 }
                 (false, 0b10111) => {
-                    println!("unsupported single 3 byte pointer embedded 111");
+                    println!(
+                        "unsupported single 3 byte pointer embedded 111 {} {:032b}",
+                        indexed_field_vec_len == 1,
+                        (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
+                    );
                 }
 
                 (_, _) => {
-                    println!("unsupported single 3 byte pointer embedded");
+                    println!(
+                        "unsupported single 3 byte pointer embedded {} {:032b}",
+                        indexed_field_vec_len == 1,
+                        (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
+                    );
                 }
             }
         };

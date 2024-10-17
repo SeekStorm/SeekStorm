@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2024-10-11
+
+### Added
+
+- The SeekStorm server now allows to ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) format via console `ingest [data_filename] [api_key] [index_id]` command.  
+  The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+- ingest_json() is also available as public method in the SeekStorm library.
+- The [Embedded web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) of SeekStorm multi-tenancy server now allows to search and display results from any index in your web browser without coding.  
+  The field names to display in the web UI can be automatically detected or pre-defined. 
+- seekstorm_server readme updated ([src/seekstorm_server/README.md](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#command-line-parameters)).
+- Optionally specify the default query type (Union/Interection) via REST API (Intersection is default if not specified).
+
+### Changed
+
+- jQuery v3.3.1 updated to v3.7.1 (used in server web UI).
+
 ## [0.6.2] - 2024-10-10
 
 ### Fixed

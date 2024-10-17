@@ -38,11 +38,9 @@ pub struct SearchRequestObject {
     pub query_string: String,
     pub offset: usize,
     pub length: usize,
-
     #[serde(default)]
     #[derivative(Default(value = "TopkCount"))]
     pub result_type: ResultType,
-
     #[serde(default)]
     #[derivative(Default(value = "false"))]
     pub realtime: bool,
@@ -60,6 +58,9 @@ pub struct SearchRequestObject {
     pub facet_filter: Vec<FacetFilter>,
     #[serde(default)]
     pub result_sort: Vec<ResultSort>,
+    #[serde(default)]
+    #[derivative(Default(value = "Intersection"))]
+    pub query_type_default: QueryType,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -81,9 +82,11 @@ pub struct CreateIndexRequest {
     pub index_name: String,
     #[serde(default)]
     pub schema: Vec<SchemaField>,
+    #[serde(default)]
     #[derivative(Default(value = "Bm25f"))]
     pub similarity: SimilarityType,
-    #[derivative(Default(value = "Alpha"))]
+    #[serde(default)]
+    #[derivative(Default(value = "AsciiAlphabetic"))]
     pub tokenizer: TokenizerType,
 }
 
@@ -440,7 +443,7 @@ pub(crate) async fn delete_documents_by_query_api(
     index_arc
         .delete_documents_by_query(
             search_request.query_string.to_owned(),
-            QueryType::Intersection,
+            search_request.query_type_default,
             search_request.offset,
             search_request.length,
             search_request.realtime,
@@ -462,7 +465,7 @@ pub(crate) async fn query_index_api(
     let result_object = index_arc
         .search(
             search_request.query_string.to_owned(),
-            QueryType::Intersection,
+            search_request.query_type_default,
             search_request.offset,
             search_request.length,
             search_request.result_type,

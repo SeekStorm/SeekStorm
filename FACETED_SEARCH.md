@@ -111,7 +111,7 @@ and set
 in the schema (see code below).
 
 Faceting can be enabled both for string field type and numerical field types.
-Both numerical, string and text fields can be indexed (field_indexed=true) and stored (field_stored=true) in the json document,
+Both numerical, string and text fields can be indexed (indexed=true) and stored (stored=true) in the json document,
 but with field_facet=true a numerical or string field is additionally stored in a binary format, for fast faceting and sorting without document store access (decompression, deserialization).
 Setting a numerical field to "facet":true is also the precondition for sorting the search result by this fields value ('score' is treated as a special field to allow sorting by relevancy).
 

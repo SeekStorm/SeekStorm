@@ -254,6 +254,7 @@ pub mod highlighter;
 /// Operate the index: reate_index, open_index, clear_index, close_index, delete_index, index_document(s)
 pub mod index;
 pub(crate) mod index_posting;
+pub mod ingest;
 pub(crate) mod intersection;
 pub(crate) mod intersection_simd;
 pub(crate) mod min_heap;

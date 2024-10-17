@@ -76,16 +76,18 @@ pub enum AccessType {
 }
 
 /// Similarity type defines the scoring and ranking of the search results: Bm25f or Bm25fProximity (considers term proximity, e.g. for implicit phrase search with improved relevancy)
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
 pub enum SimilarityType {
     Bm25f = 0,
+    #[default]
     Bm25fProximity = 1,
 }
 
 /// Defines tokenizer behavior: AsciiAlphabetic (for benchmark compatibility) or UnicodeAlphanumeric (all Unicode alphanumeric chars are recognized as token)
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy)]
+#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default)]
 pub enum TokenizerType {
     /// Only ASCII alphabetic chars are recognized as token
+    #[default]
     AsciiAlphabetic = 0,
     /// All Unicode alphanumeric chars are recognized as token
     UnicodeAlphanumeric = 1,
@@ -347,7 +349,7 @@ pub enum FieldType {
     Date,
 }
 
-/// Defines a field in index schema: field_name, field_stored, field_indexed , field_type, field_boost.
+/// Defines a field in index schema: field_name, stored, indexed , field_type, field_boost.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SchemaField {
     /// unique name of a field
@@ -360,7 +362,7 @@ pub struct SchemaField {
     pub field_type: FieldType,
     /// optional faceting for a field
     /// Faceting can be enabled both for string field type and numerical field types.
-    /// both numerical and string fields can be indexed (field_indexed=true) and stored (field_stored=true) in the json document,
+    /// both numerical and string fields can be indexed (indexed=true) and stored (stored=true) in the json document,
     /// but with field_facet=true they are additionally stored in a binary format, for fast faceting and sorting without docstore access (decompression, deserialization)
     #[serde(skip_serializing_if = "is_default_bool")]
     #[serde(default = "default_false")]
@@ -493,7 +495,7 @@ pub struct Index {
     pub(crate) last_level_docstore_file_start_pos: u64,
     /// Number of allowed parallel indexed documents (default=available_parallelism). Can be used to detect wehen all indexing processes are finished.
     pub permits: Arc<Semaphore>,
-    /// Defines a field in index schema: field_name, field_stored, field_indexed , field_type, field_boost.
+    /// Defines a field in index schema: field_name, stored, indexed , field_type, field_boost.
     pub schema_map: HashMap<String, SchemaField>,
     /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
     pub meta: IndexMetaObject,

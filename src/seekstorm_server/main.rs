@@ -35,7 +35,7 @@
 //! ---
 //! ### create index
 //! ```
-//! curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","field_stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
+//! curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
 //! ```
 //! ### get index
 //! ```
@@ -131,8 +131,6 @@ lazy_static! {
 mod api_endpoints;
 #[doc(hidden)]
 mod http_server;
-#[doc(hidden)]
-mod ingest;
 #[doc(hidden)]
 mod multi_tenancy;
 #[doc(hidden)]

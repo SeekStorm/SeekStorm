@@ -444,7 +444,7 @@ pub type Point = Vec<f64>;
 /// * `length`: number of search results to return.
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
-/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
+/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
 /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
 ///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
 ///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
@@ -617,7 +617,7 @@ impl Search for IndexArc {
     /// * `length`: number of search results to return.
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
-    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.field_indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
+    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
     /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
     ///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
     ///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.

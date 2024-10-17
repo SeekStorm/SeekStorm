@@ -18,7 +18,7 @@ use hyper::Method;
 use hyper::StatusCode;
 use hyper::{Body, Request, Response, Server};
 use seekstorm::index::Document;
-use seekstorm::search::ResultType;
+use seekstorm::search::{QueryType, ResultType};
 use sha2::Digest;
 use sha2::Sha256;
 use std::{convert::Infallible, net::SocketAddr};
@@ -49,7 +49,7 @@ const INDEX_HTML: &str = include_str!("web/index.html");
 const FLEXBOX_CSS: &str = include_str!("web/css/flexboxgrid.min.css");
 const MASTER_CSS: &str = include_str!("web/css/master.css");
 const MASTER_JS: &str = include_str!("web/js/master.js");
-const JQUERY_JS: &str = include_str!("web/js/jquery-3.3.1.min.js");
+const JQUERY_JS: &str = include_str!("web/js/jquery-3.7.1.min.js");
 const LOGO_SVG: &[u8] = include_bytes!("web/svg/logo.svg");
 const FAVICON_16: &[u8] = include_bytes!("web/favicon-16x16.png");
 const FAVICON_32: &[u8] = include_bytes!("web/favicon-32x32.png");
@@ -234,6 +234,7 @@ pub(crate) async fn http_request_handler(
                                     query_facets: Vec::new(),
                                     facet_filter: Vec::new(),
                                     result_sort: Vec::new(),
+                                    query_type_default: QueryType::Intersection,
                                 }
                             } else {
                                 let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
@@ -888,7 +889,7 @@ pub(crate) async fn http_request_handler(
             "/css/flexboxgrid.min.css" => Ok(Response::new(FLEXBOX_CSS.into())),
             "/css/master.css" => Ok(Response::new(MASTER_CSS.into())),
             "/js/master.js" => Ok(Response::new(MASTER_JS.into())),
-            "/js/jquery-3.3.1.min.js" => Ok(Response::new(JQUERY_JS.into())),
+            "/js/jquery-3.7.1.min.js" => Ok(Response::new(JQUERY_JS.into())),
 
             "/svg/logo.svg" => {
                 let body: Body = LOGO_SVG.into();

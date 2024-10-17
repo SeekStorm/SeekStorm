@@ -52,11 +52,12 @@ Result types
 
 ### SeekStorm multi-tenancy search server 
 
-  * with RESTful API
-  * multi-tenancy index management
+  * Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints)
+  * Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+  * Multi-tenancy index management
   * API-key management
-  * embedded web server and UI
-  * Cross-platform: runs on Linux and Windows (other OS untested)
+  * [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
+  * Cross-platform: runs on Linux, Windows, and macOS (other OS untested)
 
 ---
 
@@ -539,7 +540,7 @@ cargo build --release
 Preprocessed English Wikipedia corpus (5,032,105 documents, 8,28 GB decompressed). 
 Although wiki-articles.json has a .JSON extension, it is not a valid JSON file. 
 It is a text file, where every line contains a JSON object with url, title and body attributes. 
-The format is called ndjson, also referred to as "Newline delimited JSON".
+The format is called [ndjson](https://github.com/ndjson/ndjson-spec) ("Newline delimited JSON").
 
 [Download Wikipedia corpus](https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2?dl=0)
 
@@ -593,6 +594,9 @@ delete
 **Shutdown server**
 
 Type 'quit' into the commandline of the running SeekStorm server.
+```
+quit
+```
 
 ### Online Demo: DeepHN Hacker News search
 

@@ -1,10 +1,12 @@
 # SeekStorm server 
 
 * The SeekStorm server is a standalone search server to be accessed via HTTP, while the SeekStorm crate/library can be embedded into your program.
-* it is both accessible via RESTful API endpoints and via embedded web UI
-* supports multi-tenancy: multiple users, each with multiple indices
+* Index and search via [RESTful API](#rest-api-endpoints) endpoints and via [Embedded  web UI](r#open-embedded-web-ui-in-browser).
+* Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+* Multi-tenancy index management: multiple users, each with multiple indices
 * API-key management
-* rate-limiting
+* Rate-limiting
+* Cross-platform: runs on Linux, Windows, and macOS (other OS untested)
 
 ## Command line parameters
 
@@ -18,23 +20,90 @@
 
 ## Console commands
 
-* quit to exit
+Index wiki-articles.json if present in same directory like seekstorm_server.exe. The index will be created in the demo API key with default parameters.
+```
+ingest
+```
+
+Index a local data file in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command. 
+```
+ingest [data_filename] [api_key] [index_id]
+```
+
+The path to the json file is specified by the [data_filename] parameter, the API key is specified by the [api_key] parameter, the index ID by specified in the [index_id] parameter.  
+If no absolute path is specified then a path relative to the seekstorm_server.exe directory is used.  
+The document file ingestion is streamed without loading the whole document vector into memory to allow for bulk import with unlimited file size and document number while keeping RAM consumption low.
+
+CAUTION: The **array of documents** is expected to be in the **root element** of the data file.
+
+If API key or index specified by [api_key] and [index_id] parameter do not yet exist they have to be created prior to ingest via REST API endpoints:
+
+create api key: Use master API key displayed in the server console at startup.
+```
+curl --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
+```
+
+create index: Use individual API key (use create api key above to generate)
+```
+curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
+```
+
+CAUTION: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
+
+
+After ingest you can search the index via [REST API endpoints](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints) or via [browser in the embedded web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser).  
+The field names to display in the web UI can be automatically detected or pre-defined. 
+
+<br><br>
+
+```
+delete
+```
+Delete the demo API key and all its indices.
+
+```
+quit
+```
+Exit server.
+
+## Manual file manipulation
+
+While the server is not running, you may manually delete or backup API key and index directories or modify schema files in a text editor.  
+In the index.json file you also may change access_type":"Mmap" to access_type":"Ram" and vice versa, as the index file format is identical.
 
 ## Open embedded Web UI in browser
+
+The embedded web UI allows to search and display results (document fields) from an index:  
 [http://127.0.0.1](http://127.0.0.1)
 
-To use the embedded Web UI for a selected index you need to change the API_KEY and index_id (in QUERY_URL) in master.js
-**before** building the seekstorm_server (html/css/js are embedded ressources). 
+Per default the web UI is set to the [Wikipedia demo](https://github.com/SeekStorm/SeekStorm/?tab=readme-ov-file#build-a-wikipedia-search-engine-with-the-seekstorm-server) **API key**, **index_id** and **field names** ([use console command `ingest` first](https://github.com/SeekStorm/SeekStorm/tree/main/src/seekstorm_server#console-commands)).  
+
+<img src="../../assets/wikipedia_demo.png" width="800">
+<br><br>
+
+To overwrite the default **API key** and **index_id** use url parameters: [http://127.0.0.1/?api_key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&index_id=0](http://127.0.0.1/?api_key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&index_id=0).  
+This allows to open an web UI to multiple indices in different web browser tabs simultaneously.
+
+If the default names defined in [master.js](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/web/js/master.js) for `TITLE_FIELD`, `TEXT_FIELD` and `URL_FIELD` do not exist in the schema of the selected index, then the first three fields (stored=true) from the index schema are automatically used for display in the web UI instead.
+
+To permanently change the default **API key** or **index_id** of the embedded Web UI modify `API_KEY` and `INDEX_ID` in [/src/seekstorm_server/web/js/master.js](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/web/js/master.js) **before** building the seekstorm_server (html/css/js are embedded ressources).  
+To permanently change the default **field names** from the index schema that are used in the web UI modify `TITLE_FIELD`, `TEXT_FIELD` and `URL_FIELD` [/src/seekstorm_server/web/js/master.js](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/web/js/master.js) **before** building the seekstorm_server.
+
+The embedded Web UI is intended for demonstration, test and debugging rather than for end customer use.
 
 ## REST API endpoints
 
 Use VSC extension "Rest client" to execute API calls, inspect responses and generate code snippets in your language:  
 [**interactive API endpoint examples**](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
 
+CAUTION: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
+
 
 ### create api key
+Use master API key displayed in the server console at startup.
+WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
 ```
-curl --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
+curl --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
 ```
 ### delete api key
 ```
@@ -45,7 +114,7 @@ curl --request DELETE --url http://127.0.0.1/api/v1/apikey --header 'apikey: AAA
 
 ### create index
 ```
-curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","field_stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
+curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
 ```
 ### get index
 ```
