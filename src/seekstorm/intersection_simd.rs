@@ -270,13 +270,8 @@ pub(crate) fn intersection_vector16(
             let mut v_b = _mm_loadu_si128(b[i_b..].as_ptr() as *const __m128i);
 
             while (a[i_a] == 0) || (b[i_b] == 0) {
-                let res_v = _mm_cmpestrm(
-                    v_b,
-                    vectorlength_i32,
-                    v_a,
-                    vectorlength_i32,
-                    CMPESTRM_CTRL,
-                );
+                let res_v =
+                    _mm_cmpestrm(v_b, vectorlength_i32, v_a, vectorlength_i32, CMPESTRM_CTRL);
                 let r = _mm_extract_epi32(res_v, 0);
 
                 let sm16 =

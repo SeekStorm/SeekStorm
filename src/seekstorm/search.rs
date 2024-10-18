@@ -1149,19 +1149,20 @@ impl Search for IndexArc {
                 if non_unique_term.op == QueryType::Not {
                     let query_list_map_len = not_query_list_map.len();
                     let not_query_list_option = not_query_list_map.get(&key_hash);
-                    if not_query_list_option.is_none() && !not_found_terms_hashset.contains(&key_hash) {
+                    if not_query_list_option.is_none()
+                        && !not_found_terms_hashset.contains(&key_hash)
+                    {
                         let posting_count;
                         let max_list_score;
                         let blocks;
                         let blocks_len;
                         let found_plo = if index_ref.meta.access_type == AccessType::Mmap {
-                            let posting_list_object_index_option =
-                                decode_posting_list_object(
-                                    &index_ref.segments_index[key0 as usize],
-                                    &index_ref,
-                                    key_hash,
-                                    false,
-                                );
+                            let posting_list_object_index_option = decode_posting_list_object(
+                                &index_ref.segments_index[key0 as usize],
+                                &index_ref,
+                                key_hash,
+                                false,
+                            );
 
                             if posting_list_object_index_option.is_none() {
                                 posting_count = 0;

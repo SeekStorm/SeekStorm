@@ -1,6 +1,4 @@
-use std::{
-    cmp::Ordering,
-};
+use std::cmp::Ordering;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::{_pdep_u64, _pext_u64};
@@ -31,13 +29,13 @@ pub fn encode_morton_2_d(point: &Point) -> u64 {
     let y_u32 = ((point[1] * 10_000_000.0) as i32) as u32;
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
-    if is_x86_feature_detected!("bmi2") {
-        return unsafe {
-            _pdep_u64(x_u32.into(), 0x5555555555555555)
-                | _pdep_u64(y_u32.into(), 0xAAAAAAAAAAAAAAAA)
-        };
-    }
+        if is_x86_feature_detected!("bmi2") {
+            return unsafe {
+                _pdep_u64(x_u32.into(), 0x5555555555555555)
+                    | _pdep_u64(y_u32.into(), 0xAAAAAAAAAAAAAAAA)
+            };
         }
+    }
 
     (encode_morton_64_bit(y_u32) << 1) | encode_morton_64_bit(x_u32)
 }
