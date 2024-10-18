@@ -1,7 +1,9 @@
 use std::{
-    arch::x86_64::{_pdep_u64, _pext_u64},
     cmp::Ordering,
 };
+
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::{_pdep_u64, _pext_u64};
 
 use crate::{
     index::DistanceUnit,
@@ -27,13 +29,15 @@ fn encode_morton_64_bit(x: u32) -> u64 {
 pub fn encode_morton_2_d(point: &Point) -> u64 {
     let x_u32 = ((point[0] * 10_000_000.0) as i32) as u32;
     let y_u32 = ((point[1] * 10_000_000.0) as i32) as u32;
-
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
     if is_x86_feature_detected!("bmi2") {
         return unsafe {
             _pdep_u64(x_u32.into(), 0x5555555555555555)
                 | _pdep_u64(y_u32.into(), 0xAAAAAAAAAAAAAAAA)
         };
     }
+        }
 
     (encode_morton_64_bit(y_u32) << 1) | encode_morton_64_bit(x_u32)
 }
@@ -53,15 +57,18 @@ fn decode_morton_64_bit(code: u64) -> u64 {
 /// This method is lossy/quantized as a single u64 Morton code is converted to two f64 coordinate values!
 #[inline]
 pub fn decode_morton_2_d(code: u64) -> Point {
-    if is_x86_feature_detected!("bmi2") {
-        let x_u32 = unsafe { _pext_u64(code, 0x5555555555555555) as u32 };
-        let y_u32 = unsafe { _pext_u64(code, 0xAAAAAAAAAAAAAAAA) as u32 };
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("bmi2") {
+            let x_u32 = unsafe { _pext_u64(code, 0x5555555555555555) as u32 };
+            let y_u32 = unsafe { _pext_u64(code, 0xAAAAAAAAAAAAAAAA) as u32 };
 
-        return vec![
-            (x_u32 as i32) as f64 / 10_000_000.0,
-            (y_u32 as i32) as f64 / 10_000_000.0,
-        ];
-    };
+            return vec![
+                (x_u32 as i32) as f64 / 10_000_000.0,
+                (y_u32 as i32) as f64 / 10_000_000.0,
+            ];
+        };
+    }
 
     let x_u32 = decode_morton_64_bit(code) as u32;
     let y_u32 = decode_morton_64_bit(code >> 1) as u32;

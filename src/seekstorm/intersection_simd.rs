@@ -232,6 +232,7 @@ const SHUFFLE_MASK16: [u8; 4096] = [
     5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 ];
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 const CMPESTRM_CTRL: i32 = _SIDD_UWORD_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK;
 
 #[cfg(target_arch = "x86_64")]
@@ -485,10 +486,11 @@ pub(crate) fn intersection_vector16(
                     index,
                     (block_id << 16) | a[i_a] as usize,
                     result_count,
-                    result_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     non_unique_query_list,
                     query_list,
                     not_query_list,
