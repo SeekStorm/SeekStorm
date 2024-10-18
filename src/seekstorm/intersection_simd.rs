@@ -23,7 +23,6 @@ use crate::{
 };
 
 /// Fast SIMD intersection and union partially ported and modified from Daniel Lemire's CRoaring project (which is dual licensed Apache/MIT).
-
 #[cfg(target_arch = "x86_64")]
 const SHUFFLE_MASK16: [u8; 4096] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -270,8 +269,13 @@ pub(crate) fn intersection_vector16(
             let mut v_b = _mm_loadu_si128(b[i_b..].as_ptr() as *const __m128i);
 
             while (a[i_a] == 0) || (b[i_b] == 0) {
-                let res_v =
-                    _mm_cmpestrm(v_b, vectorlength_i32, v_a, vectorlength_i32, CMPESTRM_CTRL);
+                let res_v = _mm_cmpestrm(
+                    v_b,
+                    vectorlength_i32,
+                    v_a,
+                    vectorlength_i32,
+                    CMPESTRM_CTRL,
+                );
                 let r = _mm_extract_epi32(res_v, 0);
 
                 let sm16 =
@@ -442,10 +446,11 @@ pub(crate) fn intersection_vector16(
     result_count: &mut i32,
     block_id: usize,
     index: &Index,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
@@ -512,10 +517,11 @@ pub(crate) fn intersection_vector16(
                         index,
                         (block_id << 16) | a as usize,
                         result_count,
-                        result_candidates,
+                        search_result,
                         top_k,
                         result_type,
                         field_filter_set,
+                        facet_filter,
                         non_unique_query_list,
                         query_list,
                         not_query_list,
@@ -541,10 +547,11 @@ pub(crate) fn intersection_vector16(
     result_count: &mut i32,
     block_id: usize,
     index: &Index,
-    result_candidates: &mut MinHeap,
+    search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery],
     query_list: &mut [PostingListObjectQuery],
     not_query_list: &mut [PostingListObjectQuery],
@@ -570,10 +577,11 @@ pub(crate) fn intersection_vector16(
                     index,
                     (block_id << 16) | a as usize,
                     result_count,
-                    result_candidates,
+                    search_result,
                     top_k,
                     result_type,
                     field_filter_set,
+                    facet_filter,
                     non_unique_query_list,
                     query_list,
                     not_query_list,
