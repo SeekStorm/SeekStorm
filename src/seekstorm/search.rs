@@ -1149,83 +1149,78 @@ impl Search for IndexArc {
                 if non_unique_term.op == QueryType::Not {
                     let query_list_map_len = not_query_list_map.len();
                     let not_query_list_option = not_query_list_map.get(&key_hash);
-                    match not_query_list_option {
-                        None => {
-                            if !not_found_terms_hashset.contains(&key_hash) {
-                                let posting_count;
-                                let max_list_score;
-                                let blocks;
-                                let blocks_len;
-                                let found_plo = if index_ref.meta.access_type == AccessType::Mmap {
-                                    let posting_list_object_index_option =
-                                        decode_posting_list_object(
-                                            &index_ref.segments_index[key0 as usize],
-                                            &index_ref,
-                                            key_hash,
-                                            false,
-                                        );
+                    if not_query_list_option.is_none() && !not_found_terms_hashset.contains(&key_hash) {
+                        let posting_count;
+                        let max_list_score;
+                        let blocks;
+                        let blocks_len;
+                        let found_plo = if index_ref.meta.access_type == AccessType::Mmap {
+                            let posting_list_object_index_option =
+                                decode_posting_list_object(
+                                    &index_ref.segments_index[key0 as usize],
+                                    &index_ref,
+                                    key_hash,
+                                    false,
+                                );
 
-                                    if posting_list_object_index_option.is_none() {
-                                        posting_count = 0;
-                                        max_list_score = 0.0;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = 0;
-                                        false
-                                    } else {
-                                        let plo = posting_list_object_index_option.unwrap();
+                            if posting_list_object_index_option.is_none() {
+                                posting_count = 0;
+                                max_list_score = 0.0;
+                                blocks = &DUMMY_VEC;
+                                blocks_len = 0;
+                                false
+                            } else {
+                                let plo = posting_list_object_index_option.unwrap();
 
-                                        posting_count = plo.posting_count;
-                                        max_list_score = plo.max_list_score;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = plo.blocks.len();
-                                        blocks_vec.push(plo.blocks);
-                                        true
-                                    }
-                                } else {
-                                    let posting_list_object_index_option = index_ref.segments_index
-                                        [key0 as usize]
-                                        .segment
-                                        .get(&key_hash);
-                                    if posting_list_object_index_option.is_none() {
-                                        posting_count = 0;
-                                        max_list_score = 0.0;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = 0;
-                                        false
-                                    } else {
-                                        let plo = posting_list_object_index_option.unwrap();
-
-                                        posting_count = plo.posting_count;
-                                        max_list_score = plo.max_list_score;
-                                        blocks_len = plo.blocks.len();
-                                        blocks = &plo.blocks;
-                                        true
-                                    }
-                                };
-
-                                if found_plo {
-                                    let value_new = PostingListObjectQuery {
-                                        posting_count,
-                                        max_list_score,
-                                        blocks,
-                                        blocks_index: blocks_vec.len(),
-                                        p_block_max: blocks_len as i32,
-                                        term: term_no_diacritics_umlaut_case.clone(),
-                                        key0,
-                                        term_index_unique: query_list_map_len,
-                                        idf,
-                                        idf_bigram1,
-                                        idf_bigram2,
-                                        is_bigram: non_unique_term.is_bigram,
-                                        ..Default::default()
-                                    };
-                                    not_query_list_map.insert(key_hash, value_new);
-                                } else {
-                                    not_found_terms_hashset.insert(key_hash);
-                                }
+                                posting_count = plo.posting_count;
+                                max_list_score = plo.max_list_score;
+                                blocks = &DUMMY_VEC;
+                                blocks_len = plo.blocks.len();
+                                blocks_vec.push(plo.blocks);
+                                true
                             }
+                        } else {
+                            let posting_list_object_index_option = index_ref.segments_index
+                                [key0 as usize]
+                                .segment
+                                .get(&key_hash);
+                            if posting_list_object_index_option.is_none() {
+                                posting_count = 0;
+                                max_list_score = 0.0;
+                                blocks = &DUMMY_VEC;
+                                blocks_len = 0;
+                                false
+                            } else {
+                                let plo = posting_list_object_index_option.unwrap();
+
+                                posting_count = plo.posting_count;
+                                max_list_score = plo.max_list_score;
+                                blocks_len = plo.blocks.len();
+                                blocks = &plo.blocks;
+                                true
+                            }
+                        };
+
+                        if found_plo {
+                            let value_new = PostingListObjectQuery {
+                                posting_count,
+                                max_list_score,
+                                blocks,
+                                blocks_index: blocks_vec.len(),
+                                p_block_max: blocks_len as i32,
+                                term: term_no_diacritics_umlaut_case.clone(),
+                                key0,
+                                term_index_unique: query_list_map_len,
+                                idf,
+                                idf_bigram1,
+                                idf_bigram2,
+                                is_bigram: non_unique_term.is_bigram,
+                                ..Default::default()
+                            };
+                            not_query_list_map.insert(key_hash, value_new);
+                        } else {
+                            not_found_terms_hashset.insert(key_hash);
                         }
-                        Some(_) => {}
                     }
                 } else {
                     let query_list_map_len = query_list_map.len();
