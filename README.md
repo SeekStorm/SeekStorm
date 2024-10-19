@@ -83,6 +83,8 @@ Term proximity ranking provides more relevant results compared to BM25.
 **Real-time**  
 True real-time search, as opposed to NRT: every indexed document is immediately searchable, even before and during commit.
 
+## Benchmarks
+
 <img src="assets/search_benchmark_game1.png" width="800" alt="Benchmark">
 <br>
 <br>
@@ -91,11 +93,12 @@ True real-time search, as opposed to NRT: every indexed document is immediately 
 <br>
 <img src="assets/ranking.jpg" width="800" alt="Ranking">
 
-### Benchmarks
+*the who: vanilla BM25 ranking vs. SeekStorm proximity ranking*<br><br>
 
-Comparing SeekStorm with other open-source search engine libraries (BM25 lexical search) using the open-source search_benchmark_game developed by [Tantivy](https://github.com/quickwit-oss/search-benchmark-game/) and [Jason Wolfe](https://github.com/jason-wolfe/search-index-benchmark-game).
+**Methodology**  
+Comparing different open-source search engine libraries (BM25 lexical search) using the open-source **search_benchmark_game** developed by [Tantivy](https://github.com/quickwit-oss/search-benchmark-game/) and [Jason Wolfe](https://github.com/jason-wolfe/search-index-benchmark-game).
 
-Benefits:
+**Benefits**
 + using a proven open-source benchmark used by other search libraries for comparability
 + adapters writtten mostly by search library authors themselves for maximum authenticity and faithfulness
 + results can be replicated by everbody on their own infrastructure
