@@ -601,6 +601,11 @@ Type 'quit' into the commandline of the running SeekStorm server.
 quit
 ```
 
+**Customizing**
+
+Do you want to use something similar for your own project?
+Have a look at the [ingest](/src/seekstorm_server/README.md#console-commands) and [web UI](/src/seekstorm_server/README.md#open-embedded-web-ui-in-browser) documentation.
+
 ### Online Demo: DeepHN Hacker News search
 
 Full-text search 30M Hacker News posts AND linked web pages

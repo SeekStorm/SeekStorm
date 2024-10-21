@@ -1,7 +1,7 @@
 # SeekStorm server 
 
 * The SeekStorm server is a standalone search server to be accessed via HTTP, while the SeekStorm crate/library can be embedded into your program.
-* Index and search via [RESTful API](#rest-api-endpoints) endpoints and via [Embedded  web UI](r#open-embedded-web-ui-in-browser).
+* Index and search via [RESTful API](#rest-api-endpoints) endpoints and via [Embedded  web UI](#open-embedded-web-ui-in-browser).
 * Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
 * Multi-tenancy index management: multiple users, each with multiple indices
 * API-key management
@@ -34,7 +34,7 @@ The path to the json file is specified by the [data_filename] parameter, the API
 If no absolute path is specified then a path relative to the seekstorm_server.exe directory is used.  
 The document file ingestion is streamed without loading the whole document vector into memory to allow for bulk import with unlimited file size and document number while keeping RAM consumption low.
 
-CAUTION: The **array of documents** is expected to be in the **root element** of the data file.
+&#x26A0; **CAUTION**: The **array of documents** is expected to be in the **root element** of the data file.
 
 If API key or index specified by [api_key] and [index_id] parameter do not yet exist they have to be created prior to ingest via REST API endpoints:
 
@@ -48,7 +48,7 @@ create index: Use individual API key (use create api key above to generate)
 curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","stored": true,"field": "title","indexed": true,"boost":10.0},{"field_type": "Text","stored": true,"field": "body","indexed": true},{"field_type": "String","stored": true,"field": "url","indexed": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
 ```
 
-CAUTION: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
+&#x26A0; **CAUTION**: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
 
 
 After ingest you can search the index via [REST API endpoints](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints) or via [browser in the embedded web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser).  
@@ -76,7 +76,7 @@ In the index.json file you also may change access_type":"Mmap" to access_type":"
 The embedded web UI allows to search and display results (document fields) from an index:  
 [http://127.0.0.1](http://127.0.0.1)
 
-Per default the web UI is set to the [Wikipedia demo](https://github.com/SeekStorm/SeekStorm/?tab=readme-ov-file#build-a-wikipedia-search-engine-with-the-seekstorm-server) **API key**, **index_id** and **field names** ([use console command `ingest` first](https://github.com/SeekStorm/SeekStorm/tree/main/src/seekstorm_server#console-commands)).  
+Per default the web UI is set to the [Wikipedia demo](https://github.com/SeekStorm/SeekStorm/?tab=readme-ov-file#build-a-wikipedia-search-engine-with-the-seekstorm-server) **API key**, **index_id** and **field names** ([use console command `ingest` first](#console-commands)).  
 
 <img src="../../assets/wikipedia_demo.png" width="800">
 <br><br>
@@ -96,7 +96,7 @@ The embedded Web UI is intended for demonstration, test and debugging rather tha
 Use VSC extension "Rest client" to execute API calls, inspect responses and generate code snippets in your language:  
 [**interactive API endpoint examples**](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
 
-CAUTION: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
+&#x26A0; **CAUTION**: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
 
 
 ### create api key

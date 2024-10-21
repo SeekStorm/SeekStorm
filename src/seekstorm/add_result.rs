@@ -1061,9 +1061,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                     bm25f += weight
                         * plo.idf
-                        * ((tf * (K + 1.0)
-                            / (tf + (K * (1.0 - B + (B * bm25_component_vec[field_id])))))
-                            + SIGMA);
+                        * ((tf * (K + 1.0) / (tf + bm25_component_vec[field_id])) + SIGMA);
                 }
             } else {
                 for field in plo.field_vec_bigram1.iter() {
@@ -1093,8 +1091,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                     bm25f += weight
                         * plo.idf_bigram1
-                        * ((tf_bigram1 * (K + 1.0)
-                            / (tf_bigram1 + (K * (1.0 - B + (B * bm25_component_vec[field_id])))))
+                        * ((tf_bigram1 * (K + 1.0) / (tf_bigram1 + bm25_component_vec[field_id]))
                             + SIGMA);
                 }
 
@@ -1125,8 +1122,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                     bm25f += weight
                         * plo.idf_bigram2
-                        * ((tf_bigram2 * (K + 1.0)
-                            / (tf_bigram2 + (K * (1.0 - B + (B * bm25_component_vec[field_id])))))
+                        * ((tf_bigram2 * (K + 1.0) / (tf_bigram2 + bm25_component_vec[field_id]))
                             + SIGMA);
                 }
             }
@@ -2740,6 +2736,7 @@ pub(crate) fn add_result_multiterm_multifield(
                     Ordering::Equal => {
                         if t2 + 1 < non_unique_query_list.len() {
                             t2 += 1;
+
                             pos2 = non_unique_query_list[t2].pos;
                             continue;
                         }
@@ -2868,6 +2865,7 @@ pub(crate) fn add_result_multiterm_multifield(
                         Ordering::Equal => {
                             if t2 + 1 < non_unique_query_list.len() {
                                 t2 += 1;
+
                                 pos2 = non_unique_query_list[t2].pos;
                                 continue;
                             }
@@ -3167,6 +3165,7 @@ pub(crate) fn add_result_multiterm_singlefield(
                 Ordering::Equal => {
                     if t2 + 1 < non_unique_query_list.len() {
                         t2 += 1;
+
                         pos2 = non_unique_query_list[t2].pos;
                         continue;
                     }
