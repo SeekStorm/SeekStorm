@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     println!("SeekStorm server v{} starting ...", VERSION,);
-    println!("Hit CTRL-C or enter 'quit' to shutdown server");
+    println!("Press CTRL-C or enter 'quit' to shutdown server");
 
     initialize(params).await;
 
