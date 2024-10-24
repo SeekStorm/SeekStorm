@@ -166,7 +166,7 @@ impl Index {
         let mut positions_meta_compressed_nonembedded_size = 0;
 
         if term.is_bigram {
-            for field in term.field_vec_bigram1.iter() {
+            for (i, field) in term.field_vec_bigram1.iter().enumerate() {
                 if field_positions_vec.len() == 1 {
                     positions_meta_compressed_nonembedded_size += if field.1 < 128 { 1 } else { 2 };
                 } else if term.field_vec_bigram1.len() == 1
@@ -174,15 +174,22 @@ impl Index {
                 {
                     positions_meta_compressed_nonembedded_size += if field.1 < 64 { 1 } else { 2 };
                 } else {
-                    positions_meta_compressed_nonembedded_size +=
-                        if field.1 < (128 >> (self.indexed_field_id_bits + 1)) {
-                            1
-                        } else {
-                            2
-                        };
+                    let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                    let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                    let meta_bits = only_longest_field_bit
+                        + required_position_count_bits
+                        + self.indexed_field_id_bits as u32;
+
+                    if meta_bits <= 6 {
+                        positions_meta_compressed_nonembedded_size += 1;
+                    } else if meta_bits <= 13 {
+                        positions_meta_compressed_nonembedded_size += 2;
+                    } else if meta_bits <= 20 {
+                        positions_meta_compressed_nonembedded_size += 3;
+                    }
                 }
             }
-            for field in term.field_vec_bigram2.iter() {
+            for (i, field) in term.field_vec_bigram2.iter().enumerate() {
                 if field_positions_vec.len() == 1 {
                     positions_meta_compressed_nonembedded_size += if field.1 < 128 { 1 } else { 2 };
                 } else if term.field_vec_bigram2.len() == 1
@@ -190,12 +197,19 @@ impl Index {
                 {
                     positions_meta_compressed_nonembedded_size += if field.1 < 64 { 1 } else { 2 };
                 } else {
-                    positions_meta_compressed_nonembedded_size +=
-                        if field.1 < (128 >> (self.indexed_field_id_bits + 1)) {
-                            1
-                        } else {
-                            2
-                        };
+                    let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                    let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                    let meta_bits = only_longest_field_bit
+                        + required_position_count_bits
+                        + self.indexed_field_id_bits as u32;
+
+                    if meta_bits <= 6 {
+                        positions_meta_compressed_nonembedded_size += 1;
+                    } else if meta_bits <= 13 {
+                        positions_meta_compressed_nonembedded_size += 2;
+                    } else if meta_bits <= 20 {
+                        positions_meta_compressed_nonembedded_size += 3;
+                    }
                 }
             }
         }
@@ -203,39 +217,37 @@ impl Index {
         let mut positions_sum = 0;
         let mut positions_vec: Vec<u16> = Vec::new();
         let mut field_vec: Vec<(usize, u32)> = Vec::new();
-        for field_id in 0..field_positions_vec.len() {
-            if !field_positions_vec[field_id].is_empty() {
+        for (field_id, field) in field_positions_vec.iter().enumerate() {
+            if !field.is_empty() {
                 if field_positions_vec.len() == 1 {
                     positions_meta_compressed_nonembedded_size +=
-                        if field_positions_vec[field_id].len() < 128 {
-                            1
-                        } else {
-                            2
-                        };
+                        if field.len() < 128 { 1 } else { 2 };
                 } else if only_longest_field {
                     positions_meta_compressed_nonembedded_size +=
-                        if field_positions_vec[field_id].len() < 64 {
-                            1
-                        } else {
-                            2
-                        };
+                        if field.len() < 64 { 1 } else { 2 };
                 } else {
-                    positions_meta_compressed_nonembedded_size += if field_positions_vec[field_id]
-                        .len()
-                        < (128 >> (self.indexed_field_id_bits + 1))
-                    {
-                        1
-                    } else {
-                        2
-                    };
+                    let required_position_count_bits = usize::BITS - field.len().leading_zeros();
+                    let only_longest_field_bit = if field_vec.is_empty() { 1 } else { 0 };
+
+                    let meta_bits = only_longest_field_bit
+                        + required_position_count_bits
+                        + self.indexed_field_id_bits as u32;
+
+                    if meta_bits <= 6 {
+                        positions_meta_compressed_nonembedded_size += 1;
+                    } else if meta_bits <= 13 {
+                        positions_meta_compressed_nonembedded_size += 2;
+                    } else if meta_bits <= 20 {
+                        positions_meta_compressed_nonembedded_size += 3;
+                    }
                 }
 
-                positions_sum += field_positions_vec[field_id].len();
-                if self.indexed_field_vec.len() > 1 && field_positions_vec[field_id].len() <= 4 {
-                    positions_vec.append(&mut field_positions_vec[field_id].clone())
+                positions_sum += field.len();
+                if self.indexed_field_vec.len() > 1 && field.len() <= 4 {
+                    positions_vec.append(&mut field.clone())
                 };
 
-                field_vec.push((field_id, field_positions_vec[field_id].len() as u32));
+                field_vec.push((field_id, field.len() as u32));
             }
         }
 
@@ -605,7 +617,7 @@ pub(crate) fn write_field_vec(
                 println!("positionCount exceeded: {}", field.1);
             }
         } else {
-            postings_buffer[*write_pointer] = if i == nonempty_field_count as usize - 1 {
+            let field_stop_bit = if i == nonempty_field_count as usize - 1 {
                 if i == 0 {
                     FIELD_STOP_BIT_1
                 } else {
@@ -618,34 +630,26 @@ pub(crate) fn write_field_vec(
             let required_position_count_bits = u32::BITS - field.1.leading_zeros();
 
             let field_id_position_count = ((field.1 as usize) << indexed_field_id_bits) | field.0;
-
             let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+            let meta_bits =
+                only_longest_field_bit + required_position_count_bits + indexed_field_id_bits;
 
-            if only_longest_field_bit + 2 + required_position_count_bits + indexed_field_id_bits
-                <= 8
-            {
-                postings_buffer[*write_pointer] |= field_id_position_count as u8 | STOP_BIT;
+            if meta_bits <= 6 {
+                postings_buffer[*write_pointer] =
+                    field_stop_bit | field_id_position_count as u8 | STOP_BIT;
                 *write_pointer += 1;
-            } else if only_longest_field_bit
-                + 3
-                + required_position_count_bits
-                + indexed_field_id_bits
-                <= 16
-            {
-                postings_buffer[*write_pointer] |= (field_id_position_count >> 7) as u8;
+            } else if meta_bits <= 13 {
+                postings_buffer[*write_pointer] =
+                    field_stop_bit | (field_id_position_count >> 7) as u8;
                 *write_pointer += 1;
                 postings_buffer[*write_pointer] =
                     (field_id_position_count & 0b01111111) as u8 | STOP_BIT;
                 *write_pointer += 1;
-            } else if only_longest_field_bit
-                + 4
-                + required_position_count_bits
-                + indexed_field_id_bits
-                <= 24
-            {
-                postings_buffer[*write_pointer] |= (field_id_position_count >> 14) as u8;
+            } else if meta_bits <= 20 {
+                postings_buffer[*write_pointer] =
+                    field_stop_bit | (field_id_position_count >> 14) as u8;
                 *write_pointer += 1;
-                postings_buffer[*write_pointer] |=
+                postings_buffer[*write_pointer] =
                     ((field_id_position_count >> 7) & 0b01111111) as u8;
                 *write_pointer += 1;
                 postings_buffer[*write_pointer] =

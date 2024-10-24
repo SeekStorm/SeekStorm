@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2024-10-24
+
+### Fixed
+
+- Indexing of documents with > 2 fields fixed
+
 ## [0.7.4] - 2024-10-22
 
 ### Fixed

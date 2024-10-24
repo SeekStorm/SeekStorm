@@ -1027,7 +1027,8 @@ pub(crate) fn get_bm25f_multiterm_multifield(
             }
         }
     } else {
-        let mut bm25_component_vec: SmallVec<[f32; 2]> = smallvec![0.0; index.indexed_field_vec.len()];
+        let mut bm25_component_vec: SmallVec<[f32; 2]> =
+            smallvec![0.0; index.indexed_field_vec.len()];
         for plo in query_list.iter() {
             if !plo.bm25_flag {
                 continue;
