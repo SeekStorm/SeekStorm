@@ -6,7 +6,6 @@ use std::{
     time::Instant,
 };
 
-use derivative::Derivative;
 use itertools::Itertools;
 use std::collections::HashSet;
 
@@ -32,17 +31,15 @@ use crate::{
 
 const APIKEY_PATH: &str = "apikey.json";
 
-#[derive(Deserialize, Serialize, Clone, Derivative)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct SearchRequestObject {
     #[serde(rename = "query")]
     pub query_string: String,
     pub offset: usize,
     pub length: usize,
     #[serde(default)]
-    #[derivative(Default(value = "TopkCount"))]
     pub result_type: ResultType,
     #[serde(default)]
-    #[derivative(Default(value = "false"))]
     pub realtime: bool,
     #[serde(default)]
     pub highlights: Vec<Highlight>,
@@ -58,9 +55,12 @@ pub struct SearchRequestObject {
     pub facet_filter: Vec<FacetFilter>,
     #[serde(default)]
     pub result_sort: Vec<ResultSort>,
-    #[serde(default)]
-    #[derivative(Default(value = "Intersection"))]
+    #[serde(default = "query_type_api")]
     pub query_type_default: QueryType,
+}
+
+fn query_type_api() -> QueryType {
+    QueryType::Intersection
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -77,17 +77,23 @@ pub struct SearchResultObject {
     pub suggestions: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Derivative)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CreateIndexRequest {
     pub index_name: String,
     #[serde(default)]
     pub schema: Vec<SchemaField>,
-    #[serde(default)]
-    #[derivative(Default(value = "Bm25f"))]
+    #[serde(default = "similarity_type_api")]
     pub similarity: SimilarityType,
-    #[serde(default)]
-    #[derivative(Default(value = "AsciiAlphabetic"))]
+    #[serde(default = "tokenizer_type_api")]
     pub tokenizer: TokenizerType,
+}
+
+fn similarity_type_api() -> SimilarityType {
+    SimilarityType::Bm25fProximity
+}
+
+fn tokenizer_type_api() -> TokenizerType {
+    TokenizerType::UnicodeAlphanumeric
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
