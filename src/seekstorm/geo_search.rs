@@ -27,6 +27,7 @@ fn encode_morton_64_bit(x: u32) -> u64 {
 pub fn encode_morton_2_d(point: &Point) -> u64 {
     let x_u32 = ((point[0] * 10_000_000.0) as i32) as u32;
     let y_u32 = ((point[1] * 10_000_000.0) as i32) as u32;
+
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("bmi2") {

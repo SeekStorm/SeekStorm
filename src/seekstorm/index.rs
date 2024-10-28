@@ -1,6 +1,5 @@
 use add_result::decode_positions_commit;
 use ahash::{AHashMap, AHashSet, HashSet, RandomState};
-use derivative::Derivative;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -69,14 +68,14 @@ pub(crate) const BIGRAM_FLAG: bool = true;
 pub type Document = HashMap<String, serde_json::Value>;
 
 /// Defines where the index resides during search: Ram (the complete index is preloaded to Ram when opening the index) or Mmap (the index is accessed via memory-mapped files). See architecture.md for details.
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub enum AccessType {
     Ram = 0,
     Mmap = 1,
 }
 
 /// Similarity type defines the scoring and ranking of the search results: Bm25f or Bm25fProximity (considers term proximity, e.g. for implicit phrase search with improved relevancy)
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
 pub enum SimilarityType {
     Bm25f = 0,
     #[default]
@@ -84,15 +83,17 @@ pub enum SimilarityType {
 }
 
 /// Defines tokenizer behavior: AsciiAlphabetic (for benchmark compatibility) or UnicodeAlphanumeric (all Unicode alphanumeric chars are recognized as token)
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default)]
 pub enum TokenizerType {
-    /// Only ASCII alphabetic chars are recognized as token
+    /// Only ASCII alphabetic chars are recognized as token. Mainly for benchmark compatibility.
     #[default]
     AsciiAlphabetic = 0,
-    /// All Unicode alphanumeric chars are recognized as token
+    /// All Unicode alphanumeric chars are recognized as token.
+    /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     UnicodeAlphanumeric = 1,
-    /// all Unicode alphanumeric chars are recognized as token,
-    /// but diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
+    /// All Unicode alphanumeric chars are recognized as token.
+    /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+    /// Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
     /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
     /// Tokenizing might be slower due to folding and apostroph processing.
     UnicodeAlphanumericFolded = 2,
@@ -108,7 +109,7 @@ pub(crate) struct LevelIndex {
 
 /// Posting lists are divided into blocks of a doc id range of 65.536 (16 bit).
 /// Each block can be compressed with a different method.
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct BlockObjectIndex {
     pub max_block_score: f32,
     pub block_id: u32,
@@ -131,7 +132,7 @@ pub(crate) struct PostingListObjectIndex {
     pub position_range_previous: u32,
 }
 
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct PostingListObject0 {
     pub pointer_first: usize,
     pub pointer_last: usize,
@@ -154,7 +155,7 @@ pub(crate) struct PostingListObject0 {
 }
 
 /// Type of posting list compression.
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone, PartialEq, FromPrimitive)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone, PartialEq, FromPrimitive)]
 pub(crate) enum CompressionType {
     Delta = 0,
     Array = 1,
@@ -313,14 +314,14 @@ pub(crate) struct SegmentIndex {
 
 /// StripObject0 defines a strip (key hash range) within level 0. Level 0 is the mutable level where all writes are taking place.
 /// After each 65.536 docs the level 0 is flushed as an immutable block to the next level
-#[derive(Default, Debug, Derivative, Clone)]
+#[derive(Default, Debug, Clone)]
 pub(crate) struct SegmentLevel0 {
     pub segment: AHashMap<u64, PostingListObject0>,
     pub positions_compressed: Vec<u8>,
 }
 
 /// In the index schema the type for every field of the document is defined.
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
 pub enum FieldType {
     U8,
     U16,
@@ -1699,7 +1700,7 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
     }
 }
 
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct TermObject {
     pub key_hash: u64,
     pub key0: u32,

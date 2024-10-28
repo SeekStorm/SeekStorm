@@ -494,6 +494,7 @@ impl Index {
                     self.indexed_field_id_bits as u32,
                 );
             }
+
             write_field_vec(
                 &mut self.postings_buffer,
                 &mut write_pointer,

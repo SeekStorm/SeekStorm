@@ -149,7 +149,8 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-                        '"' | '+' | '-' => {
+
+                        '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
                             }
@@ -174,12 +175,13 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-                        '"' | '+' | '-' => {
+                        '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
                             }
                             true
                         }
+
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
@@ -236,6 +238,9 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
+
+                        '+' | '-' | '#' => start,
+
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -257,6 +262,9 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
+
+                        '+' | '-' | '#' => start,
+
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
@@ -283,6 +291,7 @@ pub(crate) fn tokenizer(
             }
         }
     }
+
     if start {
         if first_part.len() >= 2 {
             non_unique_terms_line.push(first_part)
@@ -305,7 +314,7 @@ pub(crate) fn tokenizer(
             let mut query_type_term = if is_phrase {
                 QueryType::Phrase
             } else {
-                QueryType::Union
+                query_type.clone()
             };
 
             if term_string.starts_with('+') {

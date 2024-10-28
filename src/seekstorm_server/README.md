@@ -66,6 +66,11 @@ quit
 ```
 Exit server.
 
+```
+help
+```
+Show help.
+
 ## Manual file manipulation
 
 While the server is not running, you may manually delete or backup API key and index directories or modify schema files in a text editor.  

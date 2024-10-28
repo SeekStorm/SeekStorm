@@ -285,6 +285,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                     std::cmp::Ordering::Equal => {
                         if t2 + 1 < non_unique_query_list.len() {
                             t2 += 1;
+
                             pos2 = non_unique_query_list[t2].pos;
                             continue;
                         }
@@ -419,6 +420,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                         std::cmp::Ordering::Equal => {
                             if t2 + 1 < non_unique_query_list.len() {
                                 t2 += 1;
+
                                 pos2 = non_unique_query_list[t2].pos;
                                 continue;
                             }
@@ -1451,9 +1453,37 @@ impl Index {
                         };
                     }
                     (false, 0b10111) => {
+                        let position_bits = 19
+                            - self.indexed_field_id_bits
+                            - self.indexed_field_id_bits
+                            - self.indexed_field_id_bits;
+                        field_id = ((rank_position_pointer
+                            >> (position_bits
+                                + self.indexed_field_id_bits
+                                + self.indexed_field_id_bits))
+                            & self.indexed_field_id_mask as u32)
+                            as u16;
+                        let field_id_2 = ((rank_position_pointer
+                            >> (position_bits + self.indexed_field_id_bits))
+                            & self.indexed_field_id_mask as u32)
+                            as u16;
+                        let field_id_3 = ((rank_position_pointer >> position_bits)
+                            & self.indexed_field_id_mask as u32)
+                            as u16;
+                        field_vec.extend([(field_id, 1), (field_id_2, 1), (field_id_3, 1)]);
+
                         if phrase_query {
-                            println!("unsupported 3 byte pointer embedded 111");
-                            plo.embedded_positions = [0, 0, 0, 0]
+                            let position_bits_1 = position_bits / 3;
+                            let position_bits_2 = (position_bits - position_bits_1) >> 1;
+                            let position_bits_3 = position_bits - position_bits_1 - position_bits_2;
+                            plo.embedded_positions = [
+                                ((rank_position_pointer >> (position_bits_2 + position_bits_3))
+                                    & ((1 << position_bits_1) - 1)),
+                                ((rank_position_pointer >> position_bits_3)
+                                    & ((1 << position_bits_2) - 1)),
+                                (rank_position_pointer & ((1 << position_bits_3) - 1)),
+                                0,
+                            ];
                         };
                     }
 

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2024-10-30
+
+### Added
+
+- Help for server console commands added
+- Added a hint of color to console messages
+- Preparation for ingest of local files in PDF format (WIP).
+
+### Changed
+
+- TokenizerType::UnicodeAlphanumeric and TokenizerType::UnicodeAlphanumericFolded now allow '+' '-' '#' in middle or end of a term: c++, c#, block-max, top-k
+
+### Fixed
+
+- query_type_default for server REST API and for library fixed
+- multifield decoding case fixed: three embedded fields with each a single position
+- Checks if path/file exists for ingest console command
+
 ## [0.7.6] - 2024-10-25
 
 ### Changed
@@ -53,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The [Embedded web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) of SeekStorm multi-tenancy server now allows to search and display results from any index in your web browser without coding.  
   The field names to display in the web UI can be automatically detected or pre-defined. 
 - seekstorm_server readme updated ([src/seekstorm_server/README.md](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#command-line-parameters)).
-- Optionally specify the default query type (Union/Interection) via REST API (Intersection is default if not specified).
+- Optionally specify the default query type (Union/Intersection) via REST API (Intersection is default if not specified).
 
 ### Changed
 

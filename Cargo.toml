@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.7.6"
+version = "0.8.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -52,6 +52,7 @@ regex-syntax = "0.8.5"
 indexmap = { version = "2.6.0", features = ["serde"]}
 unicode-normalization = "0.1.24"
 finl_unicode = "1.2.0"
+colored = "2.1.0"
 
 [profile.release]
 lto = true

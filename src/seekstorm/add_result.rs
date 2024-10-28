@@ -1633,13 +1633,35 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b10111) => {
+                    let position_bits = 19
+                        - index.indexed_field_id_bits
+                        - index.indexed_field_id_bits
+                        - index.indexed_field_id_bits;
+                    field_id = ((rank_position_pointer
+                        >> (position_bits
+                            + index.indexed_field_id_bits
+                            + index.indexed_field_id_bits))
+                        & index.indexed_field_id_mask as u32) as u16;
+                    let field_id_2 =
+                        ((rank_position_pointer >> (position_bits + index.indexed_field_id_bits))
+                            & index.indexed_field_id_mask as u32) as u16;
+                    let field_id_3 = ((rank_position_pointer >> position_bits)
+                        & index.indexed_field_id_mask as u32)
+                        as u16;
+                    field_vec.extend([(field_id, 1), (field_id_2, 1), (field_id_3, 1)]);
+
                     if phrase_query {
-                        println!(
-                            "unsupported 3 byte pointer embedded 111 {} {:032b}",
-                            index.indexed_field_vec.len() == 1,
-                            (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
-                        );
-                        plo.embedded_positions = [0, 0, 0, 0]
+                        let position_bits_1 = position_bits / 3;
+                        let position_bits_2 = (position_bits - position_bits_1) >> 1;
+                        let position_bits_3 = position_bits - position_bits_1 - position_bits_2;
+                        plo.embedded_positions = [
+                            ((rank_position_pointer >> (position_bits_2 + position_bits_3))
+                                & ((1 << position_bits_1) - 1)),
+                            ((rank_position_pointer >> position_bits_3)
+                                & ((1 << position_bits_2) - 1)),
+                            (rank_position_pointer & ((1 << position_bits_3) - 1)),
+                            0,
+                        ];
                     };
                 }
 
@@ -2139,11 +2161,22 @@ pub(crate) fn decode_positions_singleterm_multifield(
                     field_vec.extend([(field_id, 2), (field_id_2, 1)]);
                 }
                 (false, 0b10111) => {
-                    println!(
-                        "unsupported single 3 byte pointer embedded 111 {} {:032b}",
-                        index.indexed_field_vec.len() == 1,
-                        (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
-                    );
+                    let position_bits = 19
+                        - index.indexed_field_id_bits
+                        - index.indexed_field_id_bits
+                        - index.indexed_field_id_bits;
+                    field_id = ((rank_position_pointer
+                        >> (position_bits
+                            + index.indexed_field_id_bits
+                            + index.indexed_field_id_bits))
+                        & index.indexed_field_id_mask as u32) as u16;
+                    let field_id_2 =
+                        ((rank_position_pointer >> (position_bits + index.indexed_field_id_bits))
+                            & index.indexed_field_id_mask as u32) as u16;
+                    let field_id_3 = ((rank_position_pointer >> position_bits)
+                        & index.indexed_field_id_mask as u32)
+                        as u16;
+                    field_vec.extend([(field_id, 1), (field_id_2, 1), (field_id_3, 1)]);
                 }
 
                 (_, _) => {
@@ -2372,7 +2405,7 @@ pub(crate) fn decode_positions_commit(
 
                 (_, _) => {
                     println!(
-                        "unsupported single 2 byte pointer embedded {} {:032b}",
+                        "unsupported single 2 byte pointer embedded commit {} {:032b}",
                         indexed_field_vec_len == 1,
                         rank_position_pointer >> 12
                     );
@@ -2463,16 +2496,22 @@ pub(crate) fn decode_positions_commit(
                     field_vec.extend([(field_id, 2), (field_id_2, 1)]);
                 }
                 (false, 0b10111) => {
-                    println!(
-                        "unsupported single 3 byte pointer embedded 111 {} {:032b}",
-                        indexed_field_vec_len == 1,
-                        (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
-                    );
+                    let position_bits =
+                        19 - indexed_field_id_bits - indexed_field_id_bits - indexed_field_id_bits;
+                    field_id = ((rank_position_pointer
+                        >> (position_bits + indexed_field_id_bits + indexed_field_id_bits))
+                        & indexed_field_id_mask as u32) as u16;
+                    let field_id_2 = ((rank_position_pointer
+                        >> (position_bits + indexed_field_id_bits))
+                        & indexed_field_id_mask as u32) as u16;
+                    let field_id_3 = ((rank_position_pointer >> position_bits)
+                        & indexed_field_id_mask as u32) as u16;
+                    field_vec.extend([(field_id, 1), (field_id_2, 1), (field_id_3, 1)]);
                 }
 
                 (_, _) => {
                     println!(
-                        "unsupported single 3 byte pointer embedded {} {:032b}",
+                        "unsupported single 3 byte pointer embedded commit {} {:032b}",
                         indexed_field_vec_len == 1,
                         (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
                     );
@@ -2737,7 +2776,6 @@ pub(crate) fn add_result_multiterm_multifield(
                     Ordering::Equal => {
                         if t2 + 1 < non_unique_query_list.len() {
                             t2 += 1;
-
                             pos2 = non_unique_query_list[t2].pos;
                             continue;
                         }
@@ -2866,7 +2904,6 @@ pub(crate) fn add_result_multiterm_multifield(
                         Ordering::Equal => {
                             if t2 + 1 < non_unique_query_list.len() {
                                 t2 += 1;
-
                                 pos2 = non_unique_query_list[t2].pos;
                                 continue;
                             }
@@ -3166,7 +3203,6 @@ pub(crate) fn add_result_multiterm_singlefield(
                 Ordering::Equal => {
                     if t2 + 1 < non_unique_query_list.len() {
                         t2 += 1;
-
                         pos2 = non_unique_query_list[t2].pos;
                         continue;
                     }

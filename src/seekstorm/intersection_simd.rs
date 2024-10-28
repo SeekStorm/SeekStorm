@@ -23,6 +23,7 @@ use crate::{
 };
 
 /// Fast SIMD intersection and union partially ported and modified from Daniel Lemire's CRoaring project (which is dual licensed Apache/MIT).
+
 #[cfg(target_arch = "x86_64")]
 const SHUFFLE_MASK16: [u8; 4096] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,

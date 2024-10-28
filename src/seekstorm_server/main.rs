@@ -114,6 +114,7 @@
 //! To use the embedded Web UI for a selected index you need to change the API_KEY and index_id (in QUERY_URL) in master.js
 //! **before** building the seekstorm_server (html/css/js are embedded ressources).
 
+use colored::Colorize;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::env;
@@ -151,8 +152,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    println!("SeekStorm server v{} starting ...", VERSION,);
-    println!("Press CTRL-C or enter 'quit' to shutdown server");
+    println!("{} v{}", "SeekStorm server".green().bold(), VERSION);
+    println!(
+        "{}",
+        "Press CTRL-C or enter 'quit' to shutdown server, enter 'help' for console commands."
+            .yellow()
+    );
 
     initialize(params).await;
 

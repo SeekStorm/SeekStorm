@@ -22,7 +22,6 @@ use crate::{
 };
 
 use ahash::{AHashMap, AHashSet};
-use derivative::Derivative;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -63,7 +62,7 @@ pub(crate) struct SearchResult<'a> {
 }
 
 /// Contains the results returned when searching the index.
-#[derive(Default, Debug, Deserialize, Serialize, Derivative, Clone)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub struct ResultObject {
     /// Search query string
     pub query: String,
@@ -410,7 +409,7 @@ pub(crate) enum FilterSparse {
     None,
 }
 
-#[derive(Derivative, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub enum SortOrder {
     Ascending = 0,
     Descending = 1,

@@ -1,5 +1,4 @@
 use ahash::AHashMap;
-use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,7 +10,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug, Copy, Default, Deserialize, Serialize, Derivative)]
+#[derive(Clone, Debug, Copy, Default, Deserialize, Serialize)]
 pub struct Result {
     pub doc_id: usize,
     pub score: f32,
