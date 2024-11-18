@@ -425,6 +425,15 @@ pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], doci
                     return true;
                 }
             }
+            FilterSparse::Timestamp(range) => {
+                let facet_value_id = read_i64(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !range.contains(&facet_value_id) {
+                    return true;
+                }
+            }
             FilterSparse::F32(range) => {
                 let facet_value_id = read_f32(
                     &index.facets_file_mmap,
@@ -549,6 +558,15 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
 
                 Ranges::I64(_range_type, ranges) => {
+                    let facet_value = read_i64(
+                        &index.facets_file_mmap,
+                        (index.facets_size_sum * docid) + facet.offset,
+                    );
+                    ranges
+                        .binary_search_by_key(&facet_value, |range| range.1)
+                        .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                }
+                Ranges::Timestamp(_range_type, ranges) => {
                     let facet_value = read_i64(
                         &index.facets_file_mmap,
                         (index.facets_size_sum * docid) + facet.offset,
@@ -3203,6 +3221,7 @@ pub(crate) fn add_result_multiterm_singlefield(
                 Ordering::Equal => {
                     if t2 + 1 < non_unique_query_list.len() {
                         t2 += 1;
+
                         pos2 = non_unique_query_list[t2].pos;
                         continue;
                     }

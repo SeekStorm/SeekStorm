@@ -25,7 +25,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Boolean queries: AND, OR, PHRASE, NOT
 * BM25F and BM25F_Proximity ranking
 * Field filtering
-* [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets
+* [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets (with Histogram/Bucket & Min/Max aggregation)
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting. 
 * KWIC snippets, highlighting
@@ -54,6 +54,7 @@ Result types
 
   * Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints)
   * Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+  * Ingest local PDF files via console command (single file or all files in a directory).
   * Multi-tenancy index management
   * API-key management
   * [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
@@ -246,26 +247,26 @@ SeekStorm\target\doc\seekstorm_server\index.html
 ### Usage of the library
 
 Add required crates to your project
-```
+```rust
 cargo add seekstorm
 cargo add tokio
 cargo add serde_json
 ```
 
-```
+```rust
 use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
 use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
 use tokio::sync::RwLock;
 ```
 
 use an asynchronous Rust runtime
-```
+```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 ```
 
 create index
-```
+```rust
 let index_path=Path::new("C:/index/");
 
 let schema_json = r#"
@@ -289,12 +290,13 @@ let _index_arc = Arc::new(RwLock::new(index));
 ```
 
 open index (alternatively to create index)
-```
+```rust
 let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path,false).await.unwrap(); 
 ```
+
 index documents
-```
+```rust
 let documents_json = r#"
 [{"title":"title1 test","body":"body1","url":"url1"},
 {"title":"title2","body":"body2 test","url":"url2"},
@@ -303,12 +305,14 @@ let documents_vec=serde_json::from_str(documents_json).unwrap();
 
 index_arc.index_documents(documents_vec).await; 
 ```
+
 commit documents
-```
+```rust
 index_arc.commit().await;
 ```
+
 search index
-```
+```rust
 let query="test".to_string();
 let offset=0;
 let length=10;
@@ -318,8 +322,9 @@ let include_uncommitted=false;
 let field_filter=Vec::new();
 let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter).await;
 ```
+
 display results
-```
+```rust
 let highlights:Vec<Highlight>= vec![
     Highlight {
         field: "body".to_string(),
@@ -338,8 +343,9 @@ for result in result_object.results.iter() {
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 ```
+
 multi-threaded search
-```
+```rust
 let query_vec=vec!["house".to_string(),"car".to_string(),"bird".to_string(),"sky".to_string()];
 let offset=0;
 let length=10;
@@ -376,20 +382,89 @@ for query in query_vec {
     });
 }
 ```
-clear index
+
+index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
+```rust
+let file_path=Path::new("wiki_articles.json");
+let _ =index_arc.ingest_json(file_path).await;
 ```
+
+index all PDF files in directory and sub-directories
+- converts pdf to text and indexes it
+- extracts title from metatag, or first line of text, or from filename
+- extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+- copies all ingested pdf files to "files" subdirectory in index
+- the following index schema is required (and automatically created by the console `ingest` command):
+```json
+ [
+   {
+     "field": "title",
+     "stored": true,
+     "indexed": true,
+     "field_type": "Text",
+     "boost": 10
+   },
+   {
+     "field": "body",
+     "stored": true,
+     "indexed": true,
+     "field_type": "Text"
+   },
+   {
+     "field": "url",
+     "stored": true,
+     "indexed": false,
+     "field_type": "Text"
+   },
+   {
+     "field": "date",
+     "stored": true,
+     "indexed": false,
+     "field_type": "Timestamp",
+     "facet": true
+   }
+ ]
+```
+
+```rust
+ let file_path=Path::new("C:/Users/johndoe/Downloads");
+ let _ =index_arc.ingest_pdf(file_path).await;
+```
+
+index PDF file
+```rust
+let file_path=Path::new("C:/test.pdf");
+let file_date=Utc::now().timestamp();
+let _ =index_arc.index_pdf_file(file_path).await;
+```
+
+index PDF file bytes
+```rust
+let file_date=Utc::now().timestamp();
+let document = fs::read(file_path).unwrap();
+let _ =index_arc.index_pdf_bytes(file_path, file_date, &document).await;
+```
+
+get PDF file bytes
+```rust
+let doc_id=0;
+let file=index.get_file(doc_id).unwrap();
+```
+
+clear index
+```rust
 index.clear_index();
 ```
 delete index
-```
+```rust
 index.delete_index();
 ```
 close index
-```
+```rust
 index.close_index();
 ```
 seekstorm library version string
-```
+```rust
 let version=version();
 println!("version {}",version);
 ```
@@ -605,6 +680,83 @@ quit
 
 Do you want to use something similar for your own project?
 Have a look at the [ingest](/src/seekstorm_server/README.md#console-commands) and [web UI](/src/seekstorm_server/README.md#open-embedded-web-ui-in-browser) documentation.
+
+
+
+
+
+### Build a PDF search engine with the SeekStorm server
+
+A quick step-by-step tutorial on how to build a PDF search engine from a directory that contains PDF files using the SeekStorm server.  
+Make all your scientific papers, ebooks, resumes, reports, contracts, documentation, manuals, letters, bank statements, invoices, delivery notes searchable - at home or in your organisation.  
+
+<img src="assets/pdf_search.png" width="800">
+
+**Build SeekStorm**
+
+Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
+
+In the terminal of Visual Studio Code type:
+```
+cargo build --release
+```
+
+**Download PDFium**
+
+Download and copy the Pdfium library into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries
+
+**Start SeekStorm server**
+```
+cd target/release
+```
+```
+./seekstorm_server local_ip="0.0.0.0" local_port=80
+```
+
+**Create demo api key**
+```
+curl.exe --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
+```
+
+**Create index**
+```
+curl.exe --request POST --url 'http://127.0.0.1:80/api/v1/index' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{\"schema\":[{\"field\": \"title\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true,\"boost\":10.0},{\"field\": \"body\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true},{\"field\": \"url\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true}],\"index_name\": \"test_index\",\"similarity\": \"Bm25fProximity\",\"tokenizer\": \"UnicodeAlphanumeric\"}'
+```
+
+**Indexing** 
+
+Choose a directory that contains PDF files you want to index and search, e.g. your documents or download directory.
+
+Type 'ingest' into the command line of the running SeekStorm server: 
+```
+ingest C:\Users\JohnDoe\Downloads AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= 0
+```
+
+This creates the pdf_index and indexes all PDF files from the specifies directory, including subdirectories.
+
+**Start searching within the embedded WebUI**
+
+Open embedded Web UI in browser: [http://127.0.0.1](http://127.0.0.1)
+
+Enter a query into the search box 
+
+**Remove demo index**
+
+Type 'delete' into the command line of the running SeekStorm server: 
+```
+delete
+```
+
+**Shutdown server**
+
+Type 'quit' into the commandline of the running SeekStorm server.
+```
+quit
+```
+
+
+
+
 
 ### Online Demo: DeepHN Hacker News search
 

@@ -79,7 +79,7 @@ pub struct ResultObject {
     pub results: Vec<Result>,
     /// List of facet fields: field name and vector of unique values and their counts.
     /// Unique values and their counts are only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
-    pub facets: Vec<Facet>,
+    pub facets: AHashMap<String, Facet>,
 }
 
 /// Create query_list and non_unique_query_list
@@ -139,6 +139,11 @@ pub enum QueryFacet {
         range_type: RangeType,
         ranges: Vec<(String, i64)>,
     },
+    Timestamp {
+        field: String,
+        range_type: RangeType,
+        ranges: Vec<(String, i64)>,
+    },
     F32 {
         field: String,
         range_type: RangeType,
@@ -180,6 +185,8 @@ pub enum Ranges {
     I16(RangeType, Vec<(String, i16)>),
     I32(RangeType, Vec<(String, i32)>),
     I64(RangeType, Vec<(String, i64)>),
+    /// Unix timestamp: the number of seconds since 1 January 1970
+    Timestamp(RangeType, Vec<(String, i64)>),
     F32(RangeType, Vec<(String, f32)>),
     F64(RangeType, Vec<(String, f64)>),
     Point(RangeType, Vec<(String, f64)>, Point, DistanceUnit),
@@ -198,6 +205,8 @@ pub enum FacetValue {
     I16(i16),
     I32(i32),
     I64(i64),
+    /// Unix timestamp: the number of seconds since 1 January 1970
+    Timestamp(i64),
     F32(f32),
     F64(f64),
     String(String),
@@ -269,6 +278,13 @@ impl Index {
                         (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
                     );
                     FacetValue::I64(facet_value)
+                }
+                FieldType::Timestamp => {
+                    let facet_value = read_i64(
+                        &self.facets_file_mmap,
+                        (self.facets_size_sum * doc_id) + self.facets[*field_idx].offset,
+                    );
+                    FacetValue::Timestamp(facet_value)
                 }
                 FieldType::F32 => {
                     let facet_value = read_f32(
@@ -369,6 +385,10 @@ pub enum FacetFilter {
         field: String,
         filter: Range<i64>,
     },
+    Timestamp {
+        field: String,
+        filter: Range<i64>,
+    },
     F32 {
         field: String,
         filter: Range<f32>,
@@ -401,6 +421,8 @@ pub(crate) enum FilterSparse {
     I16(Range<i16>),
     I32(Range<i32>),
     I64(Range<i64>),
+    /// Unix timestamp: the number of seconds since 1 January 1970
+    Timestamp(Range<i64>),
     F32(Range<f32>),
     F64(Range<f64>),
     String(Vec<u16>),
@@ -767,6 +789,13 @@ impl Search for IndexArc {
                             }
                         }
                     }
+                    FacetFilter::Timestamp { field, filter } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::Timestamp {
+                                facet_filter_sparse[*idx] = FilterSparse::Timestamp(filter.clone())
+                            }
+                        }
+                    }
                     FacetFilter::F32 { field, filter } => {
                         if let Some(idx) = index_ref.facets_map.get(field) {
                             if index_ref.facets[*idx].field_type == FieldType::F32 {
@@ -981,6 +1010,23 @@ impl Search for IndexArc {
                                     field: field.clone(),
                                     length: u16::MAX,
                                     ranges: Ranges::I64(range_type.clone(), ranges.clone()),
+                                    ..Default::default()
+                                };
+                            }
+                        }
+                    }
+                    QueryFacet::Timestamp {
+                        field,
+                        range_type,
+                        ranges,
+                    } => {
+                        if let Some(idx) = index_ref.facets_map.get(field) {
+                            if index_ref.facets[*idx].field_type == FieldType::Timestamp {
+                                is_range_facet = true;
+                                search_result.query_facets[*idx] = ResultFacet {
+                                    field: field.clone(),
+                                    length: u16::MAX,
+                                    ranges: Ranges::Timestamp(range_type.clone(), ranges.clone()),
                                     ..Default::default()
                                 };
                             }
@@ -1450,16 +1496,15 @@ impl Search for IndexArc {
 
                         if !search_result.query_facets.is_empty() && result_type != ResultType::Topk
                         {
-                            let mut facets: Vec<Facet> = Vec::new();
-                            for (i, facet) in search_result.query_facets.iter().enumerate() {
+                            let mut facets: AHashMap<String, Facet> = AHashMap::new();
+                            for facet in search_result.query_facets.iter() {
                                 if facet.length == 0
-                                    || stopword_result_object.facets[i].values.is_empty()
+                                    || stopword_result_object.facets[&facet.field].is_empty()
                                 {
                                     continue;
                                 }
 
-                                let v = stopword_result_object.facets[i]
-                                    .values
+                                let v = stopword_result_object.facets[&facet.field]
                                     .iter()
                                     .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
                                     .map(|(a, c)| (a.clone(), *c))
@@ -1470,10 +1515,7 @@ impl Search for IndexArc {
                                     .collect::<Vec<_>>();
 
                                 if !v.is_empty() {
-                                    facets.push(Facet {
-                                        field: facet.field.clone(),
-                                        values: v,
-                                    });
+                                    facets.insert(facet.field.clone(), v);
                                 }
                             }
                             result_object.facets = facets;
@@ -1623,7 +1665,7 @@ impl Search for IndexArc {
                     .get_index_string_facets(query_facets)
                     .unwrap_or_default()
             } else {
-                let mut facets: Vec<Facet> = Vec::new();
+                let mut facets: AHashMap<String, Facet> = AHashMap::new();
                 for (i, facet) in search_result.query_facets.iter_mut().enumerate() {
                     if facet.length == 0 || facet.values.is_empty() {
                         continue;
@@ -1684,6 +1726,7 @@ impl Search for IndexArc {
                             Ranges::I16(range_type, _ranges) => range_type.clone(),
                             Ranges::I32(range_type, _ranges) => range_type.clone(),
                             Ranges::I64(range_type, _ranges) => range_type.clone(),
+                            Ranges::Timestamp(range_type, _ranges) => range_type.clone(),
                             Ranges::F32(range_type, _ranges) => range_type.clone(),
                             Ranges::F64(range_type, _ranges) => range_type.clone(),
                             Ranges::Point(range_type, _ranges, _base, _unit) => range_type.clone(),
@@ -1747,6 +1790,9 @@ impl Search for IndexArc {
                                         Ranges::I64(_range_type, ranges) => {
                                             ranges[*a as usize].0.clone()
                                         }
+                                        Ranges::Timestamp(_range_type, ranges) => {
+                                            ranges[*a as usize].0.clone()
+                                        }
                                         Ranges::F32(_range_type, ranges) => {
                                             ranges[*a as usize].0.clone()
                                         }
@@ -1771,10 +1817,7 @@ impl Search for IndexArc {
                     };
 
                     if !v.is_empty() {
-                        facets.push(Facet {
-                            field: facet.field.clone(),
-                            values: v,
-                        });
+                        facets.insert(facet.field.clone(), v);
                     }
                 }
                 facets

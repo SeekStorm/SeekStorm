@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    println!("{} v{}", "SeekStorm server".green().bold(), VERSION);
+    println!("{} v{}", "SeekStorm server".bright_green(), VERSION);
     println!(
         "{}",
         "Press CTRL-C or enter 'quit' to shutdown server, enter 'help' for console commands."

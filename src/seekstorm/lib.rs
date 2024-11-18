@@ -4,11 +4,8 @@
 #![doc(html_favicon_url = "http://seekstorm.com/favicon.ico")]
 
 //! # `seekstorm`
-//!
 //! SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server written in Rust.
 //! The **SeekStorm library** can be embedded into your program, while the **SeekStorm server** is a standalone search server to be accessed via HTTP.
-//!
-//!
 //! ### Add required crates to your project
 //! ```text
 //! cargo add seekstorm
@@ -21,23 +18,19 @@
 //! use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
 //! use tokio::sync::RwLock;
 //! ```
-//!
 //! ### use an asynchronous Rust runtime
 //! ```text
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 //! ```
-//!
 //! ### create index
 //! ```rust
 //! let index_path=Path::new("C:/index/");
-//!
 //! let schema_json = r#"
 //! [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 //! {"field":"body","field_type":"Text","stored":true,"indexed":true},
 //! {"field":"url","field_type":"Text","stored":false,"indexed":false}]"#;
 //! let schema=serde_json::from_str(schema_json).unwrap();
-//!
 //! let meta = IndexMetaObject {
 //! id: 0,
 //! name: "test_index".to_string(),
@@ -45,7 +38,6 @@
 //! tokenizer:TokenizerType::AsciiAlphabetic,
 //! access_type: AccessType::Mmap,
 //! };
-//!
 //! let segment_number_bits1=11;
 //! let serialize_schema=true;
 //! let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1).unwrap();
@@ -56,6 +48,13 @@
 //!let index_path=Path::new("C:/index/");
 //! let index_arc=open_index(index_path).await.unwrap();
 //! ```
+//! ### index document
+//! ```rust
+//! let document_json = r#"
+//! {"title":"title1 test","body":"body1","url":"url1"}"#;
+//! let document=serde_json::from_str(document_json).unwrap();
+//! index_arc.index_document(document,FileType::None).await;
+//! ```
 //! ### index documents
 //! ```rust
 //! let documents_json = r#"
@@ -63,7 +62,6 @@
 //! {"title":"title2","body":"body2 test","url":"url2"},
 //! {"title":"title3 test","body":"body3 test","url":"url3"}]"#;
 //! let documents_vec=serde_json::from_str(documents_json).unwrap();
-//!
 //! index_arc.index_documents(documents_vec).await;
 //! ```
 //! ### delete documents by document id
@@ -115,7 +113,6 @@
 //!     highlight_markup: true,
 //! },
 //! ];    
-//!
 //! let highlighter=Some(highlighter(highlights, result_object.query_term_strings));
 //! let return_fields_filter= HashSet::new();
 //! let mut index=index_arc.write().await;
@@ -123,6 +120,74 @@
 //!   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).unwrap();
 //!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 //! }
+//! ```
+//! ### get document
+//! ```rust
+//! let doc_id=0;
+//! let doc=index.get_document(doc_id,false,&highlighter2,&return_fields_filter,&distance_fields).unwrap();
+//! ```
+//! ### index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
+//! ```rust
+//! let file_path=Path::new("wiki_articles.json");
+//! let _ =index_arc.ingest_json(file_path).await;
+//! ```
+//! ### index all PDF files in directory and sub-directories
+//! - converts pdf to text and indexes it
+//! - extracts title from metatag, or first line of text, or from filename
+//! - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+//! - copies all ingested pdf files to "files" subdirectory in index
+//! - the following index schema is required (and automatically created by the console `ingest` command):
+//! ```rust
+//! [
+//!   {
+//!     "field": "title",
+//!     "stored": true,
+//!     "indexed": true,
+//!     "field_type": "Text",
+//!     "boost": 10
+//!   },
+//!   {
+//!     "field": "body",
+//!     "stored": true,
+//!     "indexed": true,
+//!     "field_type": "Text"
+//!   },
+//!   {
+//!     "field": "url",
+//!     "stored": true,
+//!     "indexed": false,
+//!     "field_type": "Text"
+//!   },
+//!   {
+//!     "field": "date",
+//!     "stored": true,
+//!     "indexed": false,
+//!     "field_type": "Timestamp",
+//!     "facet": true
+//!   }
+//! ]
+//! ```
+//!
+//! ```rust
+//! let file_path=Path::new("C:/Users/johndoe/Downloads");
+//! let _ =index_arc.ingest_pdf(file_path).await;
+//! ```
+//! ### index PDF file
+//! ```rust
+//! let file_path=Path::new("C:/test.pdf");
+//! let file_date=Utc::now().timestamp();
+//! let _ =index_arc.index_pdf_file(file_path).await;
+//! ```
+//! ### index PDF file bytes
+//! ```rust
+//! let file_date=Utc::now().timestamp();
+//! let document = fs::read(file_path).unwrap();
+//! let _ =index_arc.index_pdf_bytes(file_path, file_date, &document).await;
+//! ```
+//! ### get PDF file bytes
+//! ```rust
+//! let doc_id=0;
+//! let file=index.get_file(doc_id).unwrap();
 //! ```
 //! ### clear index
 //! ```rust
@@ -147,9 +212,7 @@
 //! }
 //! ```
 //! ----------------
-//!
 //! ### Faceted search - Quick start
-//!
 //! **Facets are defined in 3 different places:**
 //! 1. the facet fields are defined in schema at create_index,
 //! 2. the facet field values are set in index_document at index time,
@@ -158,8 +221,6 @@
 //!
 //! A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious.
 //! This is why we provide a quick start example here:
-//!
-//!
 //! ### Add required crates to your project
 //! ```text
 //! cargo add seekstorm
@@ -172,24 +233,20 @@
 //! use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
 //! use tokio::sync::RwLock;
 //! ```
-//!
 //! ### use an asynchronous Rust runtime
 //! ```text
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 //! ```
-//!
 //! ### create index
 //! ```rust
 //! let index_path=Path::new("C:/index/");//x
-//!
 //! let schema_json = r#"
 //! [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 //! {"field":"body","field_type":"Text","stored":true,"indexed":true},
 //! {"field":"url","field_type":"Text","stored":true,"indexed":false},
 //! {"field":"town","field_type":"String","stored":false,"indexed":false,"facet":true}]"#;
 //! let schema=serde_json::from_str(schema_json).unwrap();
-//!
 //! let meta = IndexMetaObject {
 //!     id: 0,
 //!     name: "test_index".to_string(),
@@ -197,7 +254,6 @@
 //!     tokenizer:TokenizerType::AsciiAlphabetic,
 //!     access_type: AccessType::Mmap,
 //! };
-//!
 //! let serialize_schema=true;
 //! let segment_number_bits1=11;
 //! let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1,false).unwrap();
@@ -210,7 +266,6 @@
 //! {"title":"title2","body":"body2 test","url":"url2","town":"Warsaw"},
 //! {"title":"title3 test","body":"body3 test","url":"url3","town":"New York"}]"#;
 //! let documents_vec=serde_json::from_str(documents_json).unwrap();
-//!
 //! index_arc.index_documents(documents_vec).await;
 //! ```
 //! ### commit documents
@@ -229,7 +284,6 @@
 //! let query_facets = vec![QueryFacet::String {field: "town".to_string(),prefix: "".to_string(),length: u16::MAX}];
 //! let facet_filter=Vec::new();
 //! //let facet_filter = vec![FacetFilter {field: "town".to_string(),   filter:Filter::String(vec!["Berlin".to_string()])}];
-//!
 //! let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;
 //! ```
 //! ### display results
@@ -243,7 +297,6 @@
 //!             highlight_markup: true,
 //!         },
 //!     ];    
-//!
 //! let highlighter2=Some(highlighter(highlights, result_object.query_terms));
 //! let return_fields_filter= HashSet::new();
 //! let index=index_arc.write().await;

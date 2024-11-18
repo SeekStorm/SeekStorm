@@ -8,6 +8,7 @@ use std::process;
 use std::str;
 use std::sync::Arc;
 
+use chrono::Utc;
 use rand::rngs::OsRng;
 use rand::RngCore;
 
@@ -25,8 +26,6 @@ use std::{convert::Infallible, net::SocketAddr};
 
 use base64::{engine::general_purpose, Engine as _};
 
-use crate::api_endpoints::delete_index_api;
-use crate::api_endpoints::get_all_index_stats_api;
 use crate::api_endpoints::get_document_api;
 use crate::api_endpoints::get_index_stats_api;
 use crate::api_endpoints::index_document_api;
@@ -41,6 +40,8 @@ use crate::api_endpoints::{commit_index_api, create_apikey_api};
 use crate::api_endpoints::{create_index_api, SearchRequestObject};
 use crate::api_endpoints::{delete_apikey_api, GetDocumentRequest};
 use crate::api_endpoints::{delete_documents_api, delete_documents_by_query_api};
+use crate::api_endpoints::{delete_index_api, get_file_api};
+use crate::api_endpoints::{get_all_index_stats_api, index_file_api};
 use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
 use crate::{MASTER_KEY_SECRET, VERSION};
@@ -53,6 +54,11 @@ const JQUERY_JS: &str = include_str!("web/js/jquery-3.7.1.min.js");
 const LOGO_SVG: &[u8] = include_bytes!("web/svg/logo.svg");
 const FAVICON_16: &[u8] = include_bytes!("web/favicon-16x16.png");
 const FAVICON_32: &[u8] = include_bytes!("web/favicon-32x32.png");
+
+const HISTOGRAM_CSS: &str = include_str!("web/css/bootstrap.histogram.slider.css");
+const SLIDER_CSS: &str = include_str!("web/css/histogram.slider.css");
+const HISTOGRAM_JS: &str = include_str!("web/js/bootstrap.histogram.slider.js");
+const SLIDER_JS: &str = include_str!("web/js/bootstrap-slider.js");
 
 pub(crate) fn calculate_hash<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();
@@ -143,10 +149,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -330,10 +342,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -370,10 +388,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -410,10 +434,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -450,10 +480,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -471,10 +507,16 @@ pub(crate) async fn http_request_handler(
 
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -516,10 +558,85 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
+            }
+        }
+
+        ("api", "v1", "index", _, "file", _, &Method::POST) => {
+            if let Some(apikey) = headers.get("apikey") {
+                if let Some(apikey_hash) =
+                    get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
+                {
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
+
+                    let file_date = headers
+                        .get("date")
+                        .and_then(|file_date| file_date.to_str().ok())
+                        .and_then(|date_str| date_str.parse::<i64>().ok())
+                        .unwrap_or_else(|| Utc::now().timestamp());
+
+                    let file_path = headers
+                        .get("file")
+                        .and_then(|file_path| file_path.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    let file_path = Path::new(&file_path);
+
+                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+
+                    let apikey_list_ref = apikey_list.read().await;
+
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let index_arc_clone = index_arc.clone();
+                            drop(apikey_list_ref);
+
+                            let status_object = index_file_api(
+                                &index_arc_clone,
+                                file_path,
+                                file_date,
+                                &request_bytes,
+                            )
+                            .await;
+                            let status_object_json = serde_json::to_string(&status_object).unwrap();
+                            Ok(Response::new(status_object_json.into()))
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
+                } else {
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
+                }
+            } else {
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -580,10 +697,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -632,10 +755,80 @@ pub(crate) async fn http_request_handler(
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
+            }
+        }
+
+        ("api", "v1", "index", _, "file", _, &Method::GET) => {
+            if let Some(apikey) = headers.get("apikey") {
+                if let Some(apikey_hash) =
+                    get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
+                {
+                    let Ok(index_id) = parts[3].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "index_id invalid or missing".to_string(),
+                        ));
+                    };
+                    let Ok(doc_id) = parts[5].parse() else {
+                        return Ok(status(
+                            StatusCode::BAD_REQUEST,
+                            "doc_id invalid or missing".to_string(),
+                        ));
+                    };
+
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                            let file = get_file_api(index_arc, doc_id).await;
+                            drop(apikey_list_ref);
+
+                            if let Some(file) = file {
+                                let response = Response::builder()
+                                    .header("Content-Type", "application/pdf")
+                                    .header("content-length", file.len())
+                                    .header("Content-Disposition", "attachment;filename=file.pdf")
+                                    .body(file.into())
+                                    .unwrap();
+                                Ok(response)
+                            } else {
+                                Ok(status(
+                                    StatusCode::NOT_FOUND,
+                                    "doc_id does not exists".to_string(),
+                                ))
+                            }
+                        } else {
+                            Ok(status(
+                                StatusCode::NOT_FOUND,
+                                "index does not exists".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key does not exists".to_string(),
+                        ))
+                    }
+                } else {
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
+                }
+            } else {
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -707,10 +900,16 @@ pub(crate) async fn http_request_handler(
                         ))
                     }
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -784,10 +983,16 @@ pub(crate) async fn http_request_handler(
                     let status_object_json = serde_json::to_string(&status_object).unwrap();
                     Ok(Response::new(status_object_json.into()))
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("api_key does not exists"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("api_key missing"),
+                ))
             }
         }
 
@@ -795,11 +1000,10 @@ pub(crate) async fn http_request_handler(
             if let Some(apikey_header) = headers.get("apikey") {
                 let mut hasher = Sha256::new();
                 hasher.update(MASTER_KEY_SECRET.to_string());
-                let peer_master_apikey = hasher.finalize();
-                let peer_master_apikey_base64 =
-                    general_purpose::STANDARD.encode(peer_master_apikey);
+                let master_apikey = hasher.finalize();
+                let master_apikey_base64 = general_purpose::STANDARD.encode(master_apikey);
 
-                if apikey_header.to_str().unwrap_or("") == peer_master_apikey_base64 {
+                if apikey_header.to_str().unwrap_or("") == master_apikey_base64 {
                     let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
                     let apikey_quota_object = match serde_json::from_slice(&request_bytes) {
                         Ok(apikey_quota_object) => apikey_quota_object,
@@ -823,10 +1027,16 @@ pub(crate) async fn http_request_handler(
 
                     Ok(Response::new(api_key_base64.into()))
                 } else {
-                    Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                    Ok(status(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("master_apikey invalid"),
+                    ))
                 }
             } else {
-                Ok(status(StatusCode::UNAUTHORIZED, String::new()))
+                Ok(status(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("master_apikey missing"),
+                ))
             }
         }
 
@@ -850,7 +1060,10 @@ pub(crate) async fn http_request_handler(
                     let Ok(apikey) =
                         general_purpose::STANDARD.decode(&request_object.apikey_base64)
                     else {
-                        return Ok(status(StatusCode::UNAUTHORIZED, String::new()));
+                        return Ok(status(
+                            StatusCode::UNAUTHORIZED,
+                            String::from("api_key invalid"),
+                        ));
                     };
 
                     let apikey_hash = calculate_hash(&apikey) as u128;
@@ -880,9 +1093,10 @@ pub(crate) async fn http_request_handler(
             }
         }
 
-        ("api", "v1", "status", "", "", "", &Method::GET) => {
-            Ok(status(StatusCode::NOT_IMPLEMENTED, String::new()))
-        }
+        ("api", "v1", "status", "", "", "", &Method::GET) => Ok(status(
+            StatusCode::NOT_IMPLEMENTED,
+            String::from("method not implemented"),
+        )),
 
         (_, _, _, _, _, _, &Method::GET) => match path {
             "/" => Ok(Response::new(INDEX_HTML.into())),
@@ -890,6 +1104,11 @@ pub(crate) async fn http_request_handler(
             "/css/master.css" => Ok(Response::new(MASTER_CSS.into())),
             "/js/master.js" => Ok(Response::new(MASTER_JS.into())),
             "/js/jquery-3.7.1.min.js" => Ok(Response::new(JQUERY_JS.into())),
+
+            "/css/bootstrap.histogram.slider.css" => Ok(Response::new(HISTOGRAM_CSS.into())),
+            "/css/histogram.slider.css" => Ok(Response::new(SLIDER_CSS.into())),
+            "/js/bootstrap.histogram.slider.js" => Ok(Response::new(HISTOGRAM_JS.into())),
+            "/js/bootstrap-slider.js" => Ok(Response::new(SLIDER_JS.into())),
 
             "/svg/logo.svg" => {
                 let body: Body = LOGO_SVG.into();
@@ -906,7 +1125,10 @@ pub(crate) async fn http_request_handler(
             "/version" => Ok(Response::new(VERSION.into())),
             _ => Ok(status(StatusCode::NOT_IMPLEMENTED, String::new())),
         },
-        _ => Ok(status(StatusCode::NOT_IMPLEMENTED, String::new())),
+        _ => Ok(status(
+            StatusCode::NOT_IMPLEMENTED,
+            String::from("method not implemented"),
+        )),
     }
 }
 

@@ -36,6 +36,7 @@ use crate::{
     },
 };
 
+pub(crate) const FILE_PATH: &str = "files";
 pub(crate) const INDEX_FILENAME: &str = "index.bin";
 pub(crate) const DOCSTORE_FILENAME: &str = "docstore.bin";
 pub(crate) const DELETE_FILENAME: &str = "delete.bin";
@@ -66,6 +67,13 @@ pub(crate) const BIGRAM_FLAG: bool = true;
 
 /// A document is a flattened, single level of key-value pairs, where key is an arbitrary string, and value represents any valid JSON value.
 pub type Document = HashMap<String, serde_json::Value>;
+
+#[derive(Clone, PartialEq)]
+pub enum FileType {
+    Path(Box<Path>),
+    Bytes(Box<Path>, Box<[u8]>),
+    None,
+}
 
 /// Defines where the index resides during search: Ram (the complete index is preloaded to Ram when opening the index) or Mmap (the index is accessed via memory-mapped files). See architecture.md for details.
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -331,6 +339,10 @@ pub enum FieldType {
     I16,
     I32,
     I64,
+    /// Timestamp is identical to I64, but to be used for Unix timestamps <https://en.wikipedia.org/wiki/Unix_time>.
+    /// The reason for a separate FieldType is to enable the UI to interpret I64 as timestamp without using the field name as indicator.
+    /// For date facets and filtering.
+    Timestamp,
     F32,
     F64,
     Bool,
@@ -345,9 +357,6 @@ pub enum FieldType {
     /// The conversion between longitude/latitude coordinates and Morton code is lossy due to rounding errors.
     Point,
     Text,
-    Bytes,
-    Json,
-    Date,
 }
 
 /// Defines a field in index schema: field_name, stored, indexed , field_type, field_boost.
@@ -450,6 +459,37 @@ impl Default for DistanceField {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct MinMaxField {
+    pub min: ValueType,
+    pub max: ValueType,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct MinMaxFieldJson {
+    pub min: serde_json::Value,
+    pub max: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+pub enum ValueType {
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    /// Unix timestamp: the number of seconds since 1 January 1970
+    Timestamp(i64),
+    F32(f32),
+    F64(f64),
+    Point(Point, DistanceUnit),
+    #[default]
+    None,
+}
+
 /// Facet field, with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct FacetField {
@@ -457,6 +497,10 @@ pub struct FacetField {
     pub name: String,
     /// Vector of facet value names and their count
     pub values: IndexMap<String, (Vec<String>, usize)>,
+
+    pub min: ValueType,
+    pub max: ValueType,
+
     #[serde(skip)]
     pub(crate) offset: usize,
     #[serde(skip)]
@@ -464,15 +508,9 @@ pub struct FacetField {
 }
 
 /// Facet field, with field name and a vector of unique values and their count (number of times the specific value appears in the whole index).
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Facet {
-    /// Facet field name
-    pub field: String,
-    /// Vector of facet value names and their count
-    /// The number of distinct string values and numerical ranges per facet field (cardinality) is limited to 65_536.
-    /// Once that number is reached, the facet field is not updated anymore (no new values are added, no existing values are counted).
-    pub values: Vec<(String, usize)>,
-}
+
+/// Facet field: a vector of unique values and their count (number of times the specific value appears in the whole index).
+pub type Facet = Vec<(String, usize)>;
 
 /// Index wrapped in Arc and RwLock for concurrent read and write access.
 pub type IndexArc = Arc<RwLock<Index>>;
@@ -605,6 +643,14 @@ pub fn create_index(
         fs::create_dir_all(index_path).unwrap();
     }
 
+    let file_path = Path::new(index_path_string).join(FILE_PATH);
+    if !file_path.exists() {
+        if !mute {
+            println!("index directory created: {} ", index_path_string);
+        }
+        fs::create_dir_all(file_path).unwrap();
+    }
+
     match File::options()
         .read(true)
         .write(true)
@@ -662,6 +708,7 @@ pub fn create_index(
                         FieldType::I16 => 2,
                         FieldType::I32 => 4,
                         FieldType::I64 => 8,
+                        FieldType::Timestamp => 8,
                         FieldType::F32 => 4,
                         FieldType::F64 => 8,
                         FieldType::String => 2,
@@ -674,6 +721,8 @@ pub fn create_index(
                     facets_vec.push(FacetField {
                         name: schema_field.field.clone(),
                         values: IndexMap::new(),
+                        min: ValueType::None,
+                        max: ValueType::None,
                         offset: facets_size_sum,
                         field_type: schema_field.field_type.clone(),
                     });
@@ -1760,6 +1809,115 @@ impl Index {
         self.facets.len()
     }
 
+    pub fn get_index_facets_minmax(&self) -> HashMap<String, MinMaxFieldJson> {
+        let mut facets_minmax: HashMap<String, MinMaxFieldJson> = HashMap::new();
+        for facet in self.facets.iter() {
+            match (&facet.min, &facet.max) {
+                (ValueType::U8(min), ValueType::U8(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::U16(min), ValueType::U16(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::U32(min), ValueType::U32(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::U64(min), ValueType::U64(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::I8(min), ValueType::I8(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::I16(min), ValueType::I16(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::I32(min), ValueType::I32(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::I64(min), ValueType::I64(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::Timestamp(min), ValueType::Timestamp(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::F32(min), ValueType::F32(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                (ValueType::F64(min), ValueType::F64(max)) => {
+                    facets_minmax.insert(
+                        facet.name.clone(),
+                        MinMaxFieldJson {
+                            min: (*min).into(),
+                            max: (*max).into(),
+                        },
+                    );
+                }
+                _ => {}
+            }
+        }
+        facets_minmax
+    }
+
     /// get_index_string_facets: list of string facet fields, each with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
     /// values are sorted by their occurrence count within all indexed documents in descending order
     /// * `query_facets`: Must be set if facet fields should be returned in get_index_facets. If set to Vec::new() then no facet fields are returned.
@@ -1768,7 +1926,10 @@ impl Index {
     ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
     ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
     ///    Example: query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
-    pub fn get_index_string_facets(&self, query_facets: Vec<QueryFacet>) -> Option<Vec<Facet>> {
+    pub fn get_index_string_facets(
+        &self,
+        query_facets: Vec<QueryFacet>,
+    ) -> Option<AHashMap<String, Facet>> {
         if self.facets.is_empty() {
             return None;
         }
@@ -1815,7 +1976,7 @@ impl Index {
             }
         }
 
-        let mut facets: Vec<Facet> = Vec::new();
+        let mut facets: AHashMap<String, Facet> = AHashMap::new();
         for (i, facet) in result_query_facets.iter().enumerate() {
             if facet.length == 0 || self.facets[i].values.is_empty() {
                 continue;
@@ -1838,10 +1999,7 @@ impl Index {
                     .collect::<Vec<_>>();
 
                 if !v.is_empty() {
-                    facets.push(Facet {
-                        field: facet.field.clone(),
-                        values: v,
-                    });
+                    facets.insert(facet.field.clone(), v);
                 }
             } else {
                 let v = self.facets[i]
@@ -1854,10 +2012,7 @@ impl Index {
                     .collect::<Vec<_>>();
 
                 if !v.is_empty() {
-                    facets.push(Facet {
-                        field: facet.field.clone(),
-                        values: v,
-                    });
+                    facets.insert(facet.field.clone(), v);
                 }
             }
         }
@@ -2094,7 +2249,7 @@ pub trait UpdateDocument {
 impl UpdateDocument for IndexArc {
     async fn update_document(&self, id_document: (u64, Document)) {
         self.delete_document(id_document.0).await;
-        self.index_document(id_document.1).await;
+        self.index_document(id_document.1, FileType::None).await;
     }
 }
 
@@ -2127,7 +2282,7 @@ impl IndexDocuments for IndexArc {
     /// Index document
     async fn index_documents(&self, document_vec: Vec<Document>) {
         for document in document_vec {
-            self.index_document(document).await;
+            self.index_document(document, FileType::None).await;
         }
     }
 }
@@ -2135,13 +2290,13 @@ impl IndexDocuments for IndexArc {
 /// Indexes as single document
 #[allow(async_fn_in_trait)]
 pub trait IndexDocument {
-    async fn index_document(&self, document: Document);
+    async fn index_document(&self, document: Document, file: FileType);
 }
 
 impl IndexDocument for IndexArc {
     /// Index document
     /// May block, if the threshold of documents indexed in parallel is exceeded.
-    async fn index_document(&self, document: Document) {
+    async fn index_document(&self, document: Document, file: FileType) {
         let index_arc_clone = self.clone();
         let index_ref = self.read().await;
         let schema = index_ref.indexed_schema_vec.clone();
@@ -2242,7 +2397,7 @@ impl IndexDocument for IndexArc {
                 field_vec,
             };
 
-            index_arc_clone.index_document_2(document_item).await;
+            index_arc_clone.index_document_2(document_item, file).await;
 
             drop(permit_thread);
         });
@@ -2251,11 +2406,11 @@ impl IndexDocument for IndexArc {
 
 #[allow(async_fn_in_trait)]
 pub(crate) trait IndexDocument2 {
-    async fn index_document_2(&self, document_item: DocumentItem);
+    async fn index_document_2(&self, document_item: DocumentItem, file: FileType);
 }
 
 impl IndexDocument2 for IndexArc {
-    async fn index_document_2(&self, document_item: DocumentItem) {
+    async fn index_document_2(&self, document_item: DocumentItem, file: FileType) {
         let mut index_mut = self.write().await;
 
         let doc_id: usize = index_mut.indexed_doc_count;
@@ -2277,54 +2432,217 @@ impl IndexDocument2 for IndexArc {
 
                     match facet.field_type {
                         FieldType::U8 => {
-                            index_mut.facets_file_mmap[address] =
-                                field_value.as_u64().unwrap() as u8
+                            let value = field_value.as_u64().unwrap_or_default() as u8;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::U8(min), ValueType::U8(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::U8(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::U8(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::U8(value);
+                                    facet.max = ValueType::U8(value);
+                                }
+                                _ => {}
+                            }
+                            index_mut.facets_file_mmap[address] = value
                         }
-                        FieldType::U16 => write_u16(
-                            field_value.as_u64().unwrap_or_default() as u16,
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::U32 => write_u32(
-                            field_value.as_u64().unwrap_or_default() as u32,
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::U64 => write_u64(
-                            field_value.as_u64().unwrap_or_default(),
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::I8 => write_i8(
-                            field_value.as_i64().unwrap() as i8,
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::I16 => write_i16(
-                            field_value.as_i64().unwrap_or_default() as i16,
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::I32 => write_i32(
-                            field_value.as_i64().unwrap_or_default() as i32,
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::I64 => write_i64(
-                            field_value.as_i64().unwrap_or_default(),
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::F32 => write_f32(
-                            field_value.as_f64().unwrap_or_default() as f32,
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
-                        FieldType::F64 => write_f64(
-                            field_value.as_f64().unwrap_or_default(),
-                            &mut index_mut.facets_file_mmap,
-                            address,
-                        ),
+                        FieldType::U16 => {
+                            let value = field_value.as_u64().unwrap_or_default() as u16;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::U16(min), ValueType::U16(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::U16(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::U16(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::U16(value);
+                                    facet.max = ValueType::U16(value);
+                                }
+                                _ => {}
+                            }
+                            write_u16(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::U32 => {
+                            let value = field_value.as_u64().unwrap_or_default() as u32;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::U32(min), ValueType::U32(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::U32(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::U32(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::U32(value);
+                                    facet.max = ValueType::U32(value);
+                                }
+                                _ => {}
+                            }
+                            write_u32(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::U64 => {
+                            let value = field_value.as_u64().unwrap_or_default();
+                            match (&facet.min, &facet.max) {
+                                (ValueType::U64(min), ValueType::U64(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::U64(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::U64(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::U64(value);
+                                    facet.max = ValueType::U64(value);
+                                }
+                                _ => {}
+                            }
+                            write_u64(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::I8 => {
+                            let value = field_value.as_i64().unwrap_or_default() as i8;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::I8(min), ValueType::I8(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::I8(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::I8(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::I8(value);
+                                    facet.max = ValueType::I8(value);
+                                }
+                                _ => {}
+                            }
+                            write_i8(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::I16 => {
+                            let value = field_value.as_i64().unwrap_or_default() as i16;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::I16(min), ValueType::I16(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::I16(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::I16(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::I16(value);
+                                    facet.max = ValueType::I16(value);
+                                }
+                                _ => {}
+                            }
+                            write_i16(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::I32 => {
+                            let value = field_value.as_i64().unwrap_or_default() as i32;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::I32(min), ValueType::I32(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::I32(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::I32(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::I32(value);
+                                    facet.max = ValueType::I32(value);
+                                }
+                                _ => {}
+                            }
+                            write_i32(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::I64 => {
+                            let value = field_value.as_i64().unwrap_or_default();
+                            match (&facet.min, &facet.max) {
+                                (ValueType::I64(min), ValueType::I64(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::I64(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::I64(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::I64(value);
+                                    facet.max = ValueType::I64(value);
+                                }
+                                _ => {}
+                            }
+                            write_i64(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::Timestamp => {
+                            let value = field_value.as_i64().unwrap_or_default();
+                            match (&facet.min, &facet.max) {
+                                (ValueType::Timestamp(min), ValueType::Timestamp(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::Timestamp(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::Timestamp(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::Timestamp(value);
+                                    facet.max = ValueType::Timestamp(value);
+                                }
+                                _ => {}
+                            }
+
+                            write_i64(value, &mut index_mut.facets_file_mmap, address);
+                        }
+                        FieldType::F32 => {
+                            let value = field_value.as_f64().unwrap_or_default() as f32;
+                            match (&facet.min, &facet.max) {
+                                (ValueType::F32(min), ValueType::F32(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::F32(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::F32(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::F32(value);
+                                    facet.max = ValueType::F32(value);
+                                }
+                                _ => {}
+                            }
+
+                            write_f32(value, &mut index_mut.facets_file_mmap, address)
+                        }
+                        FieldType::F64 => {
+                            let value = field_value.as_f64().unwrap_or_default();
+                            match (&facet.min, &facet.max) {
+                                (ValueType::F64(min), ValueType::F64(max)) => {
+                                    if value < *min {
+                                        facet.min = ValueType::F64(value);
+                                    }
+                                    if value > *max {
+                                        facet.max = ValueType::F64(value);
+                                    }
+                                }
+                                (ValueType::None, ValueType::None) => {
+                                    facet.min = ValueType::F64(value);
+                                    facet.max = ValueType::F64(value);
+                                }
+                                _ => {}
+                            }
+
+                            write_f64(value, &mut index_mut.facets_file_mmap, address)
+                        }
                         FieldType::String => {
                             if facet.values.len() < u16::MAX as usize {
                                 let key = serde_json::from_str(&field_value.to_string())
@@ -2423,6 +2741,22 @@ impl IndexDocument2 for IndexArc {
 
         for term in document_item.unique_terms {
             index_mut.index_posting(term.1, doc_id, false);
+        }
+
+        match file {
+            FileType::Path(file_path) => {
+                if let Err(e) = index_mut.copy_file(&file_path, doc_id) {
+                    println!("can't copy PDF {} {}", file_path.display(), e);
+                }
+            }
+
+            FileType::Bytes(file_path, file_bytes) => {
+                if let Err(e) = index_mut.write_file(&file_bytes, doc_id) {
+                    println!("can't copy PDF {} {}", file_path.display(), e);
+                }
+            }
+
+            _ => {}
         }
 
         if !index_mut.stored_field_names.is_empty() {

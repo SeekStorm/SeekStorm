@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset=utf-8 />
+<meta charset=utf-8>
 <meta http-equiv=X-UA-Compatible content="IE=edge">
 <title>SeekStorm Search</title>
 <meta name=viewport content="width=device-width, initial-scale=1">
 <link rel=icon type=image/png sizes=32x32 href=favicon-32x32.png>
 <link rel=icon type=image/png sizes=16x16 href=favicon-16x16.png>
 <link rel=stylesheet type=text/css media=screen href=css/flexboxgrid.min.css>
-<link rel=stylesheet type=text/css media=screen href=css/master.css />
+<link rel=stylesheet type=text/css media=screen href=css/master.css>
+<link rel=stylesheet type=text/css media=screen href=css/bootstrap.histogram.slider.css>
+<link rel=stylesheet type=text/css media=screen href=css/histogram.slider.css>
 <script src=js/jquery-3.7.1.min.js></script>
 <script src=js/master.js></script>
+<script src=js/bootstrap.histogram.slider.js></script>
+<script src=js/bootstrap-slider.js></script>
 </head>
 <body>
 <div class=h100 id=landingSearch>
@@ -18,14 +22,14 @@
 <div class="col-xs-10 col-md-8 col-lg-6 content">
 <div class=row>
 <div class="col-xs-12 centerMe">
-<h1>Seek<img src=svg/logo.svg height=58px>Storm</h1>
+<h1>Seek<img src=svg/logo.svg height=58>Storm</h1>
 </div>
 <div style=color:#898992;font-style:normal;font-size:14px;padding-top:40px;padding-left:20px>
 SeekStorm v<span id=version></span>
 &nbsp;&nbsp;&nbsp;index:
-<span id=indexName style=color:green></span>
+<span id=indexName style=color:#0e5ba3></span>
 &nbsp;&nbsp;&nbsp;documents:
-<span id=indexedDocs style=color:green></span>
+<span id=indexedDocs style=color:#0e5ba3></span>
 </div>
 <div class=col-xs-12>
 <div class="row searchBar">
@@ -49,13 +53,13 @@ SeekStorm v<span id=version></span>
 <a href=https://seekstorm.com/blog>Blog</a>
 <a href=https://twitter.com/seekstorm>Twitter</a>
 <a href=https://www.linkedin.com/company/seekstorm>LinkedIn</a>
-<span class="annot hideOnSlim">© 2024 SeekStorm</span>
+<span class="annot hideOnSlim">Â© 2024 SeekStorm</span>
 </div>
 </div>
 <div class=h100 id=landingMain style=display:none;background-color:white>
 <div class=row id=topBar>
 <div class="col-xs-2 centerOnSlim" id=topLogo>
-<h1><img src=svg/logo.svg height=25px></img> <span class=hideOnSlim>Seek</span><span class=hideOnSlim>Storm</span></h1>
+<h1><img src=svg/logo.svg height=25></img> <span class=hideOnSlim>Seek</span><span class=hideOnSlim>Storm</span></h1>
 </div>
 <div class="col-xs-5 expandOnSlim searchBarContainer">
 <div class=box>
@@ -91,14 +95,15 @@ SeekStorm v<span id=version></span>
 </div>
 </div>
 <div id=preview class="col-xs-4 hideOnSlim">
-<h3 id=prevUrl></h3>
+<h3><span id=prevUrl class=path></span></h3>
 <h1 id=prevTitle></h1>
-<p id=prevText></p>
+<p id=prevText2></p>
+<embed id=prevText src style="width:100%;height:100%;border:0"/>
 </div>
 </div>
 <div class=centerOnSlim id=footer>
 <div class="action hideOnSlim">
-< Previous</div> <div>1
+&lt; Previous</div> <div>1
 </div>
 <div>2</div>
 <div>3</div>
@@ -110,7 +115,7 @@ SeekStorm v<span id=version></span>
 <div>9</div>
 <div>10</div>
 <div class=action next=1>Next ></div>
-<span class="annot hideOnSlim">© 2024 SeekStorm</span>
+<span class="annot hideOnSlim">Â© 2024 SeekStorm</span>
 </div>
 </div>
 </body>

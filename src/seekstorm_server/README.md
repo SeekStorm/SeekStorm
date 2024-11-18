@@ -10,7 +10,8 @@
 
 ## Command line parameters
 
-* index_path   (default = "/seekstorm_index" in current directory)
+* ingest_path   (default = path of the current running executable) : The default path for data files to ingest with the console command `ingest`, if entered without absolute path/filename.
+* index_path   (default = "/seekstorm_index" in the path of the current running executable)
 * local_ip     (default = 0.0.0.0)
 * local_port   (default = 80)
 
@@ -20,23 +21,33 @@
 
 ## Console commands
 
-Index wiki-articles.json if present in same directory like seekstorm_server.exe. The index will be created in the demo API key with default parameters.
+Index local files in [PDF](https://en.wikipedia.org/wiki/PDF), [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command. 
+
 ```
 ingest
 ```
 
-Index a local data file in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command. 
 ```
-ingest [data_filename] [api_key] [index_id]
+ingest [file_path]
 ```
 
-The path to the json file is specified by the [data_filename] parameter, the API key is specified by the [api_key] parameter, the index ID by specified in the [index_id] parameter.  
-If no absolute path is specified then a path relative to the seekstorm_server.exe directory is used.  
+```
+ingest [file_path] [api_key] [index_id]
+```
+
+The path to the PDF or JSON files is specified by the `[data_filename]` parameter, the API key is specified by the `[api_key]` parameter, the index ID by specified in the `[index_id]` parameter.  
+If no absolute path is specified then the path specified with the command line parameter `ingest_path` or the path of the current running seekstorm_server.exe is used.
 The document file ingestion is streamed without loading the whole document vector into memory to allow for bulk import with unlimited file size and document number while keeping RAM consumption low.
 
-&#x26A0; **CAUTION**: The **array of documents** is expected to be in the **root element** of the data file.
+If the file extension is `PDF` then [PDF](https://en.wikipedia.org/wiki/PDF) format is assumed, if the file extension is `JSON` then it is automatically detected whether it is in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) format.  
+If the specified `[file_path]` is a `directory` instead of a file, then all `PDF` files within that directory are indexed, including all subdirectories.
 
-If API key or index specified by [api_key] and [index_id] parameter do not yet exist they have to be created prior to ingest via REST API endpoints:
+If no `[file_path]` parameter is specified then **wiki-articles.json** is indexed, if present in same directory like seekstorm_server.exe or the directory specified by the command line parameter `ingest_path`.  
+If no `[api_key]` and `[index_id]` parameter are specified then the default demo API key and index_id=0 are used.
+
+&#x26A0; **CAUTION**: The **array of documents** is expected to be in the **root element** of a `JSON` file.
+
+If API key or index specified by `[api_key]` and `[index_id]` parameter do not yet exist they have to be created prior to ingest via REST API endpoints:
 
 create api key: Use master API key displayed in the server console at startup.
 ```
@@ -147,6 +158,61 @@ curl --request POST --url http://127.0.0.1:80/api/v1/index/0/doc --header 'apike
 multiple documents
 ```
 curl --request POST --url http://127.0.0.1:80/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --header 'user-agent: vscode-restclient' --data '[{"title":"title2","body":"body2 test","url":"url2"},{"title":"title3 test","body":"body3 test","url":"url3"}]'
+```
+
+### index PDF file 
+
+- converts pdf to text and indexes it
+- extracts title from metatag, or first line of text, or from filename
+- extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+- copies all ingested pdf files to "files" subdirectory in index
+- the following index schema is required (and automatically created by the console `ingest` command):
+```json
+ [
+   {
+     "field": "title",
+     "stored": true,
+     "indexed": true,
+     "field_type": "Text",
+     "boost": 10
+   },
+   {
+     "field": "body",
+     "stored": true,
+     "indexed": true,
+     "field_type": "Text"
+   },
+   {
+     "field": "url",
+     "stored": true,
+     "indexed": false,
+     "field_type": "Text"
+   },
+   {
+     "field": "date",
+     "stored": true,
+     "indexed": false,
+     "field_type": "Timestamp",
+     "facet": true
+   }
+ ]
+```
+
+create index
+```
+curl.exe --request POST --url 'http://127.0.0.1/api/v1/index' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{\"schema\":[{\"field\": \"title\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true,\"boost\":10.0},{\"field\": \"body\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true},{\"field\": \"url\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": false},{\"field\": \"date\", \"field_type\": \"Timestamp\",\"stored\": true, \"indexed\": true, \"facet\": true}],\"index_name\": \"pdf_index\",\"similarity\": \"Bm25fProximity\",\"tokenizer\": \"UnicodeAlphanumeric\"}'
+```
+
+index PDF
+```
+curl.exe --request POST --url 'http://127.0.0.1/api/v1/index/0/file' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/pdf' --header 'file: C:\Users\johndoe\Downloads\odsceast2018.pdf' --data-binary '@C:\Users\johndoe\Downloads\odsceast2018.pdf'
+```
+
+### get PDF file 
+
+get PDF file bytes from file folder in index
+```
+curl --request GET --url http://127.0.0.1/api/v1/index/0/file/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
 ```
 
 ### get document 

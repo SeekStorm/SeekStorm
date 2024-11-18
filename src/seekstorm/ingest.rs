@@ -1,22 +1,40 @@
 use std::{
+    collections::HashMap,
     ffi::OsStr,
     fs::{self, metadata, File},
     io::{self, BufReader, Read},
     path::Path,
     sync::Arc,
     thread::available_parallelism,
-    time::Instant,
+    time::{Instant, SystemTime},
 };
 
-use async_recursion::async_recursion;
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use colored::Colorize;
 use num_format::{Locale, ToFormattedString};
-use serde_json::Deserializer;
+use pdfium_render::prelude::{PdfDocumentMetadataTagType, Pdfium};
+use serde_json::{json, Deserializer};
 use tokio::sync::RwLock;
+use walkdir::WalkDir;
 
 use crate::{
     commit::Commit,
-    index::{Document, Index, IndexDocument},
+    index::{Document, FileType, Index, IndexArc, IndexDocument},
+    utils::truncate,
 };
+
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub(crate) static ref pdfium_option: Option<Pdfium> = if let Ok(pdfium) =
+        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
+            .or_else(|_| Pdfium::bind_to_system_library())
+    {
+        Some(Pdfium::new(pdfium))
+    } else {
+        None
+    };
+}
 
 fn read_skipping_ws(mut reader: impl Read) -> io::Result<u8> {
     loop {
@@ -28,172 +46,468 @@ fn read_skipping_ws(mut reader: impl Read) -> io::Result<u8> {
     }
 }
 
-pub async fn index_pdf(_index_arc: Arc<RwLock<Index>>, _data_path: &Path, _docid: &mut i64) {}
+/// Index PDF file from local disk.
+/// - converts pdf to text and indexes it
+/// - extracts title from metatag, or first line of text, or from filename
+/// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+/// - copies all ingested pdf files to "files" subdirectory in index
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+pub trait IndexPdfFile {
+    async fn index_pdf_file(&self, file_path: &Path) -> Result<(), String>;
+}
 
-#[async_recursion]
-pub async fn path_recurse(index_arc: Arc<RwLock<Index>>, data_path: &Path, docid: &mut i64) {
-    let paths = fs::read_dir(data_path).unwrap();
+impl IndexPdfFile for IndexArc {
+    /// Index PDF file from local disk.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    async fn index_pdf_file(&self, file_path: &Path) -> Result<(), String> {
+        if let Some(pdfium) = pdfium_option.as_ref() {
+            let file_size = file_path.metadata().unwrap().len() as usize;
 
-    for path in paths {
-        let index_arc_clone = index_arc.clone();
-        if let Ok(path) = path {
-            let md = metadata(path.path()).unwrap();
-            if md.is_file() {
-                if let Some(extension) = Path::new(&path.path().display().to_string())
-                    .extension()
-                    .and_then(OsStr::to_str)
-                {
-                    if extension.to_lowercase() == "pdf" {
-                        index_pdf(index_arc_clone, &path.path(), docid).await;
-                    }
+            let date: DateTime<Utc> = if let Ok(metadata) = fs::metadata(file_path) {
+                if let Ok(time) = metadata.created() {
+                    time
+                } else {
+                    SystemTime::now()
                 }
             } else {
-                path_recurse(index_arc_clone, &path.path(), docid).await;
+                SystemTime::now()
             }
+            .into();
+            let file_date = date.timestamp();
+
+            if let Ok(pdf) = pdfium.load_pdf_from_file(file_path, None) {
+                self.index_pdf(
+                    file_path,
+                    file_size,
+                    file_date,
+                    FileType::Path(file_path.into()),
+                    pdf,
+                )
+                .await;
+                Ok(())
+            } else {
+                println!("can't read PDF {} {}", file_path.display(), file_size);
+                Err("can't read PDF".to_string())
+            }
+        } else {
+            println!("Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries");
+            Err("Pdfium library not found".to_string())
         }
     }
 }
 
-/// Ingest local data files in [PDF](https://en.wikipedia.org/wiki/PDF) format via console command.
-/// If a directory is provided, the function will recursively search for all PDF files.
-pub async fn ingest_pdf(index_arc: Arc<RwLock<Index>>, data_path: &Path) {
-    match data_path.exists() {
-        true => {
-            println!("ingesting PDF from: {}", data_path.display());
+/// Index PDF file from byte array.
+/// - converts pdf to text and indexes it
+/// - extracts title from metatag, or first line of text, or from filename
+/// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+/// - copies all ingested pdf files to "files" subdirectory in index
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+pub trait IndexPdfBytes {
+    async fn index_pdf_bytes(
+        &self,
+        file_path: &Path,
+        file_date: i64,
+        file_bytes: &[u8],
+    ) -> Result<(), String>;
+}
 
-            let start_time = Instant::now();
-            let mut docid: i64 = 0;
-
-            let thread_number = available_parallelism().unwrap().get();
-            let index_arc_clone2 = index_arc.clone();
-            let mut index_arc_clone3 = index_arc.clone();
-            let index_ref = index_arc_clone2.read().await;
-            let index_permits = index_ref.permits.clone();
-            drop(index_ref);
-
-            let md = metadata(data_path).unwrap();
-            if md.is_file() {
-                if let Some(extension) = Path::new(&data_path.display().to_string())
-                    .extension()
-                    .and_then(OsStr::to_str)
-                {
-                    if extension.to_lowercase() == "pdf" {
-                        index_pdf(index_arc, data_path, &mut docid).await;
-                    }
-                }
+impl IndexPdfBytes for IndexArc {
+    /// Index PDF file from byte array.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    async fn index_pdf_bytes(
+        &self,
+        file_path: &Path,
+        file_date: i64,
+        file_bytes: &[u8],
+    ) -> Result<(), String> {
+        if let Some(pdfium) = pdfium_option.as_ref() {
+            let file_size = file_bytes.len();
+            if let Ok(pdf) = pdfium.load_pdf_from_byte_slice(file_bytes, None) {
+                self.index_pdf(
+                    file_path,
+                    file_size,
+                    file_date,
+                    FileType::Bytes(file_path.into(), file_bytes.into()),
+                    pdf,
+                )
+                .await;
+                Ok(())
             } else {
-                path_recurse(index_arc, data_path, &mut docid).await;
+                println!("can't read PDF {} {}", file_path.display(), file_size);
+                Err("can't read PDF".to_string())
+            }
+        } else {
+            println!("Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries");
+            Err("Pdfium library not found".to_string())
+        }
+    }
+}
+
+/// Index PDF file from local disk or byte array.
+/// - converts pdf to text and indexes it
+/// - extracts title from metatag, or first line of text, or from filename
+/// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+/// - copies all ingested pdf files to "files" subdirectory in index
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+trait IndexPdf {
+    async fn index_pdf(
+        &self,
+        file_path: &Path,
+        file_size: usize,
+        file_date: i64,
+        file: FileType,
+        pdf: pdfium_render::prelude::PdfDocument<'_>,
+    );
+}
+
+impl IndexPdf for IndexArc {
+    /// Index PDF file from local disk or byte array.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    async fn index_pdf(
+        &self,
+        file_path: &Path,
+        file_size: usize,
+        file_date: i64,
+        file: FileType,
+        pdf: pdfium_render::prelude::PdfDocument<'_>,
+    ) {
+        let mut text = String::with_capacity(file_size);
+
+        pdf.pages().iter().for_each(|page| {
+            text.push_str(&page.text().unwrap().all());
+            text.push_str(" \n");
+        });
+
+        if text.is_empty() {
+            println!("can't extract text from PDF {}", file_path.display(),);
+        } else {
+            let meta = pdf.metadata();
+
+            let title = if let Some(title) = meta.get(PdfDocumentMetadataTagType::Title) {
+                title.value().to_owned()
+            } else {
+                let mut i = 0;
+                let mut lines = text.lines();
+                loop {
+                    i += 1;
+                    if let Some(title) = lines.next() {
+                        if title.trim().len() > 1 {
+                            break truncate(title, 160).trim().to_owned();
+                        } else if i < 10 {
+                            continue;
+                        }
+                    }
+
+                    break file_path
+                        .file_stem()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string()
+                        .replace("_", "");
+                }
+            };
+
+            let mut creation_timestamp =
+                if let Some(date) = meta.get(PdfDocumentMetadataTagType::CreationDate) {
+                    let mut date_string = if date.value().starts_with("D:") {
+                        &date.value()[2..]
+                    } else {
+                        &date.value()[0..]
+                    };
+
+                    if date_string.len() > 14
+                        && date_string.chars().nth(14).unwrap().to_ascii_lowercase() == 'z'
+                    {
+                        date_string = &date_string[0..14];
+                    }
+
+                    if date_string.len() == 14
+                        || date_string.len() == 19
+                        || date_string.len() == 20
+                        || date_string.len() == 21
+                    {
+                        let mut date_string2 = String::with_capacity(23);
+                        date_string2.push_str(&date_string[0..4]);
+                        date_string2.push('-');
+                        date_string2.push_str(&date_string[4..6]);
+                        date_string2.push('-');
+                        date_string2.push_str(&date_string[6..8]);
+                        date_string2.push('T');
+                        date_string2.push_str(&date_string[8..10]);
+                        date_string2.push(':');
+                        date_string2.push_str(&date_string[10..12]);
+                        date_string2.push(':');
+                        date_string2.push_str(&date_string[12..14]);
+                        if date_string.len() == 14 {
+                            date_string2.push_str("+00:00")
+                        } else if date_string.chars().nth(17).unwrap() == '\'' {
+                            date_string2.push_str(&date_string[14..17]);
+                            date_string2.push(':');
+                            date_string2.push_str(&date_string[18..20]);
+                        } else {
+                            date_string2.push_str(&date_string[14..17]);
+                            date_string2.push(':');
+                            date_string2.push_str(&date_string[17..19]);
+                        }
+
+                        if let Ok(date) = DateTime::parse_from_rfc3339(&date_string2) {
+                            date.timestamp()
+                        } else {
+                            file_date
+                        }
+                    } else if let Ok(date) =
+                        NaiveDateTime::parse_from_str(date.value(), "%a %b %e %H:%M:%S %Y")
+                            .map(|ndt| Utc.from_utc_datetime(&ndt))
+                    {
+                        date.timestamp()
+                    } else if let Ok(date) =
+                        NaiveDateTime::parse_from_str(date.value(), "%Y/%m/%d %H:%M:%S")
+                            .map(|ndt| Utc.from_utc_datetime(&ndt))
+                    {
+                        date.timestamp()
+                    } else if let Ok(date) =
+                        NaiveDateTime::parse_from_str(date.value(), "%m/%e/%Y %H:%M:%S")
+                            .map(|ndt| Utc.from_utc_datetime(&ndt))
+                    {
+                        date.timestamp()
+                    } else {
+                        file_date
+                    }
+                } else {
+                    file_date
+                };
+
+            if creation_timestamp > Utc::now().timestamp()
+                || !(0..=i64::MAX).contains(&creation_timestamp)
+            {
+                creation_timestamp = file_date;
             }
 
-            let mut permit_vec = Vec::new();
-            for _i in 0..thread_number {
-                permit_vec.push(index_permits.acquire().await.unwrap());
-            }
+            let document: Document = HashMap::from([
+                ("title".to_string(), json!(title)),
+                ("body".to_string(), json!(text)),
+                ("url".to_string(), json!(&file_path.display().to_string())),
+                ("date".to_string(), json!(creation_timestamp)),
+            ]);
 
-            index_arc_clone3.commit().await;
+            self.index_document(document, file).await;
 
-            let elapsed_time = start_time.elapsed().as_nanos();
-
+            let date_time = Utc.timestamp_opt(creation_timestamp, 0).unwrap();
             println!(
-                "Indexing finished: docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
-                docid.to_formatted_string(&Locale::en),
-                (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
-                ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)
-                    .to_formatted_string(&Locale::en),
-                elapsed_time as f64 / 1_000_000_000.0 / 60.0,
-                elapsed_time / 1_000_000_000
+                "indexed {} {} {} {}",
+                date_time.format("%d/%m/%Y %H:%M"),
+                file_path.display(),
+                text.len().to_formatted_string(&Locale::en),
+                title
             );
         }
-        false => {
-            println!("data file not found: {}", data_path.display());
+    }
+}
+
+pub(crate) async fn path_recurse(
+    index_arc: &Arc<RwLock<Index>>,
+    data_path: &Path,
+    docid: &mut usize,
+) {
+    for entry in WalkDir::new(data_path) {
+        let entry = entry.unwrap();
+        let path = entry.path();
+
+        let md = metadata(path).unwrap();
+        if md.is_file() {
+            if let Some(extension) = path.extension().and_then(OsStr::to_str) {
+                if extension.to_lowercase() == "pdf" && index_arc.index_pdf_file(path).await.is_ok()
+                {
+                    *docid += 1;
+                }
+            }
+        };
+    }
+}
+
+/// Index PDF files from local disk directory and sub-directories or from file.
+/// - converts pdf to text and indexes it
+/// - extracts title from metatag, or first line of text, or from filename
+/// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+/// - copies all ingested pdf files to "files" subdirectory in index
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+pub trait IngestPdf {
+    async fn ingest_pdf(&mut self, file_path: &Path);
+}
+
+impl IngestPdf for IndexArc {
+    /// Index PDF files from local disk directory and sub-directories or from file.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    async fn ingest_pdf(&mut self, data_path: &Path) {
+        if pdfium_option.is_some() {
+            match data_path.exists() {
+                true => {
+                    println!("ingesting PDF from: {}", data_path.display());
+
+                    let start_time = Instant::now();
+                    let mut docid = 0usize;
+
+                    let thread_number = available_parallelism().unwrap().get();
+                    let index_ref = self.read().await;
+                    let index_permits = index_ref.permits.clone();
+                    drop(index_ref);
+
+                    let md = metadata(data_path).unwrap();
+                    if md.is_file() {
+                        if let Some(extension) = Path::new(&data_path.display().to_string())
+                            .extension()
+                            .and_then(OsStr::to_str)
+                        {
+                            if extension.to_lowercase() == "pdf"
+                                && self.index_pdf_file(data_path).await.is_ok()
+                            {
+                                docid += 1;
+                            }
+                        }
+                    } else {
+                        path_recurse(self, data_path, &mut docid).await;
+                    }
+
+                    let mut permit_vec = Vec::new();
+                    for _i in 0..thread_number {
+                        permit_vec.push(index_permits.acquire().await.unwrap());
+                    }
+
+                    self.commit().await;
+
+                    let elapsed_time = start_time.elapsed().as_nanos();
+
+                    println!(
+                        "{}: docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
+                        "Indexing finished".green(),
+                        docid.to_formatted_string(&Locale::en),
+                        (docid as u128 * 1_000_000_000 / elapsed_time)
+                            .to_formatted_string(&Locale::en),
+                        ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)
+                            .to_formatted_string(&Locale::en),
+                        elapsed_time as f64 / 1_000_000_000.0 / 60.0,
+                        elapsed_time / 1_000_000_000
+                    );
+                }
+                false => {
+                    println!("data file not found: {}", data_path.display());
+                }
+            }
+        } else {
+            println!("Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries")
         }
     }
 }
 
 /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
 /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
-pub async fn ingest_json(index_arc: Arc<RwLock<Index>>, data_path: &Path) {
-    match data_path.exists() {
-        true => {
-            println!("ingesting data from: {}", data_path.display());
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+pub trait IngestJson {
+    async fn ingest_json(&mut self, data_path: &Path);
+}
 
-            let start_time = Instant::now();
-            let mut docid: i64 = 0;
+impl IngestJson for IndexArc {
+    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+    /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+    async fn ingest_json(&mut self, data_path: &Path) {
+        match data_path.exists() {
+            true => {
+                println!("ingesting data from: {}", data_path.display());
 
-            let thread_number = available_parallelism().unwrap().get();
-            let index_arc_clone2 = index_arc.clone();
-            let index_ref = index_arc_clone2.read().await;
-            let index_permits = index_ref.permits.clone();
-            drop(index_ref);
+                let start_time = Instant::now();
+                let mut docid: i64 = 0;
 
-            let index_arc_clone = index_arc.clone();
-            let file = File::open(data_path).unwrap();
-            let mut reader = BufReader::new(file);
+                let thread_number = available_parallelism().unwrap().get();
+                let index_arc_clone2 = self.clone();
+                let index_ref = index_arc_clone2.read().await;
+                let index_permits = index_ref.permits.clone();
+                drop(index_ref);
 
-            let is_vector = read_skipping_ws(&mut reader).unwrap() == b'[';
+                let index_arc_clone = self.clone();
+                let file = File::open(data_path).unwrap();
+                let mut reader = BufReader::new(file);
 
-            if !is_vector {
-                println!("Newline-delimited JSON (ndjson) or Concatenated JSON detected");
-                reader.seek_relative(-1).unwrap();
+                let is_vector = read_skipping_ws(&mut reader).unwrap() == b'[';
 
-                for doc_object in Deserializer::from_reader(reader).into_iter::<Document>() {
+                if !is_vector {
+                    println!("Newline-delimited JSON (ndjson) or Concatenated JSON detected");
+                    reader.seek_relative(-1).unwrap();
+
+                    for doc_object in Deserializer::from_reader(reader).into_iter::<Document>() {
+                        let index_arc_clone_clone = index_arc_clone.clone();
+
+                        index_arc_clone_clone
+                            .index_document(doc_object.unwrap(), FileType::None)
+                            .await;
+                        docid += 1;
+                    }
+                } else {
+                    println!("JSON detected");
+
                     let index_arc_clone_clone = index_arc_clone.clone();
-
-                    index_arc_clone_clone
-                        .index_document(doc_object.unwrap())
-                        .await;
-                    docid += 1;
-                }
-            } else {
-                println!("JSON detected");
-
-                let index_arc_clone_clone = index_arc_clone.clone();
-                loop {
-                    let next_obj = Deserializer::from_reader(reader.by_ref())
-                        .into_iter::<Document>()
-                        .next();
-                    match next_obj {
-                        Some(doc_object) => {
-                            index_arc_clone_clone
-                                .index_document(doc_object.unwrap())
-                                .await
+                    loop {
+                        let next_obj = Deserializer::from_reader(reader.by_ref())
+                            .into_iter::<Document>()
+                            .next();
+                        match next_obj {
+                            Some(doc_object) => {
+                                index_arc_clone_clone
+                                    .index_document(doc_object.unwrap(), FileType::None)
+                                    .await
+                            }
+                            None => break,
                         }
-                        None => break,
-                    }
 
-                    docid += 1;
+                        docid += 1;
 
-                    match read_skipping_ws(reader.by_ref()).unwrap() {
-                        b',' => {}
-                        b']' => break,
-                        _ => break,
+                        match read_skipping_ws(reader.by_ref()).unwrap() {
+                            b',' => {}
+                            b']' => break,
+                            _ => break,
+                        }
                     }
                 }
+
+                let mut permit_vec = Vec::new();
+                for _i in 0..thread_number {
+                    permit_vec.push(index_permits.acquire().await.unwrap());
+                }
+
+                self.commit().await;
+
+                let elapsed_time = start_time.elapsed().as_nanos();
+
+                println!(
+                    "{}: docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
+                    "Indexing finished".green(),
+                    docid.to_formatted_string(&Locale::en),
+                    (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
+                    ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)
+                        .to_formatted_string(&Locale::en),
+                    elapsed_time as f64 / 1_000_000_000.0 / 60.0,
+                    elapsed_time / 1_000_000_000
+                );
             }
-
-            let mut permit_vec = Vec::new();
-            for _i in 0..thread_number {
-                permit_vec.push(index_permits.acquire().await.unwrap());
+            false => {
+                println!("data file not found: {}", data_path.display());
             }
-
-            let mut index_arc_clone3 = index_arc.clone();
-
-            index_arc_clone3.commit().await;
-
-            let elapsed_time = start_time.elapsed().as_nanos();
-
-            println!(
-                "Indexing finished: docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
-                docid.to_formatted_string(&Locale::en),
-                (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
-                ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)
-                    .to_formatted_string(&Locale::en),
-                elapsed_time as f64 / 1_000_000_000.0 / 60.0,
-                elapsed_time / 1_000_000_000
-            );
-        }
-        false => {
-            println!("data file not found: {}", data_path.display());
         }
     }
 }

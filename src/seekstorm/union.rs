@@ -819,6 +819,15 @@ pub(crate) async fn union_count<'a>(
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
                         }
+                        Ranges::Timestamp(_range_type, ranges) => {
+                            let facet_value = read_i64(
+                                &index.facets_file_mmap,
+                                (index.facets_size_sum * docid) + facet.offset,
+                            );
+                            ranges
+                                .binary_search_by_key(&facet_value, |range| range.1)
+                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        }
                         Ranges::F32(_range_type, ranges) => {
                             let facet_value = read_f32(
                                 &index.facets_file_mmap,

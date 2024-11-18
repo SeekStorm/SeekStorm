@@ -6,6 +6,7 @@ use std::{
     time::Instant,
 };
 
+use ahash::AHashMap;
 use itertools::Itertools;
 use std::collections::HashSet;
 
@@ -14,10 +15,11 @@ use seekstorm::{
     highlighter::{highlighter, Highlight},
     index::{
         create_index, open_index, AccessType, DeleteDocument, DeleteDocuments,
-        DeleteDocumentsByQuery, DistanceField, Document, Facet, IndexArc, IndexDocument,
-        IndexDocuments, IndexMetaObject, SchemaField, SimilarityType, TokenizerType,
-        UpdateDocument, UpdateDocuments,
+        DeleteDocumentsByQuery, DistanceField, Document, Facet, FileType, IndexArc, IndexDocument,
+        IndexDocuments, IndexMetaObject, MinMaxFieldJson, SchemaField, SimilarityType,
+        TokenizerType, UpdateDocument, UpdateDocuments,
     },
+    ingest::IndexPdfBytes,
     search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
 };
 use serde::{Deserialize, Serialize};
@@ -73,7 +75,7 @@ pub struct SearchResultObject {
     pub count_total: usize,
     pub query_terms: Vec<String>,
     pub results: Vec<Document>,
-    pub facets: Vec<Facet>,
+    pub facets: AHashMap<String, Facet>,
     pub suggestions: Vec<String>,
 }
 
@@ -122,6 +124,7 @@ pub(crate) struct IndexResponseObject {
     pub operations_count: u64,
     pub query_count: u64,
     pub version: String,
+    pub facets_minmax: HashMap<String, MinMaxFieldJson>,
 }
 
 /// Save file atomically
@@ -349,6 +352,7 @@ pub(crate) async fn get_index_stats_api(
             indexed_doc_count: index_ref.indexed_doc_count,
             operations_count: 0,
             query_count: 0,
+            facets_minmax: index_ref.get_index_facets_minmax(),
         })
     } else {
         Err("index_id not found".to_string())
@@ -366,8 +370,34 @@ pub(crate) async fn index_document_api(
     index_arc: &IndexArc,
     document: Document,
 ) -> Result<usize, String> {
-    index_arc.index_document(document).await;
+    index_arc.index_document(document, FileType::None).await;
     Ok(index_arc.read().await.indexed_doc_count)
+}
+
+pub(crate) async fn index_file_api(
+    index_arc: &IndexArc,
+    file_path: &Path,
+    file_date: i64,
+    document: &[u8],
+) -> Result<usize, String> {
+    match index_arc
+        .index_pdf_bytes(file_path, file_date, document)
+        .await
+    {
+        Ok(_) => Ok(index_arc.read().await.indexed_doc_count),
+        Err(e) => Err(e),
+    }
+}
+
+pub(crate) async fn get_file_api(index_arc: &IndexArc, document_id: usize) -> Option<Vec<u8>> {
+    if !index_arc.read().await.stored_field_names.is_empty() {
+        match index_arc.read().await.get_file(document_id) {
+            Ok(doc) => Some(doc),
+            Err(_e) => None,
+        }
+    } else {
+        None
+    }
 }
 
 pub(crate) async fn index_documents_api(
@@ -483,6 +513,8 @@ pub(crate) async fn query_index_api(
         )
         .await;
 
+    let elapsed_time = start_time.elapsed().as_nanos();
+
     let return_fields_filter = HashSet::from_iter(search_request.fields);
 
     let mut results: Vec<Document> = Vec::new();
@@ -519,7 +551,7 @@ pub(crate) async fn query_index_api(
 
     SearchResultObject {
         query: search_request.query_string.to_owned(),
-        time: start_time.elapsed().as_nanos(),
+        time: elapsed_time,
         offset: search_request.offset,
         length: search_request.length,
         count: result_object.results.len(),

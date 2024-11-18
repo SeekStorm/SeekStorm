@@ -1,11 +1,15 @@
 use memmap2::Mmap;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::io::{Seek, SeekFrom, Write};
+use std::fs;
+use std::io::{self, Seek, SeekFrom, Write};
+use std::path::Path;
 
 use crate::geo_search::euclidian_distance;
 use crate::highlighter::{top_fragments_from_field, Highlighter};
-use crate::index::{AccessType, DistanceField, Document, FieldType, Index, ROARING_BLOCK_SIZE};
+use crate::index::{
+    AccessType, DistanceField, Document, FieldType, Index, FILE_PATH, ROARING_BLOCK_SIZE,
+};
 use crate::search::FacetValue;
 use crate::utils::{read_u32, write_u32};
 
@@ -128,6 +132,46 @@ impl Index {
         if self.meta.access_type == AccessType::Mmap {
             self.docstore_file_mmap =
                 unsafe { Mmap::map(&self.docstore_file).expect("Unable to create Mmap") };
+        }
+    }
+
+    pub fn copy_file(&self, source_path: &Path, doc_id: usize) -> io::Result<u64> {
+        let dir_path = Path::new(&self.index_path_string).join(FILE_PATH);
+        if !dir_path.exists() {
+            fs::create_dir_all(&dir_path).unwrap();
+        }
+
+        let file_path = dir_path.join(doc_id.to_string() + ".pdf");
+        fs::copy(source_path, file_path)
+    }
+
+    pub fn write_file(&self, file_bytes: &[u8], doc_id: usize) -> io::Result<u64> {
+        let dir_path = Path::new(&self.index_path_string).join(FILE_PATH);
+        if !dir_path.exists() {
+            fs::create_dir_all(&dir_path).unwrap();
+        }
+
+        let file_path = dir_path.join(doc_id.to_string() + ".pdf");
+
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(file_path)?;
+
+        let _ = file.write_all(file_bytes);
+        Ok(file_bytes.len() as u64)
+    }
+
+    pub fn get_file(&self, doc_id: usize) -> Result<Vec<u8>, String> {
+        let file_path = Path::new(&self.index_path_string)
+            .join(FILE_PATH)
+            .join(doc_id.to_string() + ".pdf");
+
+        if let Ok(data) = fs::read(file_path) {
+            Ok(data)
+        } else {
+            Err("not found".into())
         }
     }
 

@@ -231,6 +231,29 @@ impl<'a> MinHeap<'a> {
                     };
                 }
 
+                FieldType::Timestamp => {
+                    let offset = self.index.facets[field.idx].offset;
+
+                    let facet_value_1 = read_i64(
+                        &self.index.facets_file_mmap,
+                        (self.index.facets_size_sum * result1.doc_id) + offset,
+                    );
+                    let facet_value_2 = read_i64(
+                        &self.index.facets_file_mmap,
+                        (self.index.facets_size_sum * result2.doc_id) + offset,
+                    );
+
+                    let order = if field.order == SortOrder::Descending {
+                        facet_value_1.cmp(&facet_value_2)
+                    } else {
+                        facet_value_2.cmp(&facet_value_1)
+                    };
+
+                    if order != core::cmp::Ordering::Equal {
+                        return order;
+                    };
+                }
+
                 FieldType::F32 => {
                     let offset = self.index.facets[field.idx].offset;
 

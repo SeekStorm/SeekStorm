@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2024-11-18
+
+### Added
+
+- PDF ingestion: Ingest PDF files and directories including sub-directories.  
+- Ingest via console or REST API, search via Web UI or REST API.
+- Stores original PDF file in index, served via REST API endpoint.
+- Embedded PDF viewer in Web UI. 
+- Result sorting in Web UI (Score/Date/Price/Distance acending/descending).  
+- Numeric facet filter and histogram in Web UI (Date/Price/Distance...).  
+- Min/Max numeric facet aggregation (Date/Price/Distance...).
+
+
+- Library
+  - `create_index` now creates a `files` subdirectory in index, to store copies of ingested PDF files.
+  - new public method `ingest_pdf`: ingests a given pdf file or all pdf files in a given path, recursively.
+  - new public methods `index_pdf_bytes` and `index_pdf_file`
+    - converts pdf to text and indexes it
+    - extracts title from metatag, or first line of text, or from filename
+    - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    - copy_file in index_pdf copies all ingested pdf files to "files" subdirectory in index
+  - new public method `get_file`: gets a file from the "files" sub-directory in index
+  - new FieldType `Timestamp`, identical to I64, but enables an UI to interpret I64 as timestamp without resorting to a specific field name as indicator.
+  - new min/max value detection for numeric facet fields.
+  - new public method `get_index_facets_minmax` (min/max aggregation values of numerical facet fields).
+
+- Server
+  - new REST API endpoint `index_file`: POST api/v1/index/{index_id}/file/{doc_id} 
+    calls index_file_api, index_pdf_bytes and indexes the PDF file in the specified api_key and index_id
+  - new REST API endpoint `get_file`:   GET  api/v1/index/{index_id}/file/{doc_id}
+    calls get_file_api, get_file and returns the PDF file associated with the doc_id in the specified api_key and index_id with "Content-Type", "application/pdf"
+  - REST API error messages added
+  - Web UI automatically uses one of three options for result preview: 
+    - result links to public web URL (e.g. Wikipedia articles) or
+    - fields with path to private PDF documents via REST API (e.g. PDF ingestion) or
+    - text fields.
+  - WEB UI automatically displays both PDF previews (PDF ingestion) and text previews (JSON ingestion) when hovering with the mouse over the result list.
+  - WEB UI now with result sort: score/newest/oldest.
+  - seekstorm readme updated ([PDF search demo](https://github.com/SeekStorm/SeekStorm/?tab=readme-ov-file#build-a-pdf-search-engine-with-the-seekstorm-server)). 
+  - seekstorm_server readme updated ([Console commands](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#console-commands)).
+  - If the server console command `ingest` is used with a single path parameter only, then default demo API key and index_id=0 are used.
+  - New [command line parameter](https://github.com/SeekStorm/SeekStorm/tree/main/src/seekstorm_server#command-line-parameters) `ingest_path` to set the default path for data files to ingest with the console command `ingest`, if entered without absolute path/filename.
+  - `get_index_stats_api` returns now `facets_minmax` property from `get_index_facets_minmax` (min/max aggregation values of numerical facet fields).
+  - `SearchResultObject.facets` changed from `Vec<Facet>` to `HashMap<String,Facet>` (`HashMap<field_name,Vec<facet_label,facet_count>>`)
+
 ## [0.8.0] - 2024-10-30
 
 ### Added
