@@ -41,6 +41,7 @@ pub(crate) const INDEX_FILENAME: &str = "index.bin";
 pub(crate) const DOCSTORE_FILENAME: &str = "docstore.bin";
 pub(crate) const DELETE_FILENAME: &str = "delete.bin";
 pub(crate) const SCHEMA_FILENAME: &str = "schema.json";
+pub(crate) const SYNONYMS_FILENAME: &str = "synonyms.json";
 pub(crate) const META_FILENAME: &str = "index.json";
 pub(crate) const FACET_FILENAME: &str = "facet.bin";
 pub(crate) const FACET_VALUES_FILENAME: &str = "facet.json";
@@ -359,6 +360,28 @@ pub enum FieldType {
     Text,
 }
 
+/// Defines synonyms for terms per index.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Synonym {
+    pub terms: Vec<String>,
+    /// Creates alternative versions of documents where in each copy a term is replaced with one of its synonyms.
+    /// Doesn't impact the query latency, but does increase the index size.
+    /// Multi-way synonyms (default): all terms are synonyms of each other.
+    /// One-way synonyms: only the first term is a synonym of the following terms, but not vice versa.
+    /// E.g. [street, avenue, road] will result in searches for street to return documents containing any of the terms street, avenue or road,
+    /// but searches for avenue will only return documents containing avenue, but not documents containing street or road.
+    /// Currently only single terms without spaces are supported.
+    /// Synonyms are supported in result highlighting.
+    /// The synonyms that were created with the synonyms parameter in create_index are stored in synonyms.json in the index directory contains  
+    /// Can be manually modiefied, but becomes effective only after restart and only for newly indexed documents.
+    #[serde(default = "default_as_true")]
+    pub multiway: bool,
+}
+
+fn default_as_true() -> bool {
+    true
+}
+
 /// Defines a field in index schema: field_name, stored, indexed , field_type, field_boost.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SchemaField {
@@ -508,7 +531,6 @@ pub struct FacetField {
 }
 
 /// Facet field, with field name and a vector of unique values and their count (number of times the specific value appears in the whole index).
-
 /// Facet field: a vector of unique values and their count (number of times the specific value appears in the whole index).
 pub type Facet = Vec<(String, usize)>;
 
@@ -610,6 +632,9 @@ pub struct Index {
     pub(crate) bm25_component_cache: [f32; 256],
 
     pub(crate) string_set_to_single_term_id_vec: Vec<AHashMap<String, AHashSet<u16>>>,
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) synonyms_map: AHashMap<u64, Vec<(String, (u64, u32))>>,
 }
 
 /// Get the version of the SeekStorm search library
@@ -623,6 +648,7 @@ pub fn version() -> &'static str {
 /// * `meta` - index meta object.  
 /// * `schema` - schema.  
 /// * `serialize_schema` - serialize schema.  
+/// * `synonyms` - vector of synonyms.
 /// * `segment_number_bits1` - number of index segments: e.g. 11 bits for 2048 segments.  
 /// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
 pub fn create_index(
@@ -630,9 +656,13 @@ pub fn create_index(
     meta: IndexMetaObject,
     schema: &Vec<SchemaField>,
     serialize_schema: bool,
+    synonyms: &Vec<Synonym>,
     segment_number_bits1: usize,
     mute: bool,
 ) -> Result<Index, String> {
+    let segment_number1 = 1usize << segment_number_bits1;
+    let segment_number_mask1 = (1u32 << segment_number_bits1) - 1;
+
     let index_path_buf = index_path.to_path_buf();
     let index_path_string = index_path_buf.to_str().unwrap();
 
@@ -799,6 +829,50 @@ pub fn create_index(
                 unsafe { MmapMut::map_mut(&facets_file).expect("Unable to create Mmap") }
             };
 
+            #[allow(clippy::type_complexity)]
+            let mut synonyms_map: AHashMap<u64, Vec<(String, (u64, u32))>> = AHashMap::new();
+            for synonym in synonyms.iter() {
+                if synonym.terms.len() > 1 {
+                    let mut hashes: Vec<(String, (u64, u32))> = Vec::new();
+                    for term in synonym.terms.iter() {
+                        let term_bytes = term.to_lowercase();
+                        hashes.push((
+                            term.to_string(),
+                            (
+                                hasher_64.hash_one(term_bytes.as_bytes()),
+                                HASHER_32.hash_one(term_bytes.as_bytes()) as u32
+                                    & segment_number_mask1,
+                            ),
+                        ));
+                    }
+                    if synonym.multiway {
+                        for (i, hash) in hashes.iter().enumerate() {
+                            let new_synonyms = if i == 0 {
+                                hashes[1..].to_vec()
+                            } else if i == hashes.len() - 1 {
+                                hashes[..hashes.len() - 1].to_vec()
+                            } else {
+                                [&hashes[..i], &hashes[(i + 1)..]].concat()
+                            };
+
+                            if let Some(item) = synonyms_map.get_mut(&hash.1 .0) {
+                                *item = item
+                                    .clone()
+                                    .into_iter()
+                                    .chain(new_synonyms.into_iter())
+                                    .collect::<HashMap<String, (u64, u32)>>()
+                                    .into_iter()
+                                    .collect();
+                            } else {
+                                synonyms_map.insert(hash.1 .0, new_synonyms);
+                            }
+                        }
+                    } else {
+                        synonyms_map.insert(hashes[0].1 .0, hashes[1..].to_vec());
+                    }
+                }
+            }
+
             let facets_len = facets_vec.len();
 
             let mut index = Index {
@@ -871,6 +945,7 @@ pub fn create_index(
                 facets_file_mmap,
                 string_set_to_single_term_id_vec: vec![AHashMap::new(); facets_len],
                 bm25_component_cache: [0.0; 256],
+                synonyms_map,
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -905,8 +980,8 @@ pub fn create_index(
                 };
             }
 
-            index.segment_number1 = 1usize << index.segment_number_bits1;
-            index.segment_number_mask1 = (1u32 << index.segment_number_bits1) - 1;
+            index.segment_number1 = segment_number1;
+            index.segment_number_mask1 = segment_number_mask1;
             index.segments_level0 = vec![
                 SegmentLevel0 {
                     ..Default::default()
@@ -929,6 +1004,14 @@ pub fn create_index(
                     &schema,
                 )
                 .unwrap();
+
+                if !synonyms.is_empty() {
+                    serde_json::to_writer(
+                        &File::create(Path::new(index_path).join(SYNONYMS_FILENAME)).unwrap(),
+                        &synonyms,
+                    )
+                    .unwrap();
+                }
 
                 serde_json::to_writer(
                     &File::create(Path::new(index_path).join(META_FILENAME)).unwrap(),
@@ -1230,14 +1313,22 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
     let mut docstore_mmap_position = 0;
 
     match File::open(Path::new(index_path).join(META_FILENAME)) {
-        Ok(file) => {
-            let meta = serde_json::from_reader(BufReader::new(file)).unwrap();
+        Ok(meta_file) => {
+            let meta = serde_json::from_reader(BufReader::new(meta_file)).unwrap();
 
             match File::open(Path::new(index_path).join(SCHEMA_FILENAME)) {
-                Ok(file) => {
-                    let schema = serde_json::from_reader(BufReader::new(file)).unwrap();
+                Ok(schema_file) => {
+                    let schema = serde_json::from_reader(BufReader::new(schema_file)).unwrap();
 
-                    match create_index(index_path, meta, &schema, false, 11, false) {
+                    let synonyms = if let Ok(synonym_file) =
+                        File::open(Path::new(index_path).join(SYNONYMS_FILENAME))
+                    {
+                        serde_json::from_reader(BufReader::new(synonym_file)).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+
+                    match create_index(index_path, meta, &schema, false, &synonyms, 11, false) {
                         Ok(mut index) => {
                             let mut block_count_sum = 0;
 
@@ -2739,7 +2830,38 @@ impl IndexDocument2 for IndexArc {
             }
         }
 
-        for term in document_item.unique_terms {
+        let mut unique_terms = document_item.unique_terms;
+        if !index_mut.synonyms_map.is_empty() {
+            let unique_terms_clone = unique_terms.clone();
+            for term in unique_terms_clone.iter() {
+                if !term.1.is_bigram {
+                    let synonym = index_mut.synonyms_map.get(&term.1.key_hash).cloned();
+                    if let Some(synonym) = synonym {
+                        for synonym_term in synonym {
+                            let mut term_clone = term.1.clone();
+                            term_clone.key_hash = synonym_term.1 .0;
+                            term_clone.key0 = synonym_term.1 .1;
+                            term_clone.term = synonym_term.0.clone();
+
+                            if let Some(existing) = unique_terms.get_mut(&synonym_term.0) {
+                                existing
+                                    .field_positions_vec
+                                    .iter_mut()
+                                    .zip(term_clone.field_positions_vec.iter())
+                                    .for_each(|(x1, x2)| {
+                                        x1.extend_from_slice(x2);
+                                        x1.sort_unstable();
+                                    });
+                            } else {
+                                unique_terms.insert(synonym_term.0.clone(), term_clone);
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        for term in unique_terms {
             index_mut.index_posting(term.1, doc_id, false);
         }
 

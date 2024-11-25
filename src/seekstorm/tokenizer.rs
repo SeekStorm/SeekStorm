@@ -217,6 +217,7 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
+
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -226,6 +227,7 @@ pub(crate) fn tokenizer(
                     };
                 }
             }
+
             TokenizerType::UnicodeAlphanumeric => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
@@ -288,7 +290,6 @@ pub(crate) fn tokenizer(
             }
         }
     }
-
     if start {
         if first_part.len() >= 2 {
             non_unique_terms_line.push(first_part)
@@ -305,7 +306,6 @@ pub(crate) fn tokenizer(
     let mut previous_term_hash = 0;
 
     let mut bigrams: Vec<TermObject> = Vec::new();
-
     for term_string in non_unique_terms_line.iter_mut() {
         if is_query {
             let mut query_type_term = if is_phrase {
@@ -313,7 +313,6 @@ pub(crate) fn tokenizer(
             } else {
                 query_type.clone()
             };
-
             if term_string.starts_with('+') {
                 if query_type != &QueryType::Phrase {
                     *query_type = QueryType::Intersection;

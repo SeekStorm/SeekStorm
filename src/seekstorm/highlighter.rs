@@ -1,6 +1,6 @@
-use crate::index::{Document, FieldType, Index};
+use crate::index::{Document, FieldType, Index, IndexArc};
 use crate::min_heap::{self, MinHeap};
-use aho_corasick::AhoCorasick;
+use aho_corasick::{AhoCorasick, MatchKind};
 use serde::{Deserialize, Serialize};
 
 /// Specifies the number and size of fragments (snippets, summaries) to generate from each specified field to provide a "keyword in context" (KWIC) functionality.
@@ -45,10 +45,33 @@ pub struct Highlighter {
 }
 
 /// Returns the Highlighter object used as get_document parameter for highlighting fields in documents
-pub fn highlighter(highlights: Vec<Highlight>, query_terms_vec: Vec<String>) -> Highlighter {
+pub async fn highlighter(
+    index_arc: &IndexArc,
+    highlights: Vec<Highlight>,
+    query_terms_vec: Vec<String>,
+) -> Highlighter {
+    let index_ref = index_arc.read().await;
+    let query_terms = if !index_ref.synonyms_map.is_empty() {
+        let mut query_terms_vec_mut = query_terms_vec.clone();
+        for query_term in query_terms_vec.iter() {
+            let term_hash = index_ref
+                .hasher_64
+                .hash_one(query_term.to_lowercase().as_bytes());
+            if let Some(synonyms) = index_ref.synonyms_map.get(&term_hash) {
+                for synonym in synonyms.iter() {
+                    query_terms_vec_mut.push(synonym.0.clone());
+                }
+            }
+        }
+        query_terms_vec_mut
+    } else {
+        query_terms_vec
+    };
+
     let query_terms_ac = AhoCorasick::builder()
         .ascii_case_insensitive(true)
-        .build(query_terms_vec)
+        .match_kind(MatchKind::LeftmostLongest)
+        .build(query_terms)
         .unwrap();
 
     Highlighter {

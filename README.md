@@ -29,6 +29,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting. 
 * KWIC snippets, highlighting
+* One-way and multi-way synonyms
 * Billion-scale index
 * Language independent
 * API keys
@@ -285,7 +286,7 @@ let meta = IndexMetaObject {
 
 let serialize_schema=true;
 let segment_number_bits1=11;
-let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1,false).unwrap();
+let index=create_index(index_path,meta,&schema,serialize_schema,&Vec::new(),segment_number_bits1,false).unwrap();
 let _index_arc = Arc::new(RwLock::new(index));
 ```
 
@@ -335,7 +336,7 @@ let highlights:Vec<Highlight>= vec![
     },
 ];    
 
-let highlighter=Some(highlighter(highlights, result_object.query_term_strings));
+let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_term_strings));
 let return_fields_filter= HashSet::new();
 let mut index=index_arc.write().await;
 for result in result_object.results.iter() {
@@ -482,24 +483,24 @@ Facets are defined in 3 different places:
 A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious. This is why we provide a quick start example here:
 
 Add required crates to your project
-```
+```rust
 cargo add seekstorm
 cargo add tokio
 cargo add serde_json
 ```
 Add use declarations
-```
+```rust
 use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
 use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
 use tokio::sync::RwLock;
 ```
 use an asynchronous Rust runtime
-```
+```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 ```
 create index
-```
+```rust
 let index_path=Path::new("C:/index/");//x
 
 let schema_json = r#"
@@ -519,11 +520,11 @@ let meta = IndexMetaObject {
 
 let serialize_schema=true;
 let segment_number_bits1=11;
-let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1,false).unwrap();
+let index=create_index(index_path,meta,&schema,serialize_schema,&Vec::new(),segment_number_bits1,false).unwrap();
 let mut index_arc = Arc::new(RwLock::new(index));
 ```
 index documents
-```
+```rust
 let documents_json = r#"
 [{"title":"title1 test","body":"body1","url":"url1","town":"Berlin"},
 {"title":"title2","body":"body2 test","url":"url2","town":"Warsaw"},
@@ -533,11 +534,11 @@ let documents_vec=serde_json::from_str(documents_json).unwrap();
 index_arc.index_documents(documents_vec).await; 
 ```
 commit documents
-```
+```rust
 index_arc.commit().await;
 ```
 search index
-```
+```rust
 let query="test".to_string();
 let offset=0;
 let length=10;
@@ -554,7 +555,7 @@ let facet_result_sort=Vec::new();
 let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;
 ```
 display results
-```
+```rust
 let highlights:Vec<Highlight>= vec![
         Highlight {
             field: "body".to_owned(),
@@ -565,7 +566,7 @@ let highlights:Vec<Highlight>= vec![
         },
     ];    
 
-let highlighter2=Some(highlighter(highlights, result_object.query_terms));
+let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_terms));
 let return_fields_filter= HashSet::new();
 let index=index_arc.write().await;
 for result in result_object.results.iter() {
@@ -574,11 +575,11 @@ for result in result_object.results.iter() {
 }
 ```
 display facets
-```
+```rust
 println!("{}", serde_json::to_string_pretty(&result_object.facets).unwrap());
 ```
 end of main function
-```
+```rust
    Ok(())
 }
 ```
@@ -713,23 +714,13 @@ cd target/release
 ./seekstorm_server local_ip="0.0.0.0" local_port=80
 ```
 
-**Create demo api key**
-```
-curl.exe --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
-```
-
-**Create index**
-```
-curl.exe --request POST --url 'http://127.0.0.1:80/api/v1/index' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{\"schema\":[{\"field\": \"title\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true,\"boost\":10.0},{\"field\": \"body\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true},{\"field\": \"url\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true}],\"index_name\": \"test_index\",\"similarity\": \"Bm25fProximity\",\"tokenizer\": \"UnicodeAlphanumeric\"}'
-```
-
 **Indexing** 
 
 Choose a directory that contains PDF files you want to index and search, e.g. your documents or download directory.
 
 Type 'ingest' into the command line of the running SeekStorm server: 
 ```
-ingest C:\Users\JohnDoe\Downloads AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= 0
+ingest C:\Users\JohnDoe\Downloads
 ```
 
 This creates the pdf_index and indexes all PDF files from the specifies directory, including subdirectories.

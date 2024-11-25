@@ -16,7 +16,7 @@ use seekstorm::{
     index::{
         create_index, open_index, AccessType, DeleteDocument, DeleteDocuments,
         DeleteDocumentsByQuery, DistanceField, Document, Facet, FileType, IndexArc, IndexDocument,
-        IndexDocuments, IndexMetaObject, MinMaxFieldJson, SchemaField, SimilarityType,
+        IndexDocuments, IndexMetaObject, MinMaxFieldJson, SchemaField, SimilarityType, Synonym,
         TokenizerType, UpdateDocument, UpdateDocuments,
     },
     ingest::IndexPdfBytes,
@@ -88,6 +88,8 @@ pub struct CreateIndexRequest {
     pub similarity: SimilarityType,
     #[serde(default = "tokenizer_type_api")]
     pub tokenizer: TokenizerType,
+    #[serde(default)]
+    pub synonyms: Vec<Synonym>,
 }
 
 fn similarity_type_api() -> SimilarityType {
@@ -268,6 +270,7 @@ pub(crate) fn create_index_api<'a>(
     schema: Vec<SchemaField>,
     similarity: SimilarityType,
     tokenizer: TokenizerType,
+    synonyms: Vec<Synonym>,
     apikey_object: &'a mut ApikeyObject,
 ) -> u64 {
     let mut index_id: u64 = 0;
@@ -292,7 +295,7 @@ pub(crate) fn create_index_api<'a>(
         access_type: AccessType::Mmap,
     };
 
-    let index = create_index(&index_id_path, meta, &schema, true, 11, false).unwrap();
+    let index = create_index(&index_id_path, meta, &schema, true, &synonyms, 11, false).unwrap();
 
     let index_arc = Arc::new(RwLock::new(index));
     apikey_object.index_list.insert(index_id, index_arc);
@@ -419,10 +422,14 @@ pub(crate) async fn get_document_api(
         {
             None
         } else {
-            Some(highlighter(
-                get_document_request.highlights,
-                get_document_request.query_terms,
-            ))
+            Some(
+                highlighter(
+                    index_arc,
+                    get_document_request.highlights,
+                    get_document_request.query_terms,
+                )
+                .await,
+            )
         };
 
         match index_arc.read().await.get_document(
@@ -523,10 +530,14 @@ pub(crate) async fn query_index_api(
         let highlighter_option = if search_request.highlights.is_empty() {
             None
         } else {
-            Some(highlighter(
-                search_request.highlights,
-                result_object.query_terms.clone(),
-            ))
+            Some(
+                highlighter(
+                    index_arc,
+                    search_request.highlights,
+                    result_object.query_terms.clone(),
+                )
+                .await,
+            )
         };
 
         for result in result_object.results.iter() {

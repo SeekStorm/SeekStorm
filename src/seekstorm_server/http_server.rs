@@ -331,6 +331,7 @@ pub(crate) async fn http_request_handler(
                             create_index_request_object.schema,
                             create_index_request_object.similarity,
                             create_index_request_object.tokenizer,
+                            create_index_request_object.synonyms,
                             apikey_object,
                         );
                         drop(apikey_list_mut);
@@ -639,6 +640,21 @@ pub(crate) async fn http_request_handler(
                 ))
             }
         }
+
+        ("api", "v1", "index", _, "synonyms", _, &Method::POST) => Ok(status(
+            StatusCode::NOT_IMPLEMENTED,
+            String::from("method not implemented"),
+        )),
+
+        ("api", "v1", "index", _, "synonyms", _, &Method::PUT) => Ok(status(
+            StatusCode::NOT_IMPLEMENTED,
+            String::from("method not implemented"),
+        )),
+
+        ("api", "v1", "index", _, "synonyms", _, &Method::GET) => Ok(status(
+            StatusCode::NOT_IMPLEMENTED,
+            String::from("method not implemented"),
+        )),
 
         ("api", "v1", "index", _, "doc", _, &Method::POST) => {
             if let Some(apikey) = headers.get("apikey") {

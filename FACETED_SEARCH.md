@@ -135,7 +135,7 @@ let meta = IndexMetaObject {
 let serialize_schema=true;
 let segment_number_bits1=11;
 
-let index=create_index(index_path,meta,&schema,serialize_schema,segment_number_bits1,false).unwrap();
+let index=create_index(index_path,meta,&schema,serialize_schema,&Vec::new(),segment_number_bits1,false).unwrap();
 let mut index_arc = Arc::new(RwLock::new(index));
 ```
 
@@ -263,7 +263,7 @@ let highlights:Vec<Highlight>= vec![
         },
     ];    
 
-let highlighter2=Some(highlighter(highlights, result_object.query_terms));
+let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_terms));
 let return_fields_filter= HashSet::new();
 let index=index_arc.write().await;
 for result in result_object.results.iter() {

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2024-11-25
+
+- One-way and multi-way synonym definition per index added
+  - Synonyms parameter added to create_index (both library and REST API).
+  - Allows to define term synonyms per index.
+  - Supports both one-way and multi-way synonyms.
+  - Synonym support for result highlighting.
+  - Currently only single term synonyms without spaces are supported.
+- New server console command `create` to manually create a demo API key (`delete` to delete the demo API key and asociated indices).
+
+### Added
+
 ## [0.9.0] - 2024-11-18
 
 ### Added
@@ -16,7 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Result sorting in Web UI (Score/Date/Price/Distance acending/descending).  
 - Numeric facet filter and histogram in Web UI (Date/Price/Distance...).  
 - Min/Max numeric facet aggregation (Date/Price/Distance...).
-
 
 - Library
   - `create_index` now creates a `files` subdirectory in index, to store copies of ingested PDF files.

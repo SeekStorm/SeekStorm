@@ -205,12 +205,13 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                     let md = metadata(data_path).unwrap();
 
+
                                     if parameter.len() > 3 || !md.is_file() || data_path.display().to_string().to_lowercase().ends_with(".pdf") || data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME) ||
                                     (parameter.len()==1 && !apikey_object.index_list.is_empty() && apikey_object.index_list.contains_key(&0))  {
 
                                         let index_id=if parameter.len()>3 {
                                             parameter[3].parse().unwrap_or(0)
-                                        } else if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
+                                        } else  if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
                                                 let indexname_schemajson = if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME)
                                                 {("wikipedia_demo",r#"
                                                 [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
@@ -228,6 +229,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                     serde_json::from_str(indexname_schemajson.1).unwrap(),
                                                     SimilarityType::Bm25fProximity,
                                                     TokenizerType::UnicodeAlphanumeric,
+                                                    Vec::new(),
                                                     apikey_object,
                                                 )
                                             } else {
@@ -281,9 +283,23 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         }
                     },
 
+
+                    "create" =>
+                    {
+                        println!("create demo api_key");
+                        let mut apikey_list_mut = apikey_list_clone.write().await;
+                        let apikey_quota_object=ApikeyQuotaObject {..Default::default()};
+                        create_apikey_api(
+                            &index_path,
+                            apikey_quota_object,
+                            &demo_api_key,
+                            &mut apikey_list_mut,
+                        );
+                    }
+
                     "delete" =>
                     {
-                        println!("delete api_key");
+                        println!("delete demo api_key");
                         let apikey_hash = calculate_hash(&demo_api_key) as u128;
                         let mut apikey_list_mut = apikey_list_clone.write().await;
                         let _ = delete_apikey_api(&index_path, &mut apikey_list_mut, apikey_hash);
@@ -320,6 +336,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         println!("{:40} Index {} if present in the seekstorm_server.exe directory or the directory specified by the command line parameter `ingest_path`.","ingest".green(),WIKIPEDIA_FILENAME);
                         println!("{:40} Index a local file in PDF, JSON, Newline-delimited JSON, or Concatenated JSON format, from the seekstorm_server.exe directory or the directory specified by the command line parameter.","ingest [data_path]".green());
                         println!("{:40} Index a local file in PDF, JSON, Newline-delimited JSON, or Concatenated JSON format.","ingest [data_path] [apikey] [index_id]".green());
+                        println!("{:40} Create the demo API key manually to allow a subsequent custom create index via REST API.","create".green());
                         println!("{:40} Delete the demo API key and all its indices.","delete".green());
                         println!("{:40} Stop the server.","quit".green());
                         println!("{:40} Show this help.","help".green());
