@@ -339,6 +339,27 @@ pub(crate) async fn close_index_api(index_arc: &IndexArc) -> Result<u64, String>
     Ok(indexed_doc_count as u64)
 }
 
+pub(crate) async fn set_synonyms_api(
+    index_arc: &IndexArc,
+    synonyms: Vec<Synonym>,
+) -> Result<usize, String> {
+    let mut index_mut = index_arc.write().await;
+    index_mut.set_synonyms(&synonyms)
+}
+
+pub(crate) async fn add_synonyms_api(
+    index_arc: &IndexArc,
+    synonyms: Vec<Synonym>,
+) -> Result<usize, String> {
+    let mut index_mut = index_arc.write().await;
+    index_mut.add_synonyms(&synonyms)
+}
+
+pub(crate) async fn get_synonyms_api(index_arc: &IndexArc) -> Result<Vec<Synonym>, String> {
+    let index_ref = index_arc.read().await;
+    index_ref.get_synonyms()
+}
+
 pub(crate) async fn get_index_stats_api(
     _index_path: &Path,
     index_id: u64,

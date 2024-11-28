@@ -27,7 +27,8 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Field filtering
 * [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets (with Histogram/Bucket & Min/Max aggregation)
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
-* Geo proximity search, filtering and sorting. 
+* Geo proximity search, filtering and sorting.
+* Tokenizer with Chinese word segmentation
 * KWIC snippets, highlighting
 * One-way and multi-way synonyms
 * Billion-scale index
@@ -772,9 +773,10 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Faceted search
 * ✅ Sorting of results by any field
 * ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
+* ✅ Tokenizer with Chinese word segmentation
+* More tokenizer types (stemming)
 * Autosuggestion, spelling correction, instant search
 * Fuzzy search
-* More tokenizer types (stemming, CJK)
 * Intra-query concurrency
 
 **Improvements**

@@ -5,6 +5,7 @@ use seekstorm::{
     index::{SimilarityType, TokenizerType},
     ingest::{IngestJson, IngestPdf},
 };
+
 use std::{
     collections::HashMap,
     env::current_exe,
@@ -282,6 +283,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             println!("{} ingest [data_path] [apikey] [index_id]","Missing parameters:".bright_red());
                         }
                     },
+
 
 
                     "create" =>

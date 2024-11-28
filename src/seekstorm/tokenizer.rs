@@ -5,7 +5,8 @@ use finl_unicode::categories::{CharacterCategories, MinorCategory};
 
 use crate::{
     index::{
-        NonUniqueTermObject, TermObject, TokenizerType, HASHER_32, HASHER_64, STOPWORD_HASHSET,
+        Index, NonUniqueTermObject, TermObject, TokenizerType, HASHER_32, HASHER_64,
+        STOPWORD_HASHSET,
     },
     search::QueryType,
 };
@@ -94,6 +95,7 @@ pub fn fold_diacritics_accents_zalgo_umlaut(string: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::assigning_clones)]
 pub(crate) fn tokenizer(
+    index: &Index,
     text: &str,
     unique_terms: &mut AHashMap<String, TermObject>,
     non_unique_terms: &mut Vec<NonUniqueTermObject>,
@@ -113,6 +115,7 @@ pub(crate) fn tokenizer(
 
     let text_normalized;
     let mut non_unique_terms_line: Vec<&str> = Vec::new();
+    let mut non_unique_terms_line_string: Vec<String> = Vec::new();
 
     let mut start = false;
     let mut start_pos = 0;
@@ -204,6 +207,38 @@ pub(crate) fn tokenizer(
                     };
                 }
             }
+
+            #[cfg(feature = "zh")]
+            TokenizerType::UnicodeAlphanumericZH => {
+                text_normalized = text.to_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if regex_syntax::is_word_character(token) => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        '"' | '+' | '-' | '#' => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                let result = index
+                                    .word_segmentation_option
+                                    .as_ref()
+                                    .unwrap()
+                                    .segment(&text_normalized[start_pos..char.0], true);
+                                non_unique_terms_line_string.extend(result.0);
+                            }
+                            false
+                        }
+                    };
+                }
+            }
         }
     } else {
         match tokenizer {
@@ -217,7 +252,6 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -227,7 +261,6 @@ pub(crate) fn tokenizer(
                     };
                 }
             }
-
             TokenizerType::UnicodeAlphanumeric => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
@@ -238,6 +271,7 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
+
                         '+' | '-' | '#' => start,
 
                         _ => {
@@ -288,16 +322,84 @@ pub(crate) fn tokenizer(
                     };
                 }
             }
+
+            #[cfg(feature = "zh")]
+            TokenizerType::UnicodeAlphanumericZH => {
+                text_normalized = text.to_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if regex_syntax::is_word_character(token) => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+
+                        '+' | '-' | '#' => start,
+
+                        _ => {
+                            if start {
+                                let result = index
+                                    .word_segmentation_option
+                                    .as_ref()
+                                    .unwrap()
+                                    .segment(&text_normalized[start_pos..char.0], true);
+                                non_unique_terms_line_string.extend(result.0);
+                            }
+                            false
+                        }
+                    };
+                }
+            }
         }
     }
-    if start {
-        if first_part.len() >= 2 {
-            non_unique_terms_line.push(first_part)
-        } else {
-            non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
+
+    #[cfg(feature = "zh")]
+    if tokenizer == TokenizerType::UnicodeAlphanumericZH {
+        if start {
+            if first_part.len() >= 2 {
+                let result = index
+                    .word_segmentation_option
+                    .as_ref()
+                    .unwrap()
+                    .segment(first_part, true);
+                non_unique_terms_line_string.extend(result.0);
+            } else {
+                non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
+                let result = index
+                    .word_segmentation_option
+                    .as_ref()
+                    .unwrap()
+                    .segment(&text_normalized[start_pos..text_normalized.len()], true);
+                non_unique_terms_line_string.extend(result.0);
+            }
+        } else if !first_part.is_empty() {
+            let result = index
+                .word_segmentation_option
+                .as_ref()
+                .unwrap()
+                .segment(first_part, true);
+            non_unique_terms_line_string.extend(result.0);
         }
-    } else if !first_part.is_empty() {
-        non_unique_terms_line.push(first_part);
+        non_unique_terms_line = non_unique_terms_line_string
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+    }
+
+    if tokenizer == TokenizerType::AsciiAlphabetic
+        || tokenizer == TokenizerType::UnicodeAlphanumeric
+        || tokenizer == TokenizerType::UnicodeAlphanumericFolded
+    {
+        if start {
+            if first_part.len() >= 2 {
+                non_unique_terms_line.push(first_part)
+            } else {
+                non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
+            }
+        } else if !first_part.is_empty() {
+            non_unique_terms_line.push(first_part);
+        }
     }
 
     let mut position: u32 = 0;

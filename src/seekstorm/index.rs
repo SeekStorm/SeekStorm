@@ -24,6 +24,8 @@ use std::{
 use tokio::sync::{RwLock, Semaphore};
 use utils::{read_u32, write_u16};
 
+#[cfg(feature = "zh")]
+use crate::word_segmentation::WordSegmentationTM;
 use crate::{
     add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
     commit::KEY_HEAD_SIZE,
@@ -106,6 +108,8 @@ pub enum TokenizerType {
     /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
     /// Tokenizing might be slower due to folding and apostroph processing.
     UnicodeAlphanumericFolded = 2,
+    #[cfg(feature = "zh")]
+    UnicodeAlphanumericZH = 3,
 }
 
 pub(crate) struct LevelIndex {
@@ -314,7 +318,6 @@ pub(crate) struct NonUniquePostingListObjectQuery<'a> {
 /// Terms are converted to hashs. The index is divided into key hash range partitioned segments.
 /// for each strip (key hash range) a separate dictionary (key hash - posting list) is maintained.
 /// The index hash multiple segments, each segments contains multiple terms, each term has a postinglist, each postinglist has multiple blocks.
-
 pub(crate) struct SegmentIndex {
     pub byte_array_blocks: Vec<Vec<u8>>,
     pub byte_array_blocks_pointer: Vec<(usize, usize, u32)>,
@@ -340,7 +343,7 @@ pub enum FieldType {
     I16,
     I32,
     I64,
-    /// Timestamp is identical to I64, but to be used for Unix timestamps <https://en.wikipedia.org/wiki/Unix_time>.
+    /// Timestamp is identical to I64, but to be used for Unix timestamps https://en.wikipedia.org/wiki/Unix_time.
     /// The reason for a separate FieldType is to enable the UI to interpret I64 as timestamp without using the field name as indicator.
     /// For date facets and filtering.
     Timestamp,
@@ -373,7 +376,7 @@ pub struct Synonym {
     /// Currently only single terms without spaces are supported.
     /// Synonyms are supported in result highlighting.
     /// The synonyms that were created with the synonyms parameter in create_index are stored in synonyms.json in the index directory contains  
-    /// Can be manually modiefied, but becomes effective only after restart and only for newly indexed documents.
+    /// Can be manually modified, but becomes effective only after restart and only for newly indexed documents.
     #[serde(default = "default_as_true")]
     pub multiway: bool,
 }
@@ -633,13 +636,67 @@ pub struct Index {
 
     pub(crate) string_set_to_single_term_id_vec: Vec<AHashMap<String, AHashSet<u16>>>,
 
-    #[allow(clippy::type_complexity)]
-    pub(crate) synonyms_map: AHashMap<u64, Vec<(String, (u64, u32))>>,
+    pub(crate) synonyms_map: AHashMap<u64, SynonymItem>,
+
+    #[cfg(feature = "zh")]
+    pub(crate) word_segmentation_option: Option<WordSegmentationTM>,
 }
+
+pub type SynonymItem = Vec<(String, (u64, u32))>;
 
 /// Get the version of the SeekStorm search library
 pub fn version() -> &'static str {
     VERSION
+}
+
+pub(crate) fn get_synonyms_map(
+    synonyms: &[Synonym],
+    hasher_64: &RandomState,
+    hasher_32: &RandomState,
+    segment_number_mask1: u32,
+) -> AHashMap<u64, SynonymItem> {
+    let mut synonyms_map: AHashMap<u64, SynonymItem> = AHashMap::new();
+    for synonym in synonyms.iter() {
+        if synonym.terms.len() > 1 {
+            let mut hashes: Vec<(String, (u64, u32))> = Vec::new();
+            for term in synonym.terms.iter() {
+                let term_bytes = term.to_lowercase();
+                hashes.push((
+                    term.to_string(),
+                    (
+                        hasher_64.hash_one(term_bytes.as_bytes()),
+                        hasher_32.hash_one(term_bytes.as_bytes()) as u32 & segment_number_mask1,
+                    ),
+                ));
+            }
+            if synonym.multiway {
+                for (i, hash) in hashes.iter().enumerate() {
+                    let new_synonyms = if i == 0 {
+                        hashes[1..].to_vec()
+                    } else if i == hashes.len() - 1 {
+                        hashes[..hashes.len() - 1].to_vec()
+                    } else {
+                        [&hashes[..i], &hashes[(i + 1)..]].concat()
+                    };
+
+                    if let Some(item) = synonyms_map.get_mut(&hash.1 .0) {
+                        *item = item
+                            .clone()
+                            .into_iter()
+                            .chain(new_synonyms.into_iter())
+                            .collect::<HashMap<String, (u64, u32)>>()
+                            .into_iter()
+                            .collect();
+                    } else {
+                        synonyms_map.insert(hash.1 .0, new_synonyms);
+                    }
+                }
+            } else {
+                synonyms_map.insert(hashes[0].1 .0, hashes[1..].to_vec());
+            }
+        }
+    }
+    synonyms_map
 }
 
 /// Create index in RAM.
@@ -829,51 +886,20 @@ pub fn create_index(
                 unsafe { MmapMut::map_mut(&facets_file).expect("Unable to create Mmap") }
             };
 
-            #[allow(clippy::type_complexity)]
-            let mut synonyms_map: AHashMap<u64, Vec<(String, (u64, u32))>> = AHashMap::new();
-            for synonym in synonyms.iter() {
-                if synonym.terms.len() > 1 {
-                    let mut hashes: Vec<(String, (u64, u32))> = Vec::new();
-                    for term in synonym.terms.iter() {
-                        let term_bytes = term.to_lowercase();
-                        hashes.push((
-                            term.to_string(),
-                            (
-                                hasher_64.hash_one(term_bytes.as_bytes()),
-                                HASHER_32.hash_one(term_bytes.as_bytes()) as u32
-                                    & segment_number_mask1,
-                            ),
-                        ));
-                    }
-                    if synonym.multiway {
-                        for (i, hash) in hashes.iter().enumerate() {
-                            let new_synonyms = if i == 0 {
-                                hashes[1..].to_vec()
-                            } else if i == hashes.len() - 1 {
-                                hashes[..hashes.len() - 1].to_vec()
-                            } else {
-                                [&hashes[..i], &hashes[(i + 1)..]].concat()
-                            };
-
-                            if let Some(item) = synonyms_map.get_mut(&hash.1 .0) {
-                                *item = item
-                                    .clone()
-                                    .into_iter()
-                                    .chain(new_synonyms.into_iter())
-                                    .collect::<HashMap<String, (u64, u32)>>()
-                                    .into_iter()
-                                    .collect();
-                            } else {
-                                synonyms_map.insert(hash.1 .0, new_synonyms);
-                            }
-                        }
-                    } else {
-                        synonyms_map.insert(hashes[0].1 .0, hashes[1..].to_vec());
-                    }
-                }
-            }
+            let synonyms_map =
+                get_synonyms_map(synonyms, &hasher_64, &hasher_32, segment_number_mask1);
 
             let facets_len = facets_vec.len();
+
+            #[cfg(feature = "zh")]
+            let word_segmentation_option = if meta.tokenizer == TokenizerType::UnicodeAlphanumericZH
+            {
+                let mut word_segmentation = WordSegmentationTM::new();
+                word_segmentation.load_dictionary(0, 1, true);
+                Some(word_segmentation)
+            } else {
+                None
+            };
 
             let mut index = Index {
                 index_format_version_major: INDEX_FORMAT_VERSION_MAJOR,
@@ -946,6 +972,8 @@ pub fn create_index(
                 string_set_to_single_term_id_vec: vec![AHashMap::new(); facets_len],
                 bm25_component_cache: [0.0; 256],
                 synonyms_map,
+                #[cfg(feature = "zh")]
+                word_segmentation_option,
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -2206,6 +2234,67 @@ impl Index {
     pub fn close_index(&mut self) {
         self.commit(self.indexed_doc_count);
     }
+
+    /// Get synonyms from index
+    pub fn get_synonyms(&self) -> Result<Vec<Synonym>, String> {
+        if let Ok(synonym_file) =
+            File::open(Path::new(&self.index_path_string).join(SYNONYMS_FILENAME))
+        {
+            if let Ok(synonyms) = serde_json::from_reader(BufReader::new(synonym_file)) {
+                Ok(synonyms)
+            } else {
+                Err("not found".into())
+            }
+        } else {
+            Err("not found".into())
+        }
+    }
+
+    /// Set/replace/overwrite synonyms in index
+    /// Affects only subsequently indexed documents
+    pub fn set_synonyms(&mut self, synonyms: &Vec<Synonym>) -> Result<usize, String> {
+        serde_json::to_writer(
+            &File::create(Path::new(&self.index_path_string).join(SYNONYMS_FILENAME)).unwrap(),
+            &synonyms,
+        )
+        .unwrap();
+
+        self.synonyms_map = get_synonyms_map(
+            synonyms,
+            &self.hasher_64,
+            &self.hasher_32,
+            self.segment_number_mask1,
+        );
+        Ok(synonyms.len())
+    }
+
+    /// Add/append/update/merge synonyms in index
+    /// Affects only subsequently indexed documents
+    pub fn add_synonyms(&mut self, synonyms: &[Synonym]) -> Result<usize, String> {
+        let mut merged_synonyms = if let Ok(synonym_file) =
+            File::open(Path::new(&self.index_path_string).join(SYNONYMS_FILENAME))
+        {
+            serde_json::from_reader(BufReader::new(synonym_file)).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        merged_synonyms.extend(synonyms.iter().cloned());
+
+        serde_json::to_writer(
+            &File::create(Path::new(&self.index_path_string).join(SYNONYMS_FILENAME)).unwrap(),
+            &merged_synonyms,
+        )
+        .unwrap();
+
+        self.synonyms_map = get_synonyms_map(
+            &merged_synonyms,
+            &self.hasher_64,
+            &self.hasher_32,
+            self.segment_number_mask1,
+        );
+        Ok(merged_synonyms.len())
+    }
 }
 
 /// Delete document from index by document id
@@ -2404,6 +2493,7 @@ impl IndexDocument for IndexArc {
             let token_per_field_max: u32 = u16::MAX as u32;
             let mut unique_terms: AHashMap<String, TermObject> = AHashMap::new();
             let mut field_vec: Vec<(usize, u8, u32, u32)> = Vec::new();
+            let index_ref2 = index_arc_clone.read().await;
 
             for schema_field in schema.iter() {
                 let field_name = &schema_field.field;
@@ -2424,6 +2514,7 @@ impl IndexDocument for IndexArc {
                     let mut query_type_mut = QueryType::Union;
 
                     tokenizer(
+                        &index_ref2,
                         &text,
                         &mut unique_terms,
                         &mut non_unique_terms,
@@ -2450,6 +2541,7 @@ impl IndexDocument for IndexArc {
                     ));
                 }
             }
+            drop(index_ref2);
 
             let bigrams: Vec<String> = unique_terms
                 .iter()

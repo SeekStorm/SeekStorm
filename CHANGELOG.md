@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2024-11-28
+
+### Added
+
+- New tokenizer UnicodeAlphanumericZH (enable SeekStorm Cargo feature 'zh')
+  - Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
+  - Supports mixed Latin and Chinese texts
+  - Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.
+- get_synonyms, set_synonyms and add_synonyms library methods and REST API endpoints added 
+  - Updated synonyms only affect subsequently indexed documents.
+
+### Changed
+
+- Commit now waits until all previously started index_posting have finished (multi-threading).
+
 ## [0.10.0] - 2024-11-25
+
+### Added
 
 - One-way and multi-way synonym definition per index added
   - Synonyms parameter added to create_index (both library and REST API).
@@ -14,8 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Synonym support for result highlighting.
   - Currently only single term synonyms without spaces are supported.
 - New server console command `create` to manually create a demo API key (`delete` to delete the demo API key and asociated indices).
-
-### Added
 
 ## [0.9.0] - 2024-11-18
 

@@ -1138,6 +1138,7 @@ impl Search for IndexArc {
             let mut nonunique_terms_count = 0u32;
 
             tokenizer(
+                &index_ref,
                 &query_string,
                 &mut unique_terms,
                 &mut non_unique_terms,
@@ -1428,6 +1429,17 @@ impl Search for IndexArc {
                         non_unique_query_list.push(nu_plo);
                     }
                 }
+                if term.is_bigram {
+                    result_object
+                        .query_terms
+                        .push(term.term_bigram1.to_string());
+                    result_object
+                        .query_terms
+                        .push(term.term_bigram2.to_string());
+                }
+                {
+                    result_object.query_terms.push(term.term.to_string());
+                }
             }
 
             not_query_list = not_query_list_map.into_values().collect();
@@ -1444,20 +1456,6 @@ impl Search for IndexArc {
 
             let query_list_len = query_list.len();
             let non_unique_query_list_len = non_unique_query_list.len();
-
-            for term in non_unique_terms.iter() {
-                if term.is_bigram {
-                    result_object
-                        .query_terms
-                        .push(term.term_bigram1.to_string());
-                    result_object
-                        .query_terms
-                        .push(term.term_bigram2.to_string());
-                }
-                {
-                    result_object.query_terms.push(term.term.to_string());
-                }
-            }
 
             let mut matching_blocks: i32 = 0;
             if query_list_len == 0 {

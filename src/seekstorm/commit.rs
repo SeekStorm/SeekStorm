@@ -6,6 +6,7 @@ use std::{
     fs::File,
     io::{Seek, SeekFrom, Write},
     path::Path,
+    thread::available_parallelism,
 };
 
 use crate::{
@@ -73,6 +74,15 @@ impl Commit for IndexArc {
     ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
     async fn commit(&mut self) {
+        let index_ref = self.read().await;
+        let index_permits = index_ref.permits.clone();
+        drop(index_ref);
+        let thread_number = available_parallelism().unwrap().get();
+        let mut permit_vec = Vec::new();
+        for _i in 0..thread_number {
+            permit_vec.push(index_permits.acquire().await.unwrap());
+        }
+
         let mut index_mut = self.write().await;
         let indexed_doc_count = index_mut.indexed_doc_count;
         index_mut.commit(indexed_doc_count);

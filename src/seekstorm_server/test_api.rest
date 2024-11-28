@@ -291,6 +291,11 @@ GET http://127.0.0.1/api/v1/index/0/file/0
 apikey: {{api_key}}
 content-type: application/json
 
+### get synonyms
+GET http://127.0.0.1/api/v1/index/0/synonyms
+apikey: {{api_key}}
+content-type: application/json
+
 ### query index POST with query facets and facet filter
 POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
 apikey: {{api_key}}

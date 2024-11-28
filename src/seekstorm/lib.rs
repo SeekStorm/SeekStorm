@@ -340,3 +340,5 @@ pub(crate) mod single;
 pub mod tokenizer;
 pub(crate) mod union;
 pub(crate) mod utils;
+#[cfg(feature = "zh")]
+pub(crate) mod word_segmentation;

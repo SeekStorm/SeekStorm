@@ -5,7 +5,6 @@ use std::{
     io::{self, BufReader, Read},
     path::Path,
     sync::Arc,
-    thread::available_parallelism,
     time::{Instant, SystemTime},
 };
 
@@ -289,9 +288,7 @@ impl IndexPdf for IndexArc {
                     file_date
                 };
 
-            if creation_timestamp > Utc::now().timestamp()
-                || !(0..=i64::MAX).contains(&creation_timestamp)
-            {
+            if creation_timestamp > Utc::now().timestamp() || creation_timestamp < 0 {
                 creation_timestamp = file_date;
             }
 
@@ -363,9 +360,7 @@ impl IngestPdf for IndexArc {
                     let start_time = Instant::now();
                     let mut docid = 0usize;
 
-                    let thread_number = available_parallelism().unwrap().get();
                     let index_ref = self.read().await;
-                    let index_permits = index_ref.permits.clone();
                     drop(index_ref);
 
                     let md = metadata(data_path).unwrap();
@@ -382,11 +377,6 @@ impl IngestPdf for IndexArc {
                         }
                     } else {
                         path_recurse(self, data_path, &mut docid).await;
-                    }
-
-                    let mut permit_vec = Vec::new();
-                    for _i in 0..thread_number {
-                        permit_vec.push(index_permits.acquire().await.unwrap());
                     }
 
                     self.commit().await;
@@ -434,10 +424,8 @@ impl IngestJson for IndexArc {
                 let start_time = Instant::now();
                 let mut docid: i64 = 0;
 
-                let thread_number = available_parallelism().unwrap().get();
                 let index_arc_clone2 = self.clone();
                 let index_ref = index_arc_clone2.read().await;
-                let index_permits = index_ref.permits.clone();
                 drop(index_ref);
 
                 let index_arc_clone = self.clone();
@@ -483,11 +471,6 @@ impl IngestJson for IndexArc {
                             _ => break,
                         }
                     }
-                }
-
-                let mut permit_vec = Vec::new();
-                for _i in 0..thread_number {
-                    permit_vec.push(index_permits.acquire().await.unwrap());
                 }
 
                 self.commit().await;

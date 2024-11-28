@@ -18,7 +18,7 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::Method;
 use hyper::StatusCode;
 use hyper::{Body, Request, Response, Server};
-use seekstorm::index::Document;
+use seekstorm::index::{Document, Synonym};
 use seekstorm::search::{QueryType, ResultType};
 use sha2::Digest;
 use sha2::Sha256;
@@ -26,8 +26,6 @@ use std::{convert::Infallible, net::SocketAddr};
 
 use base64::{engine::general_purpose, Engine as _};
 
-use crate::api_endpoints::get_document_api;
-use crate::api_endpoints::get_index_stats_api;
 use crate::api_endpoints::index_document_api;
 use crate::api_endpoints::index_documents_api;
 use crate::api_endpoints::query_index_api;
@@ -35,6 +33,7 @@ use crate::api_endpoints::update_document_api;
 use crate::api_endpoints::update_documents_api;
 use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
+use crate::api_endpoints::{add_synonyms_api, get_index_stats_api, set_synonyms_api};
 use crate::api_endpoints::{close_index_api, delete_document_api};
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
 use crate::api_endpoints::{create_index_api, SearchRequestObject};
@@ -42,6 +41,7 @@ use crate::api_endpoints::{delete_apikey_api, GetDocumentRequest};
 use crate::api_endpoints::{delete_documents_api, delete_documents_by_query_api};
 use crate::api_endpoints::{delete_index_api, get_file_api};
 use crate::api_endpoints::{get_all_index_stats_api, index_file_api};
+use crate::api_endpoints::{get_document_api, get_synonyms_api};
 use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
 use crate::{MASTER_KEY_SECRET, VERSION};
@@ -641,20 +641,189 @@ pub(crate) async fn http_request_handler(
             }
         }
 
-        ("api", "v1", "index", _, "synonyms", _, &Method::POST) => Ok(status(
-            StatusCode::NOT_IMPLEMENTED,
-            String::from("method not implemented"),
-        )),
+        ("api", "v1", "index", _, "synonyms", _, &Method::POST) => {
+            if let Some(apikey) = headers.get("apikey") {
+                if let Some(apikey_hash) =
+                    get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
+                {
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Ok(index_id) = parts[3].parse::<u64>() {
+                            if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                                let index_arc_clone = index_arc.clone();
+                                drop(apikey_list_ref);
 
-        ("api", "v1", "index", _, "synonyms", _, &Method::PUT) => Ok(status(
-            StatusCode::NOT_IMPLEMENTED,
-            String::from("method not implemented"),
-        )),
+                                let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                                let synonyms =
+                                    match serde_json::from_slice::<Vec<Synonym>>(&request_bytes) {
+                                        Ok(create_index_request_object) => {
+                                            create_index_request_object
+                                        }
+                                        Err(e) => {
+                                            return Ok(status(
+                                                StatusCode::BAD_REQUEST,
+                                                e.to_string(),
+                                            ));
+                                        }
+                                    };
 
-        ("api", "v1", "index", _, "synonyms", _, &Method::GET) => Ok(status(
-            StatusCode::NOT_IMPLEMENTED,
-            String::from("method not implemented"),
-        )),
+                                if let Ok(result) =
+                                    add_synonyms_api(&index_arc_clone, synonyms).await
+                                {
+                                    let result_object_json =
+                                        serde_json::to_string(&result).unwrap();
+                                    Ok(Response::new(result_object_json.into()))
+                                } else {
+                                    Ok(status(
+                                        StatusCode::NOT_FOUND,
+                                        "synonyms not found".to_string(),
+                                    ))
+                                }
+                            } else {
+                                Ok(status(
+                                    StatusCode::NOT_FOUND,
+                                    "index does not exists".to_string(),
+                                ))
+                            }
+                        } else {
+                            Ok(status(
+                                StatusCode::BAD_REQUEST,
+                                "index_id missing".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key not found".to_string(),
+                        ))
+                    }
+                } else {
+                    Ok(status(
+                        StatusCode::NOT_FOUND,
+                        "api_key not found".to_string(),
+                    ))
+                }
+            } else {
+                Ok(status(StatusCode::NOT_FOUND, "api_key missing".to_string()))
+            }
+        }
+
+        ("api", "v1", "index", _, "synonyms", _, &Method::PUT) => {
+            if let Some(apikey) = headers.get("apikey") {
+                if let Some(apikey_hash) =
+                    get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
+                {
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Ok(index_id) = parts[3].parse::<u64>() {
+                            if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                                let index_arc_clone = index_arc.clone();
+                                drop(apikey_list_ref);
+
+                                let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                                let synonyms =
+                                    match serde_json::from_slice::<Vec<Synonym>>(&request_bytes) {
+                                        Ok(create_index_request_object) => {
+                                            create_index_request_object
+                                        }
+                                        Err(e) => {
+                                            return Ok(status(
+                                                StatusCode::BAD_REQUEST,
+                                                e.to_string(),
+                                            ));
+                                        }
+                                    };
+
+                                if let Ok(result) =
+                                    set_synonyms_api(&index_arc_clone, synonyms).await
+                                {
+                                    let result_object_json =
+                                        serde_json::to_string(&result).unwrap();
+                                    Ok(Response::new(result_object_json.into()))
+                                } else {
+                                    Ok(status(
+                                        StatusCode::NOT_FOUND,
+                                        "synonyms not found".to_string(),
+                                    ))
+                                }
+                            } else {
+                                Ok(status(
+                                    StatusCode::NOT_FOUND,
+                                    "index does not exists".to_string(),
+                                ))
+                            }
+                        } else {
+                            Ok(status(
+                                StatusCode::BAD_REQUEST,
+                                "index_id missing".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key not found".to_string(),
+                        ))
+                    }
+                } else {
+                    Ok(status(
+                        StatusCode::NOT_FOUND,
+                        "api_key not found".to_string(),
+                    ))
+                }
+            } else {
+                Ok(status(StatusCode::NOT_FOUND, "api_key missing".to_string()))
+            }
+        }
+
+        ("api", "v1", "index", _, "synonyms", _, &Method::GET) => {
+            if let Some(apikey) = headers.get("apikey") {
+                if let Some(apikey_hash) =
+                    get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
+                {
+                    let apikey_list_ref = apikey_list.read().await;
+                    if let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) {
+                        if let Ok(index_id) = parts[3].parse::<u64>() {
+                            if let Some(index_arc) = apikey_object.index_list.get(&index_id) {
+                                let index_arc_clone = index_arc.clone();
+                                drop(apikey_list_ref);
+                                if let Ok(result) = get_synonyms_api(&index_arc_clone).await {
+                                    let result_object_json =
+                                        serde_json::to_string(&result).unwrap();
+                                    Ok(Response::new(result_object_json.into()))
+                                } else {
+                                    Ok(status(
+                                        StatusCode::NOT_FOUND,
+                                        "synonyms not found".to_string(),
+                                    ))
+                                }
+                            } else {
+                                Ok(status(
+                                    StatusCode::NOT_FOUND,
+                                    "index does not exists".to_string(),
+                                ))
+                            }
+                        } else {
+                            Ok(status(
+                                StatusCode::BAD_REQUEST,
+                                "index_id missing".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(status(
+                            StatusCode::NOT_FOUND,
+                            "api_key not found".to_string(),
+                        ))
+                    }
+                } else {
+                    Ok(status(
+                        StatusCode::NOT_FOUND,
+                        "api_key not found".to_string(),
+                    ))
+                }
+            } else {
+                Ok(status(StatusCode::NOT_FOUND, "api_key missing".to_string()))
+            }
+        }
 
         ("api", "v1", "index", _, "doc", _, &Method::POST) => {
             if let Some(apikey) = headers.get("apikey") {

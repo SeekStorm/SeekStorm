@@ -39,6 +39,7 @@ impl Default for Highlight {
 }
 
 /// Highlighter object used as get_document parameter for extracting keyword-in-context (KWIC) fragments from fields in documents, and highlighting the query terms within.
+#[derive(Debug)]
 pub struct Highlighter {
     pub(crate) highlights: Vec<Highlight>,
     pub(crate) query_terms_ac: AhoCorasick,
@@ -173,7 +174,8 @@ pub(crate) fn add_fragment<'a>(
     }
 }
 
-const SENTENCE_BOUNDARY_CHARS: [char; 5] = ['!', '?', '.', '¿', '¡'];
+const SENTENCE_BOUNDARY_CHARS: [char; 11] =
+    ['!', '?', '.', '¿', '¡', '。', '、', '！', '？', '︒', '。'];
 
 pub(crate) struct Fragment<'a> {
     text: &'a str,

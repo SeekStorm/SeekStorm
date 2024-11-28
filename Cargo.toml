@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -11,7 +11,12 @@ repository = "https://github.com/SeekStorm/SeekStorm"
 readme = "README.md"
 keywords = ["search", "information", "retrieval"]
 edition = "2021"
-exclude = ["assets/*",]
+exclude = ["assets/*.png","assets/*.jpg"]
+
+[features]
+# comment out entry below if you don't need Chinese word segmentation
+default = ["zh"]
+zh = []
 
 [lib]
 name = "seekstorm"
