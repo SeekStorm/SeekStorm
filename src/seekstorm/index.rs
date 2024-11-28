@@ -343,7 +343,7 @@ pub enum FieldType {
     I16,
     I32,
     I64,
-    /// Timestamp is identical to I64, but to be used for Unix timestamps https://en.wikipedia.org/wiki/Unix_time.
+    /// Timestamp is identical to I64, but to be used for Unix timestamps <https://en.wikipedia.org/wiki/Unix_time>.
     /// The reason for a separate FieldType is to enable the UI to interpret I64 as timestamp without using the field name as indicator.
     /// For date facets and filtering.
     Timestamp,
