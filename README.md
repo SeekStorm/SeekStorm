@@ -638,7 +638,7 @@ Move the decompressed wiki-articles.json to the release directory
 cd target/release
 ```
 ```
-./seekstorm_server local_ip="0.0.0.0" local_port=80
+./seekstorm_server local_ip="0.0.0.0" local_port=80
 ```
 
 **Indexing** 
