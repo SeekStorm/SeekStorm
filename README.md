@@ -10,7 +10,7 @@
 
 Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, work in progress.
 
-SeekStorm is open source licensed under under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+SeekStorm is open source licensed under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
 Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/) and [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
 
@@ -103,8 +103,8 @@ Comparing different open-source search engine libraries (BM25 lexical search) us
 
 **Benefits**
 + using a proven open-source benchmark used by other search libraries for comparability
-+ adapters writtten mostly by search library authors themselves for maximum authenticity and faithfulness
-+ results can be replicated by everbody on their own infrastructure
++ adapters written mostly by search library authors themselves for maximum authenticity and faithfulness
++ results can be replicated by everybody on their own infrastructure
 + detailed results per query, per query type and per result type to investigate optimization potential
 
 **Detailed benchmark results**
@@ -117,13 +117,13 @@ See our **blog posts** for more detailed information: [SeekStorm is now Open Sou
 
 ### Why latency matters
 
-* Search speed might be good enough for a single search. Below <10 ms people can't tell latency anymore. Search latency might be small compared to internet network latency.
-* But search engine performance still matters when used in a server or service for many concurrent users and requests for maximum scaling, and throughput, and low processor load, cost.
-* With performant search technology you can serve many concurrent users, at low latency with fewer servers, less cost, and less energy consumption, lower carbon footprint.
+* Search speed might be good enough for a single search. Below 10 ms people can't tell latency anymore. Search latency might be small compared to internet network latency.
+* But search engine performance still matters when used in a server or service for many concurrent users and requests for maximum scaling, throughput, low processor load, and cost.
+* With performant search technology, you can serve many concurrent users at low latency with fewer servers, less cost, less energy consumption, and a lower carbon footprint.
 * It also ensures low latency even for complex and challenging queries: instant search, fuzzy search, faceted search, and union/intersection/phrase of very frequent terms.
-* Besides average latencies we also need to reduce tail latencies, which are often overlooked, but can cause loss of customers, and revenue and can cause a bad user experience.
-* It is always advisable to engineer your search infrastructure with enough performance headroom, to keep those tail latencies in check, even on periods of high concurrent load.
-* Also, even if a human user might not notice the latency, it still might make a big difference in autonomous stock market, defense applications or RAG which requires multiple queries.
+* Besides average latencies, we also need to reduce tail latencies, which are often overlooked but can cause loss of customers, revenue, and a bad user experience.
+* It is always advisable to engineer your search infrastructure with enough performance headroom to keep those tail latencies in check, even during periods of high concurrent load.
+* Also, even if a human user might not notice the latency, it still might make a big difference in autonomous stock markets, defense applications or RAG which requires multiple queries.
 
 ---
 
@@ -134,15 +134,15 @@ Despite what the hype-cycles https://www.bitecode.dev/p/hype-cycles want you to 
 You should maintain a toolbox, and choose the best tool for your task at hand. https://seekstorm.com/blog/vector-search-vs-keyword-search1/
 
 Keyword search is just a filter for a set of documents, returning those where certain keywords occur in, usually combined with a ranking metric like BM25.
-A very basic and core functionality, that is very challenging to implement at scale with low latency.
+A very basic and core functionality is very challenging to implement at scale with low latency.
 Because the functionality is so basic, there is an unlimited number of application fields.
 It is a component, to be used together with other components.
-There are uses cases which can be solved better today with vector search and LLMs, but for many more keyword search is still the best solution.
+There are use cases which can be solved better today with vector search and LLMs, but for many more keyword search is still the best solution.
 Keyword search is exact, lossless, and it is very fast, with better scaling, better latency, lower cost and energy consumption.
-Vector search works with semantic similarity, returning results within with a given proximity and probability. 
+Vector search works with semantic similarity, returning results within a given proximity and probability. 
 
 ### Keyword search (lexical search)
-If you search for exact results like proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then keyword search is your friend. Vector search on the other hand will bury the exact result that you are looking for among a myriad results that are only somehow semantically related. At the same time, if you don’t know the exact terms, or you are interested in a broader topic, meaning or synonym, no matter what exact terms are used, then keyword search will fail you.
+If you search for exact results like proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then keyword search is your friend. Vector search, on the other hand, will bury the exact result that you are looking for among a myriad of results that are only somehow semantically related. At the same time, if you don’t know the exact terms, or you are interested in a broader topic, meaning or synonym, no matter what exact terms are used, then keyword search will fail you.
 
 ```diff
 - works with text data only
@@ -168,9 +168,9 @@ If you search for exact results like proper names, numbers, license plates, doma
 
 
 ### Vector search
-Vector search is perfect if you don’t know the exact query terms, or you are interested in a broader topic, meaning or synonym, no matter what exact query terms are used. But if you are looking for exact terms, e.g. proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then you should always use keyword search. Vector search will but bury the exact result that you are looking for among a myriad results that are only somehow related. It has a good recall, but low precision, and higher latency. It is prone to false positives, e.g. in in plagiarism detection as exact words and word order get lost.
+Vector search is perfect if you don’t know the exact query terms, or you are interested in a broader topic, meaning or synonym, no matter what exact query terms are used. But if you are looking for exact terms, e.g. proper names, numbers, license plates, domain names, and phrases (e.g. plagiarism detection) then you should always use keyword search. Vector search will instead bury the exact result that you are looking for among a myriad of results that are only somehow related. It has a good recall, but low precision, and higher latency. It is prone to false positives, e.g., in plagiarism detection as exact words and word order get lost.
 
-Vector search enables you to search not only for similar text, but everything that can be transformed to a vector: text, images (face recognition, finger prints), audio and it enables you to do magic things like queen - woman + man = king.
+Vector search enables you to search not only for similar text, but for everything that can be transformed into a vector: text, images (face recognition, fingerprints), audio, enabling you to do magic things like "queen - woman + man = king."
 
 ```diff
 + works with any data that can be transformed to a vector: text, image, audio ...
@@ -395,7 +395,7 @@ index all PDF files in directory and sub-directories
 - converts pdf to text and indexes it
 - extracts title from metatag, or first line of text, or from filename
 - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
-- copies all ingested pdf files to "files" subdirectory in index
+- copies all ingested PDF files to the "files" subdirectory in the index.
 - the following index schema is required (and automatically created by the console `ingest` command):
 ```json
  [
@@ -476,9 +476,9 @@ println!("version {}",version);
 ### Faceted search - Quick start
 
 Facets are defined in 3 different places:
-1. the facet fields are defined in schema at create_index,
-2. the facet field values are set in index_document at index time,
-3. the query_facets/facet_filter parameters are specified at query time.  
+1. The facet fields are defined in the schema at create_index.
+2. The facet field values are set in index_document at index time.
+3. The query_facets/facet_filter parameters are specified at query time.  
    Facets are then returned in the search result object.
 
 A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious. This is why we provide a quick start example here:
@@ -598,7 +598,7 @@ A quick step-by-step tutorial on how to build a Wikipedia search engine from a W
 **Download SeekStorm**
 
 [Download SeekStorm from the GitHub repository](https://github.com/SeekStorm/SeekStorm/archive/refs/heads/main.zip)  
-Unzip in directory of your choice, open in Visual Studio code.
+Unzip in a directory of your choice, open in Visual Studio code.
 
 or alternatively
 
@@ -638,7 +638,7 @@ Move the decompressed wiki-articles.json to the release directory
 cd target/release
 ```
 ```
-./seekstorm_server local_ip="0.0.0.0" local_port=80
+./seekstorm_server local_ip="0.0.0.0" local_port=80
 ```
 
 **Indexing** 
@@ -724,7 +724,7 @@ Type 'ingest' into the command line of the running SeekStorm server:
 ingest C:\Users\JohnDoe\Downloads
 ```
 
-This creates the pdf_index and indexes all PDF files from the specifies directory, including subdirectories.
+This creates the pdf_index and indexes all PDF files from the specified directory, including subdirectories.
 
 **Start searching within the embedded WebUI**
 
