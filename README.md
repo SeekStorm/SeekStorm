@@ -4,7 +4,18 @@
 [![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
 [![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
-========
+<p>
+  <a href="https://seekstorm.com">Website</a> | 
+  <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
+  <a href="https://deephn.org/">Demo</a> | 
+  <a href="https://github.com/SeekStorm/SeekStorm?tab=readme-ov-file#documentation">Library Docs</a> | 
+  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Server Docs</a> |
+  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Roadmap</a> | 
+  <a href="https://seekstorm.com/blog/">Blog</a> | 
+  <a href="https://x.com/seekstorm">Twitter</a>
+</p>
+
+---
 
 **SeekStorm** is an **open-source, sub-millisecond full-text search library** & **multi-tenancy server** implemented in **Rust**.
 
@@ -16,7 +27,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 
 ### SeekStorm high-performance search library
 
-* Full-text search
+* Full-text lexical search
 * True real-time search, with negligible performance impact
 * Incremental indexing
 * Multithreaded indexing & search
@@ -121,6 +132,7 @@ See our **blog posts** for more detailed information: [SeekStorm is now Open Sou
 * But search engine performance still matters when used in a server or service for many concurrent users and requests for maximum scaling, throughput, low processor load, and cost.
 * With performant search technology, you can serve many concurrent users at low latency with fewer servers, less cost, less energy consumption, and a lower carbon footprint.
 * It also ensures low latency even for complex and challenging queries: instant search, fuzzy search, faceted search, and union/intersection/phrase of very frequent terms.
+* Local search performance matters, e.g. when many local queries are spawned for reranking, fallback/refinement queries, fuzzy search, data mining or RAG befor the response is transferred back over the network.
 * Besides average latencies, we also need to reduce tail latencies, which are often overlooked but can cause loss of customers, revenue, and a bad user experience.
 * It is always advisable to engineer your search infrastructure with enough performance headroom to keep those tail latencies in check, even during periods of high concurrent load.
 * Also, even if a human user might not notice the latency, it still might make a big difference in autonomous stock markets, defense applications or RAG which requires multiple queries.
@@ -638,7 +650,7 @@ Move the decompressed wiki-articles.json to the release directory
 cd target/release
 ```
 ```
-./seekstorm_server local_ip="0.0.0.0" local_port=80
+./seekstorm_server local_ip="0.0.0.0" local_port=80
 ```
 
 **Indexing** 
@@ -782,6 +794,7 @@ The Rust port is not yet feature complete. The following features are currently 
 **Improvements**
 * Faster indexing
 * Relevancy benchmarks: BeIR, MS MARCO
+* Better API documentation: integrated OpenAPI generator
 
 **New features**
 * Native vector search (currently PoC)
