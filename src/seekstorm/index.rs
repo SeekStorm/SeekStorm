@@ -411,6 +411,8 @@ pub struct SchemaField {
 
     #[serde(skip)]
     pub(crate) indexed_field_id: usize,
+    #[serde(skip_deserializing)]
+    pub(crate) field_id: usize,
 }
 
 fn default_false() -> bool {
@@ -780,9 +782,10 @@ pub fn create_index(
             let mut stored_fields_flag = false;
             let mut stored_field_names = Vec::new();
             let mut facets_size_sum = 0;
-            for schema_field in schema.iter() {
+            for (i, schema_field) in schema.iter().enumerate() {
                 let mut schema_field_clone = schema_field.clone();
                 schema_field_clone.indexed_field_id = indexed_field_vec.len();
+                schema_field_clone.field_id = i;
                 schema_map.insert(schema_field.field.clone(), schema_field_clone.clone());
 
                 if schema_field.facet {
@@ -2496,6 +2499,10 @@ impl IndexDocument for IndexArc {
             let index_ref2 = index_arc_clone.read().await;
 
             for schema_field in schema.iter() {
+                if !schema_field.indexed {
+                    continue;
+                }
+
                 let field_name = &schema_field.field;
 
                 if let Some(field_value) = document.get(field_name) {

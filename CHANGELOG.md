@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2024-12-05
+
+### Changed
+
+- In index_document skip tokenizing fields with !schema_field.indexed.
+- New property SchemaField.field_id to indicate the field order in the schema map.
+- In master.js, the fields in the schema map are now sorted by field_id to preserve the field order of the schema.json.
+- In the Web UI, the preview panel is now always using 100% height, independent from the number of results in the result panel.
+
 ## [0.11.0] - 2024-11-28
 
 ### Added

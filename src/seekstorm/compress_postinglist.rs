@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-/// Compress a single postinglist using roaring bitmaps compression for docid https:roaringbitmap.org/about/
+/// Compress a single postinglist using roaring bitmaps compression for docid https://roaringbitmap.org/about/
 pub(crate) fn compress_postinglist(
     index: &mut Index,
     key_head_pointer_w: &mut usize,
@@ -111,7 +111,7 @@ pub(crate) fn compress_postinglist(
                 } else {
                     u16::MAX
                 },
-            );
+            ); // !!
             compress_postinglist_rle(
                 index,
                 roaring_offset,

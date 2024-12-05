@@ -5,7 +5,6 @@ use seekstorm::{
     index::{SimilarityType, TokenizerType},
     ingest::{IngestJson, IngestPdf},
 };
-
 use std::{
     collections::HashMap,
     env::current_exe,
@@ -212,7 +211,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                         let index_id=if parameter.len()>3 {
                                             parameter[3].parse().unwrap_or(0)
-                                        } else  if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
+                                        } else if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
                                                 let indexname_schemajson = if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME)
                                                 {("wikipedia_demo",r#"
                                                 [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
