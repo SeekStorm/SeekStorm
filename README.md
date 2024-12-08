@@ -9,7 +9,8 @@
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
   <a href="https://deephn.org/">Demo</a> | 
   <a href="https://github.com/SeekStorm/SeekStorm?tab=readme-ov-file#documentation">Library Docs</a> | 
-  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Server Docs</a> |
+  <a href="https://seekstorm.apidocumentation.com">Server Docs</a> |
+  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Server Readme</a> |
   <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Roadmap</a> | 
   <a href="https://seekstorm.com/blog/">Blog</a> | 
   <a href="https://x.com/seekstorm">Twitter</a>
@@ -65,13 +66,14 @@ Result types
 
 ### SeekStorm multi-tenancy search server 
 
-  * Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints)
+  * Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints).
   * Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
   * Ingest local PDF files via console command (single file or all files in a directory).
-  * Multi-tenancy index management
-  * API-key management
+  * Multi-tenancy index management.
+  * API-key management.
   * [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
-  * Cross-platform: runs on Linux, Windows, and macOS (other OS untested)
+  * Code first OpenAPI generated [REST API documentation](https://seekstorm.apidocumentation.com)
+  * Cross-platform: runs on Linux, Windows, and macOS (other OS untested).
 
 ---
 
@@ -799,5 +801,6 @@ The Rust port is not yet feature complete. The following features are currently 
 **New features**
 * Native vector search (currently PoC)
 * Distributed search cluster (currently PoC)
+* S3 object storage compatible index: cloud-native split of storage and compute
 
 
