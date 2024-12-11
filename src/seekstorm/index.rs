@@ -23,6 +23,7 @@ use std::{
 };
 use tokio::sync::{RwLock, Semaphore};
 use utils::{read_u32, write_u16};
+use utoipa::ToSchema;
 
 #[cfg(feature = "zh")]
 use crate::word_segmentation::WordSegmentationTM;
@@ -85,16 +86,38 @@ pub enum AccessType {
     Mmap = 1,
 }
 
-/// Similarity type defines the scoring and ranking of the search results: Bm25f or Bm25fProximity (considers term proximity, e.g. for implicit phrase search with improved relevancy)
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
+/// Similarity type defines the scoring and ranking of the search results:
+/// - Bm25f: considers documents composed from several fields, with different field lengths and importance
+/// - Bm25fProximity: considers term proximity, e.g. for implicit phrase search with improved relevancy
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default, ToSchema)]
 pub enum SimilarityType {
     Bm25f = 0,
     #[default]
     Bm25fProximity = 1,
 }
 
-/// Defines tokenizer behavior: AsciiAlphabetic (for benchmark compatibility) or UnicodeAlphanumeric (all Unicode alphanumeric chars are recognized as token)
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default)]
+/// Defines tokenizer behavior:
+/// AsciiAlphabetic
+/// - Mainly for for benchmark compatibility
+/// - Only ASCII alphabetic chars are recognized as token.
+///
+/// UnicodeAlphanumeric
+/// - All Unicode alphanumeric chars are recognized as token.
+/// - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+///
+/// UnicodeAlphanumericFolded
+/// - All Unicode alphanumeric chars are recognized as token.
+/// - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+/// - Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
+/// - Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
+/// - Tokenizing might be slower due to folding and apostroph processing.
+///
+/// UnicodeAlphanumericZH
+/// - Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
+/// - Supports mixed Latin and Chinese texts
+/// - Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.
+/// - Requires feature #[cfg(feature = "zh")]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default, ToSchema)]
 pub enum TokenizerType {
     /// Only ASCII alphabetic chars are recognized as token. Mainly for benchmark compatibility.
     #[default]
@@ -103,11 +126,15 @@ pub enum TokenizerType {
     /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     UnicodeAlphanumeric = 1,
     /// All Unicode alphanumeric chars are recognized as token.
-    /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+    /// Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     /// Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
     /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
     /// Tokenizing might be slower due to folding and apostroph processing.
     UnicodeAlphanumericFolded = 2,
+    /// Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
+    /// Supports mixed Latin and Chinese texts
+    /// Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.
+    /// Requires feature #[cfg(feature = "zh")]
     #[cfg(feature = "zh")]
     UnicodeAlphanumericZH = 3,
 }
@@ -333,7 +360,7 @@ pub(crate) struct SegmentLevel0 {
 }
 
 /// In the index schema the type for every field of the document is defined.
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default, ToSchema)]
 pub enum FieldType {
     U8,
     U16,
@@ -364,7 +391,7 @@ pub enum FieldType {
 }
 
 /// Defines synonyms for terms per index.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct Synonym {
     pub terms: Vec<String>,
     /// Creates alternative versions of documents where in each copy a term is replaced with one of its synonyms.
@@ -385,8 +412,8 @@ fn default_as_true() -> bool {
     true
 }
 
-/// Defines a field in index schema: field_name, stored, indexed , field_type, field_boost.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct SchemaField {
     /// unique name of a field
     pub field: String,
@@ -413,6 +440,29 @@ pub struct SchemaField {
     pub(crate) indexed_field_id: usize,
     #[serde(skip_deserializing)]
     pub(crate) field_id: usize,
+}
+
+impl SchemaField {
+    pub fn new(
+        field: String,
+        stored: bool,
+        indexed: bool,
+        field_type: FieldType,
+        facet: bool,
+        boost: f32,
+    ) -> Self {
+        SchemaField {
+            field,
+            stored,
+            indexed,
+            field_type,
+            facet,
+            boost,
+
+            indexed_field_id: 0,
+            field_id: 0,
+        }
+    }
 }
 
 fn default_false() -> bool {
@@ -462,13 +512,13 @@ pub(crate) struct ResultFacet {
     pub ranges: Ranges,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, ToSchema)]
 pub enum DistanceUnit {
     Kilometers,
     Miles,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct DistanceField {
     pub field: String,
     pub distance: String,
@@ -493,7 +543,7 @@ pub struct MinMaxField {
     pub max: ValueType,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default, ToSchema)]
 pub struct MinMaxFieldJson {
     pub min: serde_json::Value,
     pub max: serde_json::Value,
@@ -561,7 +611,7 @@ pub struct Index {
     pub(crate) last_level_docstore_file_start_pos: u64,
     /// Number of allowed parallel indexed documents (default=available_parallelism). Can be used to detect wehen all indexing processes are finished.
     pub permits: Arc<Semaphore>,
-    /// Defines a field in index schema: field_name, stored, indexed , field_type, field_boost.
+    /// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
     pub schema_map: HashMap<String, SchemaField>,
     /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
     pub meta: IndexMetaObject,

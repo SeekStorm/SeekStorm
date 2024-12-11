@@ -111,7 +111,7 @@ pub(crate) fn compress_postinglist(
                 } else {
                     u16::MAX
                 },
-            ); // !!
+            );
             compress_postinglist_rle(
                 index,
                 roaring_offset,

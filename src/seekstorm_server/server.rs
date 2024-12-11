@@ -5,6 +5,7 @@ use seekstorm::{
     index::{SimilarityType, TokenizerType},
     ingest::{IngestJson, IngestPdf},
 };
+
 use std::{
     collections::HashMap,
     env::current_exe,
@@ -16,7 +17,9 @@ use std::{
 use tokio::sync::RwLock;
 
 use crate::{
-    api_endpoints::{create_apikey_api, create_index_api, delete_apikey_api, open_all_apikeys},
+    api_endpoints::{
+        create_apikey_api, create_index_api, delete_apikey_api, generate_openapi, open_all_apikeys,
+    },
     http_server::{calculate_hash, http_server},
     multi_tenancy::{get_apikey_hash, ApikeyObject, ApikeyQuotaObject},
 };
@@ -32,8 +35,8 @@ fn ctrl_channel() -> Result<Receiver<()>, ctrlc::Error> {
     Ok(receiver)
 }
 
-#[allow(clippy::manual_flatten)]
 async fn commandline(sender: crossbeam_channel::Sender<String>) {
+    #[allow(clippy::manual_flatten)]
     for line in std::io::stdin().lines() {
         if let Ok(line) = line {
             if sender.send(line.clone()).is_err() {
@@ -312,6 +315,11 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         println!("delete indices");
                     },
 
+                    "openapi" =>
+                    {
+                        generate_openapi();
+                    },
+
                     "quit" =>
                     {
                         println!("Committing all indices ...");
@@ -339,6 +347,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         println!("{:40} Index a local file in PDF, JSON, Newline-delimited JSON, or Concatenated JSON format.","ingest [data_path] [apikey] [index_id]".green());
                         println!("{:40} Create the demo API key manually to allow a subsequent custom create index via REST API.","create".green());
                         println!("{:40} Delete the demo API key and all its indices.","delete".green());
+                        println!("{:40} Create OpenAPI JSON file.","openapi".green());
                         println!("{:40} Stop the server.","quit".green());
                         println!("{:40} Show this help.","help".green());
                         println!();

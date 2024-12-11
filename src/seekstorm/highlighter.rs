@@ -2,10 +2,11 @@ use crate::index::{Document, FieldType, Index, IndexArc};
 use crate::min_heap::{self, MinHeap};
 use aho_corasick::{AhoCorasick, MatchKind};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Specifies the number and size of fragments (snippets, summaries) to generate from each specified field to provide a "keyword in context" (KWIC) functionality.
 /// With highlight_markup the matching query terms within the fragments can be highlighted with HTML markup.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct Highlight {
     /// Specifies the field from which the fragments  (snippets, summaries) are created.
     pub field: String,

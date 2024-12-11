@@ -31,10 +31,16 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
+use utoipa::ToSchema;
 
-/// Specifies the default QueryType: The following query types are supported: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
+/// Specifies the default QueryType: The following query types are supported:
+/// - **Union** (OR, disjunction),
+/// - **Intersection** (AND, conjunction),
+/// - **Phrase** (""),
+/// - **Not** (-).
+///
 /// The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
-#[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum QueryType {
     #[default]
     Union = 0,
@@ -44,10 +50,10 @@ pub enum QueryType {
 }
 
 /// The following result types are supported:
-/// **Count** (count all results that match the query, but returning top-k results is not required)
-/// **Topk** (returns the top-k results per query, but counting all results that match the query is not required)
-/// **TopkCount** (returns the top-k results per query + count all results that match the query)
-#[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize)]
+/// - **Count** (count all results that match the query, but returning top-k results is not required)
+/// - **Topk** (returns the top-k results per query, but counting all results that match the query is not required)
+/// - **TopkCount** (returns the top-k results per query + count all results that match the query)
+#[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum ResultType {
     Count = 0,
     Topk = 1,
@@ -86,7 +92,7 @@ pub struct ResultObject {
 /// blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
 /// then the intersect_docid within a single block is executed  (=segments?)
 /// specifies how to count the frequency of numerical facet field values
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, ToSchema)]
 pub enum RangeType {
     /// within the specified range
     #[default]
@@ -97,7 +103,7 @@ pub enum RangeType {
     CountBelowRange,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, ToSchema)]
 pub enum QueryFacet {
     U8 {
         field: String,
@@ -194,7 +200,7 @@ pub enum Ranges {
     None,
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum FacetValue {
     Bool(bool),
     U8(u8),
@@ -348,53 +354,134 @@ impl Index {
     }
 }
 
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeU8 {
+    pub start: u8,
+    pub end: u8,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeU16 {
+    pub start: u16,
+    pub end: u16,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeU32 {
+    pub start: u32,
+    pub end: u32,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeU64 {
+    pub start: u64,
+    pub end: u64,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeI8 {
+    pub start: i8,
+    pub end: i8,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeI16 {
+    pub start: i16,
+    pub end: i16,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeI32 {
+    pub start: i32,
+    pub end: i32,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeI64 {
+    pub start: i64,
+    pub end: i64,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeF32 {
+    pub start: f32,
+    pub end: f32,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
+pub struct RangeF64 {
+    pub start: f64,
+    pub end: f64,
+}
+
 /// FacetFilter:
 /// either numerical range facet filter (range start/end) or
 /// string facet filter (vector of strings) at least one (boolean OR) must match.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, ToSchema)]
 pub enum FacetFilter {
     U8 {
         field: String,
+        #[schema(value_type=RangeU8)]
         filter: Range<u8>,
     },
     U16 {
         field: String,
+        #[schema(value_type=RangeU16)]
         filter: Range<u16>,
     },
     U32 {
         field: String,
+        #[schema(value_type=RangeU32)]
         filter: Range<u32>,
     },
     U64 {
         field: String,
+        #[schema(value_type=RangeU64)]
         filter: Range<u64>,
     },
     I8 {
         field: String,
+        #[schema(value_type=RangeI8)]
         filter: Range<i8>,
     },
     I16 {
         field: String,
+        #[schema(value_type=RangeI16)]
         filter: Range<i16>,
     },
     I32 {
         field: String,
+        #[schema(value_type=RangeI32)]
         filter: Range<i32>,
     },
     I64 {
         field: String,
+        #[schema(value_type=RangeI64)]
         filter: Range<i64>,
     },
     Timestamp {
         field: String,
+        #[schema(value_type=RangeI64)]
         filter: Range<i64>,
     },
     F32 {
         field: String,
+        #[schema(value_type=RangeF32)]
         filter: Range<f32>,
     },
     F64 {
         field: String,
+        #[schema(value_type=RangeF64)]
         filter: Range<f64>,
     },
     String {
@@ -407,6 +494,7 @@ pub enum FacetFilter {
     },
     Point {
         field: String,
+        #[schema(value_type=(Point, RangeF64, DistanceUnit))]
         filter: (Point, Range<f64>, DistanceUnit),
     },
 }
@@ -431,13 +519,13 @@ pub(crate) enum FilterSparse {
     None,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, ToSchema)]
 pub enum SortOrder {
     Ascending = 0,
     Descending = 1,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub struct ResultSort {
     pub field: String,
     pub order: SortOrder,
@@ -492,7 +580,7 @@ pub type Point = Vec<f64>;
 ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
 ///    Sort is only enabled on facet fields that are defined in schema at create_index!
 ///    Examples:
-///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "lamguage".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
 ///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
 ///  
 ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
@@ -665,7 +753,7 @@ impl Search for IndexArc {
     ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
     ///    Sort is only enabled on facet fields that are defined in schema at create_index!   
     ///    Examples:
-    ///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "lamguage".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+    ///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
     ///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
     ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
     ///    Facets are defined in 3 different places:
