@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -61,6 +61,13 @@ walkdir = "2.5.0"
 pdfium-render = { version ="0.8.26",  features = ["thread_safe","sync"]}
 chrono = "0.4.39"
 utoipa = { version ="5.2.0",  features = ["preserve_order","preserve_path_order","yaml"]}
+
+[lints.rust]
+missing_docs = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_qualifications = "warn"
 
 [profile.release]
 lto = true

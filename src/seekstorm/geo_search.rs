@@ -100,13 +100,9 @@ pub fn morton_ordering(
     let distance2 = simplified_distance(&point2, base_point);
 
     if order == &SortOrder::Descending {
-        distance1
-            .partial_cmp(&distance2)
-            .unwrap_or(core::cmp::Ordering::Equal)
+        distance1.partial_cmp(&distance2).unwrap_or(Ordering::Equal)
     } else {
-        distance2
-            .partial_cmp(&distance1)
-            .unwrap_or(core::cmp::Ordering::Equal)
+        distance2.partial_cmp(&distance1).unwrap_or(Ordering::Equal)
     }
 }
 

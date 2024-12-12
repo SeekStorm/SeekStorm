@@ -72,17 +72,35 @@ pub(crate) const BIGRAM_FLAG: bool = true;
 /// A document is a flattened, single level of key-value pairs, where key is an arbitrary string, and value represents any valid JSON value.
 pub type Document = HashMap<String, serde_json::Value>;
 
+/// File type for storing documents: Path, Bytes, None.
 #[derive(Clone, PartialEq)]
 pub enum FileType {
+    /// File path
     Path(Box<Path>),
+    /// File bytes
     Bytes(Box<Path>, Box<[u8]>),
+    /// No file
     None,
 }
 
-/// Defines where the index resides during search: Ram (the complete index is preloaded to Ram when opening the index) or Mmap (the index is accessed via memory-mapped files). See architecture.md for details.
+/// Defines where the index resides during search:
+/// - Ram (the complete index is preloaded to Ram when opening the index)
+/// - Mmap (the index is accessed via memory-mapped files). See architecture.md for details.
+/// - At commit the data is serialized to disk for persistence both in Ram and Mmap mode.
+/// - The serialization format is identical for Ram and Mmap mode, allowing to change it retrospectively.
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub enum AccessType {
+    /// Ram (the complete index is preloaded to Ram when opening the index).
+    /// - Index size is limited by available RAM size.
+    /// - Slightly fastesr search speed.
+    /// - Higher index loading time.
+    /// - Higher RAM usage.
     Ram = 0,
+    /// Mmap (the index is accessed via memory-mapped files). See architecture.md for details.
+    /// - Enables index size scaling beyond RAM size.
+    /// - Slightly slower search speed compared to Ram.
+    /// - Faster index loading time compared to Ram.
+    /// - Lower RAM usage.
     Mmap = 1,
 }
 
@@ -91,7 +109,9 @@ pub enum AccessType {
 /// - Bm25fProximity: considers term proximity, e.g. for implicit phrase search with improved relevancy
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default, ToSchema)]
 pub enum SimilarityType {
+    /// Bm25f considers documents composed from several fields, with different field lengths and importance
     Bm25f = 0,
+    /// Bm25fProximity considers term proximity, e.g. for implicit phrase search with improved relevancy
     #[default]
     Bm25fProximity = 1,
 }
@@ -359,26 +379,39 @@ pub(crate) struct SegmentLevel0 {
     pub positions_compressed: Vec<u8>,
 }
 
-/// In the index schema the type for every field of the document is defined.
+/// FieldType defines the type of a field in the document: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, point, string, stringset, text.
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default, ToSchema)]
 pub enum FieldType {
+    /// Unsigned 8-bit integer
     U8,
+    /// Unsigned 16-bit integer
     U16,
+    /// Unsigned 32-bit integer
     U32,
+    /// Unsigned 64-bit integer
     U64,
+    /// Signed 8-bit integer
     I8,
+    /// Signed 16-bit integer
     I16,
+    /// Signed 32-bit integer
     I32,
+    /// Signed 64-bit integer
     I64,
     /// Timestamp is identical to I64, but to be used for Unix timestamps <https://en.wikipedia.org/wiki/Unix_time>.
     /// The reason for a separate FieldType is to enable the UI to interpret I64 as timestamp without using the field name as indicator.
     /// For date facets and filtering.
     Timestamp,
+    /// Floating point 32-bit
     F32,
+    /// Floating point 64-bit
     F64,
+    /// Boolean
     Bool,
+    /// String
     #[default]
     String,
+    /// StringSet is a set of strings, e.g. tags, categories, keywords, authors, genres, etc.
     StringSet,
     /// Point is a geographic field type: A `Vec<f64>` with two coordinate values (latitude and longitude) are internally encoded into a single u64 value (Morton code).
     /// Morton codes enable efficient range queries.
@@ -387,12 +420,14 @@ pub enum FieldType {
     /// Coordinates are internally stored as u64 morton code: both f64 values are multiplied by 10_000_000, converted to i32 and bitwise interleaved into a single u64 morton code
     /// The conversion between longitude/latitude coordinates and Morton code is lossy due to rounding errors.
     Point,
+    /// Text is a text field, that will be tokenized by the selected Tokenizer into string tokens.
     Text,
 }
 
 /// Defines synonyms for terms per index.
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct Synonym {
+    /// List of terms that are synonyms.
     pub terms: Vec<String>,
     /// Creates alternative versions of documents where in each copy a term is replaced with one of its synonyms.
     /// Doesn't impact the query latency, but does increase the index size.
@@ -442,7 +477,22 @@ pub struct SchemaField {
     pub(crate) field_id: usize,
 }
 
+/// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
+/// # Parameters
+/// - field: unique name of a field
+/// - stored: only stored fields are returned in the search results
+/// - indexed: only indexed fields can be searched
+/// - field_type: type of a field: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, point
+/// - facet: enable faceting for a field: for sorting results by field values, for range filtering, for result count per field value or range
+/// - boost: optional custom weight factor for Bm25 ranking
+/// # Returns
+/// - SchemaField
+/// # Example
+/// ```rust
+/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String, false, 1.0);
+/// ```
 impl SchemaField {
+    /// Creates a new SchemaField.
     pub fn new(
         field: String,
         stored: bool,
@@ -492,14 +542,17 @@ pub(crate) struct IndexedField {
 /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IndexMetaObject {
+    /// unique index ID
     #[serde(skip)]
     pub id: u64,
+    /// index name: used informational purposes
     pub name: String,
-
+    /// SimilarityType defines the scoring and ranking of the search results: Bm25f or Bm25fProximity
     pub similarity: SimilarityType,
-
+    /// TokenizerType defines the tokenizer behavior: AsciiAlphabetic, UnicodeAlphanumeric, UnicodeAlphanumericFolded, UnicodeAlphanumericZH
     pub tokenizer: TokenizerType,
 
+    /// AccessType defines where the index resides during search: Ram or Mmap
     pub access_type: AccessType,
 }
 
@@ -512,17 +565,25 @@ pub(crate) struct ResultFacet {
     pub ranges: Ranges,
 }
 
+/// DistanceUnit defines the unit for distance calculation: kilometers or miles.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, ToSchema)]
 pub enum DistanceUnit {
+    /// Kilometers
     Kilometers,
+    /// Miles
     Miles,
 }
 
+/// DistanceField defines a field for proximity search.
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct DistanceField {
+    /// field name of a numeric facet field (currently onyl Point field type supported)
     pub field: String,
+    /// field name of the distance field we are deriving from the numeric facet field (Point type) and the base (Point type)
     pub distance: String,
+    /// base point (lat,lon) for distance calculation
     pub base: Point,
+    /// distance unit for the distance field: kilometers or miles
     pub unit: DistanceUnit,
 }
 
@@ -537,33 +598,52 @@ impl Default for DistanceField {
     }
 }
 
+/// MinMaxField represents the minimum and maximum value of a field.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct MinMaxField {
+    /// minimum value of the field
     pub min: ValueType,
+    /// maximum value of the field
     pub max: ValueType,
 }
 
+/// MinMaxFieldJson is a JSON representation of the minimum and maximum value of a field.
 #[derive(Deserialize, Serialize, Debug, Clone, Default, ToSchema)]
 pub struct MinMaxFieldJson {
+    /// minimum value of the field
     pub min: serde_json::Value,
+    /// maximum value of the field
     pub max: serde_json::Value,
 }
 
+/// Value type for a field: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, point, none.
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
 pub enum ValueType {
+    /// Unsigned 8-bit integer
     U8(u8),
+    /// Unsigned 16-bit integer
     U16(u16),
+    /// Unsigned 32-bit integer
     U32(u32),
+    /// Unsigned 64-bit integer
     U64(u64),
+    /// Signed 8-bit integer
     I8(i8),
+    /// Signed 16-bit integer
     I16(i16),
+    /// Signed 32-bit integer
     I32(i32),
+    /// Signed 64-bit integer
     I64(i64),
     /// Unix timestamp: the number of seconds since 1 January 1970
     Timestamp(i64),
+    /// Floating point 32-bit
     F32(f32),
+    /// Floating point 64-bit
     F64(f64),
+    /// Geographic Point: a pair of latitude and longitude coordinates and a distance unit (kilometers, miles)
     Point(Point, DistanceUnit),
+    /// No value
     #[default]
     None,
 }
@@ -576,7 +656,9 @@ pub struct FacetField {
     /// Vector of facet value names and their count
     pub values: IndexMap<String, (Vec<String>, usize)>,
 
+    ///Minimum value of the facet field
     pub min: ValueType,
+    ///Maximum value of the facet field
     pub max: ValueType,
 
     #[serde(skip)]
@@ -694,6 +776,7 @@ pub struct Index {
     pub(crate) word_segmentation_option: Option<WordSegmentationTM>,
 }
 
+///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
 pub type SynonymItem = Vec<(String, (u64, u32))>;
 
 /// Get the version of the SeekStorm search library
@@ -1067,7 +1150,7 @@ pub fn create_index(
                 SegmentLevel0 {
                     ..Default::default()
                 };
-                index.segment_number1 as usize
+                index.segment_number1
             ];
 
             index.segments_index = Vec::new();
@@ -1905,7 +1988,7 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
                 QueryType::Union,
                 0,
                 1000,
-                search::ResultType::TopkCount,
+                ResultType::TopkCount,
                 false,
                 Vec::new(),
                 query_facets.clone(),
@@ -1981,6 +2064,7 @@ impl Index {
         self.facets.len()
     }
 
+    /// get_index_facets_minmax: return map of numeric facet fields, each with field name and min/max values.
     pub fn get_index_facets_minmax(&self) -> HashMap<String, MinMaxFieldJson> {
         let mut facets_minmax: HashMap<String, MinMaxFieldJson> = HashMap::new();
         for facet in self.facets.iter() {
@@ -2192,7 +2276,7 @@ impl Index {
         Some(facets)
     }
 
-    pub fn string_set_to_single_term_id(&mut self) {
+    pub(crate) fn string_set_to_single_term_id(&mut self) {
         for (i, facet) in self.facets.iter().enumerate() {
             if facet.field_type == FieldType::StringSet {
                 for (idx, value) in facet.values.iter().enumerate() {
@@ -2353,6 +2437,7 @@ impl Index {
 /// Delete document from index by document id
 #[allow(async_fn_in_trait)]
 pub trait DeleteDocument {
+    /// Delete document from index by document id
     async fn delete_document(&self, docid: u64);
 }
 
@@ -2382,6 +2467,7 @@ impl DeleteDocument for IndexArc {
 /// Delete documents from index by document id
 #[allow(async_fn_in_trait)]
 pub trait DeleteDocuments {
+    /// Delete documents from index by document id
     async fn delete_documents(&self, docid_vec: Vec<u64>);
 }
 
@@ -2416,6 +2502,9 @@ impl DeleteDocuments for IndexArc {
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait DeleteDocumentsByQuery {
+    /// Delete documents from index by query
+    /// Delete and search have identical parameters.
+    /// It is recommended to test with search prior to delete to verify that only those documents are returned that you really want to delete.
     async fn delete_documents_by_query(
         &self,
         query_string: String,
@@ -2473,6 +2562,9 @@ impl DeleteDocumentsByQuery for IndexArc {
 /// All current limitations of delete_document apply.
 #[allow(async_fn_in_trait)]
 pub trait UpdateDocument {
+    /// Update document in index
+    /// Update_document is a combination of delete_document and index_document.
+    /// All current limitations of delete_document apply.
     async fn update_document(&self, id_document: (u64, Document));
 }
 
@@ -2491,6 +2583,9 @@ impl UpdateDocument for IndexArc {
 /// All current limitations of delete_document apply.
 #[allow(async_fn_in_trait)]
 pub trait UpdateDocuments {
+    /// Update documents in index
+    /// Update_document is a combination of delete_document and index_document.
+    /// All current limitations of delete_document apply.
     async fn update_documents(&self, id_document_vec: Vec<(u64, Document)>);
 }
 
@@ -2508,11 +2603,14 @@ impl UpdateDocuments for IndexArc {
 /// Indexes a list of documents
 #[allow(async_fn_in_trait)]
 pub trait IndexDocuments {
+    /// Indexes a list of documents
+    /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_documents(&self, document_vec: Vec<Document>);
 }
 
 impl IndexDocuments for IndexArc {
-    /// Index document
+    /// Index list of documents (bulk)
+    /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_documents(&self, document_vec: Vec<Document>) {
         for document in document_vec {
             self.index_document(document, FileType::None).await;
@@ -2523,6 +2621,8 @@ impl IndexDocuments for IndexArc {
 /// Indexes as single document
 #[allow(async_fn_in_trait)]
 pub trait IndexDocument {
+    /// Indexes as single document
+    /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_document(&self, document: Document, file: FileType);
 }
 

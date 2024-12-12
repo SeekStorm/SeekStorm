@@ -5,7 +5,6 @@ use seekstorm::{
     index::{SimilarityType, TokenizerType},
     ingest::{IngestJson, IngestPdf},
 };
-
 use std::{
     collections::HashMap,
     env::current_exe,

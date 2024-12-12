@@ -42,10 +42,14 @@ use utoipa::ToSchema;
 /// The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
 #[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum QueryType {
+    /// Union (OR, disjunction)
     #[default]
     Union = 0,
+    /// Intersection (AND, conjunction)
     Intersection = 1,
+    /// Phrase ("")
     Phrase = 2,
+    /// Not (-)
     Not = 3,
 }
 
@@ -55,8 +59,11 @@ pub enum QueryType {
 /// - **TopkCount** (returns the top-k results per query + count all results that match the query)
 #[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum ResultType {
+    /// Count all results that match the query, without returning top-k results
     Count = 0,
+    /// Return the top-k results per query, without counting all results that match the query
     Topk = 1,
+    /// Return the top-k results per query and count all results that match the query
     #[default]
     TopkCount = 2,
 }
@@ -103,121 +110,212 @@ pub enum RangeType {
     CountBelowRange,
 }
 
+/// Defines the query facets:
+/// - string facet field values
+/// - range segments for numerical facet field values
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, ToSchema)]
 pub enum QueryFacet {
+    /// Range segment definition for numerical facet field values of type u8
     U8 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, u8)>,
     },
+    /// Range segment definition for numerical facet field values of type u16
     U16 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, u16)>,
     },
+    /// Range segment definition for numerical facet field values of type u32
     U32 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, u32)>,
     },
+    /// Range segment definition for numerical facet field values of type u64
     U64 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, u64)>,
     },
+    /// Range segment definition for numerical facet field values of type i8
     I8 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, i8)>,
     },
+    /// Range segment definition for numerical facet field values of type i16
     I16 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, i16)>,
     },
+    /// Range segment definition for numerical facet field values of type i32
     I32 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, i32)>,
     },
+    /// Range segment definition for numerical facet field values of type i64
     I64 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, i64)>,
     },
+    /// Range segment definition for numerical facet field values of type Unix timestamp
     Timestamp {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, i64)>,
     },
+    /// Range segment definition for numerical facet field values of type f32
     F32 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, f32)>,
     },
+    /// Range segment definition for numerical facet field values of type f64
     F64 {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, f64)>,
     },
+    /// Facet field values of type string
     String {
+        /// field name
         field: String,
+        /// Prefix filter of facet values to return
         prefix: String,
+        /// maximum number of facet values to return
         length: u16,
     },
+    /// Facet field values of type string set
     StringSet {
+        /// field name
         field: String,
+        /// Prefix filter of facet values to return
         prefix: String,
+        /// maximum number of facet values to return
         length: u16,
     },
+    /// Range segment definition for numerical facet field values of type Point (distance between base of type Point and facet field of type Point)
     Point {
+        /// field name
         field: String,
+        /// range type (CountWithinRange,CountBelowRange,CountAboveRange)
         range_type: RangeType,
+        /// range label, range start
         ranges: Vec<(String, f64)>,
+        /// base point (latitude/lat, longitude/lon)
         base: Point,
+        /// distance unit (kilometers/miles)
         unit: DistanceUnit,
     },
+    /// No query facet
     #[default]
     None,
 }
 
+/// Defines the range segments for numerical facet field values
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
 pub enum Ranges {
+    /// U8 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     U8(RangeType, Vec<(String, u8)>),
+    /// U16 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     U16(RangeType, Vec<(String, u16)>),
+    /// U32 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     U32(RangeType, Vec<(String, u32)>),
+    /// U64 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     U64(RangeType, Vec<(String, u64)>),
+    /// I8 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     I8(RangeType, Vec<(String, i8)>),
+    /// I16 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     I16(RangeType, Vec<(String, i16)>),
+    /// I32 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     I32(RangeType, Vec<(String, i32)>),
+    /// I64 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     I64(RangeType, Vec<(String, i64)>),
-    /// Unix timestamp: the number of seconds since 1 January 1970
+    /// Unix timestamp (number of seconds since 1 January 1970) range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     Timestamp(RangeType, Vec<(String, i64)>),
+    /// F32 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     F32(RangeType, Vec<(String, f32)>),
+    /// F64 range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, range start
     F64(RangeType, Vec<(String, f64)>),
+    /// Proximity range filter: range type (CountWithinRange,CountBelowRange,CountAboveRange), range label, base point (longitude/lon, latitude/lat), distance unit
     Point(RangeType, Vec<(String, f64)>, Point, DistanceUnit),
     #[default]
+    /// No range filter
     None,
 }
 
+/// FacetValue: Facet field value types
 #[derive(Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum FacetValue {
+    /// Boolean value
     Bool(bool),
+    /// Unsigned 8-bit integer
     U8(u8),
+    /// Unsigned 16-bit integer
     U16(u16),
+    /// Unsigned 32-bit integer
     U32(u32),
+    /// Unsigned 64-bit integer
     U64(u64),
+    /// Signed 8-bit integer
     I8(i8),
+    /// Signed 16-bit integer
     I16(i16),
+    /// Signed 32-bit integer
     I32(i32),
+    /// Signed 64-bit integer
     I64(i64),
     /// Unix timestamp: the number of seconds since 1 January 1970
     Timestamp(i64),
+    /// 32-bit floating point number
     F32(f32),
+    /// 64-bit floating point number
     F64(f64),
+    /// String value
     String(String),
+    /// String set value
     StringSet(Vec<String>),
+    /// Point value: latitude/lat, longitude/lon
     Point(Point),
+    /// No value
     None,
 }
 
@@ -354,73 +452,103 @@ impl Index {
     }
 }
 
+/// U8 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeU8 {
+    /// range start
     pub start: u8,
+    /// range end
     pub end: u8,
 }
 
+/// U16 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeU16 {
+    /// range start
     pub start: u16,
+    /// range end
     pub end: u16,
 }
 
+/// U32 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeU32 {
+    /// range start
     pub start: u32,
+    /// range end
     pub end: u32,
 }
 
+/// U64 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeU64 {
+    /// range start
     pub start: u64,
+    /// range end
     pub end: u64,
 }
 
+/// I8 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeI8 {
+    /// range start
     pub start: i8,
+    /// range end
     pub end: i8,
 }
 
+/// I16 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeI16 {
+    /// range start
     pub start: i16,
+    /// range end
     pub end: i16,
 }
 
+/// I32 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeI32 {
+    /// range start
     pub start: i32,
+    /// range end
     pub end: i32,
 }
 
+/// I64 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeI64 {
+    /// range start
     pub start: i64,
+    /// range end
     pub end: i64,
 }
 
+/// F32 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeF32 {
+    /// range start
     pub start: f32,
+    /// range end
     pub end: f32,
 }
 
+/// F64 range filter
 #[allow(dead_code)]
 #[derive(ToSchema)]
 pub struct RangeF64 {
+    /// range start
     pub start: f64,
+    /// range end
     pub end: f64,
 }
 
@@ -429,71 +557,113 @@ pub struct RangeF64 {
 /// string facet filter (vector of strings) at least one (boolean OR) must match.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, ToSchema)]
 pub enum FacetFilter {
+    /// U8 range filter
     U8 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeU8)]
         filter: Range<u8>,
     },
+    /// U16 range filter
     U16 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeU16)]
         filter: Range<u16>,
     },
+    /// U32 range filter
     U32 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeU32)]
         filter: Range<u32>,
     },
+    /// U64 range filter
     U64 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeU64)]
         filter: Range<u64>,
     },
+    /// I8 range filter
     I8 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeI8)]
         filter: Range<i8>,
     },
+    /// I16 range filter
     I16 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeI16)]
         filter: Range<i16>,
     },
+    /// I32 range filter
     I32 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeI32)]
         filter: Range<i32>,
     },
+    /// I64 range filter
     I64 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeI64)]
         filter: Range<i64>,
     },
+    /// Timestamp range filter, Unix timestamp: the number of seconds since 1 January 1970
     Timestamp {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeI64)]
         filter: Range<i64>,
     },
+    /// F32 range filter
     F32 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeF32)]
         filter: Range<f32>,
     },
+    /// F64 range filter
     F64 {
+        /// field name
         field: String,
+        /// filter: range start, range end
         #[schema(value_type=RangeF64)]
         filter: Range<f64>,
     },
+    /// String filter
     String {
+        /// field name
         field: String,
+        /// filter: array of facet string values
         filter: Vec<String>,
     },
+    /// StringSet filter
     StringSet {
+        /// field name
         field: String,
+        /// filter: array of facet string values
         filter: Vec<String>,
     },
+    /// Point proximity range filter
     Point {
+        /// field name
         field: String,
+        /// filter: base point (latitude/lat, longitude/lon), proximity range start, proximity range end, distance unit
         #[schema(value_type=(Point, RangeF64, DistanceUnit))]
         filter: (Point, Range<f64>, DistanceUnit),
     },
@@ -519,23 +689,34 @@ pub(crate) enum FilterSparse {
     None,
 }
 
+/// Specifies the sort order for the search results.
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, ToSchema)]
 pub enum SortOrder {
+    /// Ascending sort order
     Ascending = 0,
+    /// Descending sort order
     Descending = 1,
 }
 
+/// Specifies the sort order for the search results.
 #[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub struct ResultSort {
+    /// name of the facet field to sort by
     pub field: String,
+    /// Sort order: Ascending or Descending
     pub order: SortOrder,
+    /// Base value/point for (geo) proximity sorting
     pub base: FacetValue,
 }
 
+/// Specifies the sort order for the search results.
 #[derive(Clone, Serialize)]
-pub struct ResultSortIndex<'a> {
+pub(crate) struct ResultSortIndex<'a> {
+    /// Index/ID of the facet field to sort by
     pub idx: usize,
+    /// Sort order: Ascending or Descending
     pub order: SortOrder,
+    /// Base value/point for (geo) proximity sorting
     pub base: &'a FacetValue,
 }
 
@@ -592,6 +773,52 @@ pub type Point = Vec<f64>;
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait Search {
+    /// Search the index for all indexed documents, both for committed and uncommitted documents.
+    /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
+    /// Arguments:
+    /// * `query_string`: query string + - "" search operators are recognized.
+    /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
+    ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+    /// * `offset`: offset of search results to return.
+    /// * `length`: number of search results to return.
+    /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
+    /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
+    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
+    /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
+    ///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+    ///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///    The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+    ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+    ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///    Examples:
+    ///    query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
+    ///    query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+    ///    query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
+    /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
+    ///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+    ///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
+    ///    The facet counts depend only from the query and not which facet filters are selected.
+    ///    Examples:
+    ///    facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+    ///    facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+    ///    facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
+    /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
+    ///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
+    ///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+    ///    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+    ///    until the n-th field value is either not equal or the last field is reached.
+    ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+    ///    Sort is only enabled on facet fields that are defined in schema at create_index!
+    ///    Examples:
+    ///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+    ///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+    ///  
+    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///    Facets are defined in 3 different places:
+    ///    the facet fields are defined in schema at create_index,
+    ///    the facet field values are set in index_document at index time,
+    ///    the query_facets/facet_filter search parameters are specified at query time.
+    ///    Facets are then returned in the search result object.
     async fn search(
         &self,
         query_string: String,

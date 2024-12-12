@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    fs::{self, metadata, File},
+    fs::{metadata, File},
     io::{self, BufReader, Read},
     path::Path,
     sync::Arc,
@@ -50,9 +50,22 @@ fn read_skipping_ws(mut reader: impl Read) -> io::Result<u8> {
 /// - extracts title from metatag, or first line of text, or from filename
 /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
 /// - copies all ingested pdf files to "files" subdirectory in index
+/// # Arguments
+/// * `file_path` - Path to the file
+/// # Returns
+/// * `Result<(), String>` - Ok(()) or Err(String)
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait IndexPdfFile {
+    /// Index PDF file from local disk.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    /// # Arguments
+    /// * `file_path` - Path to the file
+    /// # Returns
+    /// * `Result<(), String>` - Ok(()) or Err(String)
     async fn index_pdf_file(&self, file_path: &Path) -> Result<(), String>;
 }
 
@@ -66,7 +79,7 @@ impl IndexPdfFile for IndexArc {
         if let Some(pdfium) = pdfium_option.as_ref() {
             let file_size = file_path.metadata().unwrap().len() as usize;
 
-            let date: DateTime<Utc> = if let Ok(metadata) = fs::metadata(file_path) {
+            let date: DateTime<Utc> = if let Ok(metadata) = metadata(file_path) {
                 if let Ok(time) = metadata.created() {
                     time
                 } else {
@@ -104,9 +117,22 @@ impl IndexPdfFile for IndexArc {
 /// - extracts title from metatag, or first line of text, or from filename
 /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
 /// - copies all ingested pdf files to "files" subdirectory in index
+/// # Arguments
+/// * `file_path` - Path to the file (fallback, if title and date can't be extracted)
+/// * `file_date` - File creation date (Unix timestamp: the number of seconds since 1 January 1970) (fallback, if date can't be extracted)
+/// * `file_bytes` - Byte array of the file
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait IndexPdfBytes {
+    /// Index PDF file from byte array.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    /// # Arguments
+    /// * `file_path` - Path to the file (fallback, if title and date can't be extracted)
+    /// * `file_date` - File creation date (Unix timestamp: the number of seconds since 1 January 1970) (fallback, if date can't be extracted)
+    /// * `file_bytes` - Byte array of the file
     async fn index_pdf_bytes(
         &self,
         file_path: &Path,
@@ -121,6 +147,10 @@ impl IndexPdfBytes for IndexArc {
     /// - extracts title from metatag, or first line of text, or from filename
     /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
     /// - copies all ingested pdf files to "files" subdirectory in index
+    /// # Arguments
+    /// * `file_path` - Path to the file (fallback, if title and date can't be extracted)
+    /// * `file_date` - File creation date (Unix timestamp: the number of seconds since 1 January 1970) (fallback, if date can't be extracted)
+    /// * `file_bytes` - Byte array of the file
     async fn index_pdf_bytes(
         &self,
         file_path: &Path,
@@ -155,6 +185,11 @@ impl IndexPdfBytes for IndexArc {
 /// - extracts title from metatag, or first line of text, or from filename
 /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
 /// - copies all ingested pdf files to "files" subdirectory in index
+/// # Arguments
+/// * `file_path` - Path to the file (fallback, if title and date can't be extracted)
+/// * `file_date` - File creation date (Unix timestamp: the number of seconds since 1 January 1970) (fallback, if date can't be extracted)
+/// * `file` - FileType::Path or FileType::Bytes
+/// * `pdf` - pdfium_render::prelude::PdfDocument
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 trait IndexPdf {
@@ -339,9 +374,18 @@ pub(crate) async fn path_recurse(
 /// - extracts title from metatag, or first line of text, or from filename
 /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
 /// - copies all ingested pdf files to "files" subdirectory in index
+/// # Arguments
+/// * `file_path` - Path to the file
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait IngestPdf {
+    /// Index PDF files from local disk directory and sub-directories or from file.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    /// # Arguments
+    /// * `file_path` - Path to the file
     async fn ingest_pdf(&mut self, file_path: &Path);
 }
 
@@ -410,6 +454,8 @@ impl IngestPdf for IndexArc {
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait IngestJson {
+    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+    /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
     async fn ingest_json(&mut self, data_path: &Path);
 }
 

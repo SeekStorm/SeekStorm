@@ -430,7 +430,7 @@ pub(crate) async fn union_scan<'a>(
                 let runlength = ushorts1[(ii + 1) as usize] as usize;
 
                 for j in 0..=runlength {
-                    let docid = (startdocid + j) as usize;
+                    let docid = startdocid + j;
 
                     query_terms_bitset_table[docid] |= mask;
                 }
@@ -476,7 +476,7 @@ pub(crate) async fn union_scan<'a>(
                 let runlength = ushorts1[(ii + 1) as usize] as usize;
 
                 for j in 0..=runlength {
-                    let docid = (startdocid + j) as usize;
+                    let docid = startdocid + j;
 
                     query_terms_bitset_table[docid] = 0;
                 }
@@ -626,7 +626,7 @@ pub(crate) async fn union_count<'a>(
                     let runlength = ushorts1[(ii + 1) as usize] as usize;
 
                     for j in 0..=runlength {
-                        let docid = (startdocid + j) as usize;
+                        let docid = startdocid + j;
                         let byte_index = docid >> 3;
                         let bit_index = docid & 7;
 
@@ -639,7 +639,7 @@ pub(crate) async fn union_count<'a>(
                     let runlength = ushorts1[(ii + 1) as usize] as usize;
 
                     for j in 0..=runlength {
-                        let docid = (startdocid + j) as usize;
+                        let docid = startdocid + j;
                         let byte_index = docid >> 3;
                         let bit_index = docid & 7;
 

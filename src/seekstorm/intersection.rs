@@ -86,7 +86,7 @@ pub(crate) fn intersection_bitmap_2(
 
                 add_result_multiterm_multifield(
                     index,
-                    (block_id << 16) | doc_id1 as usize,
+                    (block_id << 16) | doc_id1,
                     result_count,
                     search_result,
                     top_k,
@@ -317,7 +317,7 @@ pub(crate) async fn intersection_docid(
 
                 loop {
                     match doc_id1.cmp(&doc_id2) {
-                        std::cmp::Ordering::Less => {
+                        cmp::Ordering::Less => {
                             if t2 > 1 {
                                 t2 = 1;
                                 if query_list[t2].compression_type != CompressionType::Array {
@@ -342,7 +342,7 @@ pub(crate) async fn intersection_docid(
                             }
                             doc_id1 = ushorts1[query_list[t1].p_docid];
                         }
-                        std::cmp::Ordering::Greater => {
+                        cmp::Ordering::Greater => {
                             query_list[t2].p_docid += 1;
                             if query_list[t2].p_docid == query_list[t2].p_docid_count {
                                 break;
@@ -358,7 +358,7 @@ pub(crate) async fn intersection_docid(
 
                             doc_id2 = ushorts2[query_list[t2].p_docid];
                         }
-                        std::cmp::Ordering::Equal => {
+                        cmp::Ordering::Equal => {
                             if t2 + 1 < query_list.len() {
                                 t2 += 1;
                                 if query_list[t2].compression_type != CompressionType::Array {
@@ -442,7 +442,7 @@ pub(crate) async fn intersection_docid(
 
                 loop {
                     match doc_id1.cmp(&doc_id2) {
-                        std::cmp::Ordering::Less => {
+                        cmp::Ordering::Less => {
                             if t2 > 1 {
                                 t2 = 1;
                                 if query_list[t2].compression_type != CompressionType::Delta {
@@ -462,7 +462,7 @@ pub(crate) async fn intersection_docid(
                             }
                             doc_id1 = ushorts1[query_list[t1].p_docid];
                         }
-                        std::cmp::Ordering::Greater => {
+                        cmp::Ordering::Greater => {
                             query_list[t2].p_docid += 1;
                             if query_list[t2].p_docid == query_list[t2].p_docid_count {
                                 break;
@@ -478,7 +478,7 @@ pub(crate) async fn intersection_docid(
                                 + 1;
                             query_list[t2].docid = doc_id2 as i32;
                         }
-                        std::cmp::Ordering::Equal => {
+                        cmp::Ordering::Equal => {
                             if t2 + 1 < query_list.len() {
                                 t2 += 1;
                                 if query_list[t2].compression_type != CompressionType::Delta {
@@ -662,7 +662,7 @@ pub(crate) async fn intersection_docid(
 
                             add_result_multiterm_multifield(
                                 index,
-                                (block_id << 16) | doc_id1 as usize,
+                                (block_id << 16) | doc_id1,
                                 result_count,
                                 search_result,
                                 top_k,
@@ -1064,7 +1064,7 @@ pub(crate) async fn intersection_docid(
 
                 loop {
                     match doc_id1.cmp(&doc_id2) {
-                        std::cmp::Ordering::Less => {
+                        cmp::Ordering::Less => {
                             if t2 > 1 {
                                 t2 = 1;
                                 if query_list[t2].compression_type != CompressionType::Delta {
@@ -1093,7 +1093,7 @@ pub(crate) async fn intersection_docid(
                                 + 1;
                             query_list[t1].docid = doc_id1 as i32;
                         }
-                        std::cmp::Ordering::Greater => {
+                        cmp::Ordering::Greater => {
                             query_list[t2].p_docid += 1;
                             if query_list[t2].p_docid == query_list[t2].p_docid_count {
                                 break;
@@ -1109,7 +1109,7 @@ pub(crate) async fn intersection_docid(
                                 + 1;
                             query_list[t2].docid = doc_id2 as i32;
                         }
-                        std::cmp::Ordering::Equal => {
+                        cmp::Ordering::Equal => {
                             if t2 + 1 < query_list.len() {
                                 t2 += 1;
                                 if query_list[t2].compression_type != CompressionType::Delta {
@@ -1971,7 +1971,7 @@ pub(crate) async fn intersection_blockid<'a>(
 
     'exit: loop {
         match block_id1.cmp(&block_id2) {
-            std::cmp::Ordering::Less => {
+            cmp::Ordering::Less => {
                 let item_1 = &mut query_list[t1 as usize];
                 item_1.p_block += 1;
                 if item_1.p_block == item_1.p_block_max {
@@ -1983,7 +1983,7 @@ pub(crate) async fn intersection_blockid<'a>(
                 let item_2 = &query_list[t2 as usize];
                 block_id2 = item_2.blocks[item_2.p_block as usize].block_id;
             }
-            std::cmp::Ordering::Greater => {
+            cmp::Ordering::Greater => {
                 let item_2 = &mut query_list[t2 as usize];
                 item_2.p_block += 1;
                 if item_2.p_block == item_2.p_block_max {
@@ -1991,7 +1991,7 @@ pub(crate) async fn intersection_blockid<'a>(
                 }
                 block_id2 = item_2.blocks[item_2.p_block as usize].block_id;
             }
-            std::cmp::Ordering::Equal => {
+            cmp::Ordering::Equal => {
                 if t2 + 1 < query_list.len() as i32 {
                     t2 += 1;
                     let item_2 = &query_list[t2 as usize];

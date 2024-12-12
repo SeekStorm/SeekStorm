@@ -239,7 +239,7 @@
 //! ```
 //! ### create index
 //! ```rust
-//! let index_path=Path::new("C:/index/");//x
+//! let index_path=Path::new("C:/index/");
 //! let schema_json = r#"
 //! [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 //! {"field":"body","field_type":"Text","stored":true,"indexed":true},
@@ -321,6 +321,7 @@ pub mod commit;
 pub(crate) mod compatible;
 pub(crate) mod compress_postinglist;
 pub(crate) mod doc_store;
+/// Geo search by indexing geo points (latitude, longitude), proximity searching for points within a specified radius, and proximity sorting.
 pub mod geo_search;
 /// Extracts the most relevant fragments (snippets, summaries) from specified fields of the document to provide a "keyword in context" (KWIC) functionality.
 /// With highlight_markup the matching query terms within the fragments can be highlighted with HTML markup.
@@ -328,6 +329,7 @@ pub mod highlighter;
 /// Operate the index: reate_index, open_index, clear_index, close_index, delete_index, index_document(s)
 pub mod index;
 pub(crate) mod index_posting;
+/// Ingest JSON, Newline-delimited JSON, Concatenated JSON files, and PDF files into the index.
 pub mod ingest;
 pub(crate) mod intersection;
 pub(crate) mod intersection_simd;
@@ -337,6 +339,7 @@ pub(crate) mod realtime_search;
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
 pub mod search;
 pub(crate) mod single;
+/// Tokenizes text into tokens (words), supports Chinese word segmentation, folds (converts) diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters into their basic representation.
 pub mod tokenizer;
 pub(crate) mod union;
 pub(crate) mod utils;

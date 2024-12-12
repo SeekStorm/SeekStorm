@@ -108,6 +108,7 @@ pub struct SearchResultObject {
 /// Create index request object
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CreateIndexRequest {
+    #[schema(example = "demo_index")]
     pub index_name: String,
     #[schema(required = true, example = json!([
     {"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
@@ -120,6 +121,7 @@ pub struct CreateIndexRequest {
     pub similarity: SimilarityType,
     #[serde(default = "tokenizer_type_api")]
     pub tokenizer: TokenizerType,
+    #[schema(required = true, example = json!([{"terms":["berry","lingonberry","blueberry","gooseberry"],"multiway":false}]))]
     #[serde(default)]
     pub synonyms: Vec<Synonym>,
 }
@@ -859,7 +861,7 @@ pub(crate) async fn update_documents_api(
     Ok(index_arc.read().await.indexed_doc_count as u64)
 }
 
-/// Delete Document by DocID parameter
+/// Delete Document
 /// Delete document by document_id from index with index_id
 /// Document ID can by obtained by search.
 /// Immediately effective, indpendent of commit.
@@ -898,14 +900,14 @@ pub(crate) async fn delete_document_by_parameter_api(
 }
 
 /// Delete Document(s) by Request Object
-/// Delete document by document_id or by array of document_id (bulk) or by query (SearchRequestObject) from index with index_id
-/// Document ID can by obtained by search.
+/// Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
 /// Immediately effective, indpendent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
 /// For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
 /// BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
+/// Document ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.
 #[utoipa::path(
     delete,
     tag = "Document",
@@ -914,7 +916,7 @@ pub(crate) async fn delete_document_by_parameter_api(
         ("apikey" = String, Header, description = "YOUR_SECRET_API_KEY",example="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
         ("index_id" = u64, Path, description = "index id"),
     ),
-    request_body(content = SearchRequestObject, description = "doc_id or array of doc_id or SearchRequestObject", content_type = "application/json", example=json!({
+    request_body(content = SearchRequestObject, description = "Specifies the document(s) to delete by different request objects\n- 'clear' : delete all documents in index (clear index)\n- u64 : delete single doc ID\n- [u64] : delete array of doc ID \n- SearchRequestObject : delete documents by query", content_type = "application/json", example=json!({
         "query":"test",
         "offset":0,
         "length":10,
@@ -967,6 +969,12 @@ pub(crate) async fn delete_documents_by_query_api(
         )
         .await;
 
+    Ok(index_arc.read().await.indexed_doc_count as u64)
+}
+
+pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String> {
+    let mut index_mut = index_arc.write().await;
+    index_mut.clear_index();
     Ok(index_arc.read().await.indexed_doc_count as u64)
 }
 
@@ -1107,7 +1115,7 @@ pub(crate) async fn query_index_api(
         offset: search_request.offset,
         length: search_request.length,
         count: result_object.results.len(),
-        count_total: result_object.result_count_total as usize,
+        count_total: result_object.result_count_total,
         query_terms: result_object.query_terms,
         results,
         facets: result_object.facets,
@@ -1157,7 +1165,7 @@ pub fn generate_openapi() {
     let path_yml = path.join("openapi.yml");
 
     serde_json::to_writer_pretty(&File::create(path_json.clone()).unwrap(), &openapi).unwrap();
-    std::fs::write(path_yml.clone(), openapi.to_yaml().unwrap()).unwrap();
+    fs::write(path_yml.clone(), openapi.to_yaml().unwrap()).unwrap();
 
     println!(
         "OpenAPI documents generated: {} {}",

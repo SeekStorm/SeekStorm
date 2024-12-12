@@ -1,11 +1,8 @@
 #[cfg(target_arch = "x86_64")]
-use std::{
-    arch::x86_64::{
-        __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
-        _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
-        _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
-    },
-    mem::{self},
+use std::arch::x86_64::{
+    __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
+    _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32, _SIDD_BIT_MASK,
+    _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
 };
 
 #[cfg(target_arch = "aarch64")]
@@ -261,7 +258,7 @@ pub(crate) fn intersection_vector16(
 
         let mut i_a = 0;
         let mut i_b = 0;
-        let vectorlength = mem::size_of::<__m128i>() / mem::size_of::<u16>();
+        let vectorlength = size_of::<__m128i>() / size_of::<u16>();
         let vectorlength_i32 = vectorlength as i32;
         let st_a = (s_a / vectorlength) * vectorlength;
         let st_b = (s_b / vectorlength) * vectorlength;

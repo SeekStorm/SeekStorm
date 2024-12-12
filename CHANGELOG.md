@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2024-12-12
+
+### Added
+
+- Delete Documents(s) REST API endpoint now supports deleting all documents in the index (clear index).
+
+### Changed
+
+- REST API documentation improved.
+- Library documentation improved.
+- All public methods, structs, enums and properties got document comments. 
+- Stricter linting: missing_docs, unused_import_braces, trivial_casts, trivial_numeric_casts, unused_qualifications.
+
 ## [0.12.0] - 2024-12-11
 
 ### Added

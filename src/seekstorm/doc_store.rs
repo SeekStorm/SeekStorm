@@ -135,7 +135,7 @@ impl Index {
         }
     }
 
-    pub fn copy_file(&self, source_path: &Path, doc_id: usize) -> io::Result<u64> {
+    pub(crate) fn copy_file(&self, source_path: &Path, doc_id: usize) -> io::Result<u64> {
         let dir_path = Path::new(&self.index_path_string).join(FILE_PATH);
         if !dir_path.exists() {
             fs::create_dir_all(&dir_path).unwrap();
@@ -145,7 +145,7 @@ impl Index {
         fs::copy(source_path, file_path)
     }
 
-    pub fn write_file(&self, file_bytes: &[u8], doc_id: usize) -> io::Result<u64> {
+    pub(crate) fn write_file(&self, file_bytes: &[u8], doc_id: usize) -> io::Result<u64> {
         let dir_path = Path::new(&self.index_path_string).join(FILE_PATH);
         if !dir_path.exists() {
             fs::create_dir_all(&dir_path).unwrap();
@@ -163,6 +163,12 @@ impl Index {
         Ok(file_bytes.len() as u64)
     }
 
+    /// Get file for document id
+    /// Arguments:
+    /// * `doc_id`: Specifies which document to load from the document store of the index.
+    ///
+    /// Returns:
+    /// * `Vec<u8>`: The file content as a byte vector.
     pub fn get_file(&self, doc_id: usize) -> Result<Vec<u8>, String> {
         let file_path = Path::new(&self.index_path_string)
             .join(FILE_PATH)

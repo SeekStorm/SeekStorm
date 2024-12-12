@@ -879,7 +879,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                 } else {
                     index.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
-                } as usize] as f32;
+                } as usize];
 
             let tf = field.1 as f32;
 
@@ -902,7 +902,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                 } else {
                     index.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
-                } as usize] as f32;
+                } as usize];
 
             let tf_bigram1 = field.1 as f32;
 
@@ -927,7 +927,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                 } else {
                     index.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
-                } as usize] as f32;
+                } as usize];
 
             let tf_bigram2 = field.1 as f32;
 
@@ -1132,7 +1132,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                             index.level_index[block_id].document_length_compressed_array[field_id]
                                 [docid & 0b11111111_11111111]
                         }
-                            as usize] as f32;
+                            as usize];
                     }
 
                     let tf_bigram2 = field.1 as f32;
@@ -2794,7 +2794,6 @@ pub(crate) fn add_result_multiterm_multifield(
                     Ordering::Equal => {
                         if t2 + 1 < non_unique_query_list.len() {
                             t2 += 1;
-
                             pos2 = non_unique_query_list[t2].pos;
                             continue;
                         }
