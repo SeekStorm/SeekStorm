@@ -7,22 +7,30 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::str;
 use std::sync::Arc;
+use std::{convert::Infallible, net::SocketAddr};
 
 use chrono::Utc;
 use rand::rngs::OsRng;
 use rand::RngCore;
 
-use hyper::body;
-use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::Method;
-use hyper::StatusCode;
-use hyper::{Body, Request, Response, Server};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use hyper::{
+    body::{Bytes, Incoming},
+    service::service_fn,
+    Method, Request, Response, StatusCode,
+};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder,
+};
+
 use seekstorm::index::{Document, Synonym};
 use seekstorm::search::{QueryType, ResultType};
+
 use sha2::Digest;
 use sha2::Sha256;
-use std::{convert::Infallible, net::SocketAddr};
+
+use tokio::net::TcpListener;
 
 use base64::{engine::general_purpose, Engine as _};
 
@@ -67,19 +75,22 @@ pub(crate) fn calculate_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-pub(crate) fn status(status: StatusCode, error_message: String) -> Response<Body> {
+pub(crate) fn status(
+    status: StatusCode,
+    error_message: String,
+) -> Response<BoxBody<Bytes, Infallible>> {
     Response::builder()
         .status(status)
-        .body(error_message.into())
+        .body(BoxBody::new(Full::new(error_message.into())))
         .unwrap()
 }
 
 pub(crate) async fn http_request_handler(
     index_path: PathBuf,
     apikey_list: Arc<tokio::sync::RwLock<HashMap<u128, ApikeyObject>>>,
-    req: Request<Body>,
+    req: Request<Incoming>,
     _remote_addr: SocketAddr,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
     let headers = req.headers();
 
     let mut parts: [&str; 6] = ["", "", "", "", "", ""];
@@ -120,8 +131,7 @@ pub(crate) async fn http_request_handler(
                             let index_arc_clone = index_arc.clone();
                             drop(apikey_list_ref);
 
-                            let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
-
+                            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
                             let search_request =
                                 match serde_json::from_slice::<SearchRequestObject>(&request_bytes)
                                 {
@@ -135,8 +145,10 @@ pub(crate) async fn http_request_handler(
                                 query_index_api_post(&index_arc_clone, search_request).await;
 
                             let search_result_json =
-                                serde_json::to_string(&search_result_local).unwrap();
-                            Ok(Response::new(search_result_json.into()))
+                                serde_json::to_vec(&search_result_local).unwrap();
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                search_result_json.into(),
+                            ))))
                         } else {
                             Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -250,7 +262,8 @@ pub(crate) async fn http_request_handler(
                                     query_type_default: QueryType::Intersection,
                                 }
                             } else {
-                                let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                                let request_bytes =
+                                    req.into_body().collect().await.unwrap().to_bytes();
 
                                 match request_bytes.is_empty() {
                                     true => {
@@ -279,10 +292,12 @@ pub(crate) async fn http_request_handler(
 
                             let search_result_local =
                                 query_index_api_get(&index_arc_clone, search_request).await;
-                            let search_result_json =
-                                serde_json::to_string(&search_result_local).unwrap();
 
-                            Ok(Response::new(search_result_json.into()))
+                            let search_result_json =
+                                serde_json::to_vec(&search_result_local).unwrap();
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                search_result_json.into(),
+                            ))))
                         } else {
                             Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -314,7 +329,7 @@ pub(crate) async fn http_request_handler(
                 if let Some(apikey_hash) =
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
                     let create_index_request_object =
                         match serde_json::from_slice::<CreateIndexRequest>(&request_bytes) {
@@ -336,7 +351,9 @@ pub(crate) async fn http_request_handler(
                             apikey_object,
                         );
                         drop(apikey_list_mut);
-                        Ok(Response::new(index_id.to_string().into()))
+                        Ok(Response::new(BoxBody::new(Full::new(
+                            index_id.to_string().into(),
+                        ))))
                     } else {
                         Ok(status(
                             StatusCode::NOT_FOUND,
@@ -382,7 +399,9 @@ pub(crate) async fn http_request_handler(
                         let index_count = apikey_object.index_list.len();
                         drop(apikey_list_mut);
 
-                        Ok(Response::new(index_count.to_string().into()))
+                        Ok(Response::new(BoxBody::new(Full::new(
+                            index_count.to_string().into(),
+                        ))))
                     } else {
                         Ok(status(
                             StatusCode::NOT_FOUND,
@@ -422,7 +441,9 @@ pub(crate) async fn http_request_handler(
                             drop(apikey_list_ref);
                             let result = commit_index_api(&index_arc_clone).await;
 
-                            Ok(Response::new(result.unwrap().to_string().into()))
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                result.unwrap().to_string().into(),
+                            ))))
                         } else {
                             Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -468,7 +489,9 @@ pub(crate) async fn http_request_handler(
                             drop(apikey_list_ref);
                             let result = close_index_api(&index_arc_clone).await;
 
-                            Ok(Response::new(result.unwrap().to_string().into()))
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                result.unwrap().to_string().into(),
+                            ))))
                         } else {
                             Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -505,9 +528,10 @@ pub(crate) async fn http_request_handler(
                     let status_object =
                         get_apikey_indices_info_api(&apikey_object.index_list).await;
                     drop(apikey_list_ref);
-                    let status_object_json = serde_json::to_string(&status_object).unwrap();
-
-                    Ok(Response::new(status_object_json.into()))
+                    let status_object_json = serde_json::to_vec(&status_object).unwrap();
+                    Ok(Response::new(BoxBody::new(Full::new(
+                        status_object_json.into(),
+                    ))))
                 } else {
                     Ok(status(
                         StatusCode::UNAUTHORIZED,
@@ -544,8 +568,10 @@ pub(crate) async fn http_request_handler(
                         match status_object {
                             Ok(status_object) => {
                                 let status_object_json =
-                                    serde_json::to_string(&status_object).unwrap();
-                                Ok(Response::new(status_object_json.into()))
+                                    serde_json::to_vec(&status_object).unwrap();
+                                Ok(Response::new(BoxBody::new(Full::new(
+                                    status_object_json.into(),
+                                ))))
                             }
                             Err(_e) => Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -597,7 +623,7 @@ pub(crate) async fn http_request_handler(
                         .to_string();
                     let file_path = Path::new(&file_path);
 
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
                     let apikey_list_ref = apikey_list.read().await;
 
@@ -613,8 +639,10 @@ pub(crate) async fn http_request_handler(
                                 &request_bytes,
                             )
                             .await;
-                            let status_object_json = serde_json::to_string(&status_object).unwrap();
-                            Ok(Response::new(status_object_json.into()))
+                            let status_object_json = serde_json::to_vec(&status_object).unwrap();
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                status_object_json.into(),
+                            ))))
                         } else {
                             Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -653,7 +681,8 @@ pub(crate) async fn http_request_handler(
                                 let index_arc_clone = index_arc.clone();
                                 drop(apikey_list_ref);
 
-                                let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                                let request_bytes =
+                                    req.into_body().collect().await.unwrap().to_bytes();
                                 let synonyms =
                                     match serde_json::from_slice::<Vec<Synonym>>(&request_bytes) {
                                         Ok(create_index_request_object) => {
@@ -670,9 +699,10 @@ pub(crate) async fn http_request_handler(
                                 if let Ok(result) =
                                     add_synonyms_api(&index_arc_clone, synonyms).await
                                 {
-                                    let result_object_json =
-                                        serde_json::to_string(&result).unwrap();
-                                    Ok(Response::new(result_object_json.into()))
+                                    let status_object_json = serde_json::to_vec(&result).unwrap();
+                                    Ok(Response::new(BoxBody::new(Full::new(
+                                        status_object_json.into(),
+                                    ))))
                                 } else {
                                     Ok(status(
                                         StatusCode::NOT_FOUND,
@@ -720,7 +750,8 @@ pub(crate) async fn http_request_handler(
                                 let index_arc_clone = index_arc.clone();
                                 drop(apikey_list_ref);
 
-                                let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                                let request_bytes =
+                                    req.into_body().collect().await.unwrap().to_bytes();
                                 let synonyms =
                                     match serde_json::from_slice::<Vec<Synonym>>(&request_bytes) {
                                         Ok(create_index_request_object) => {
@@ -737,9 +768,10 @@ pub(crate) async fn http_request_handler(
                                 if let Ok(result) =
                                     set_synonyms_api(&index_arc_clone, synonyms).await
                                 {
-                                    let result_object_json =
-                                        serde_json::to_string(&result).unwrap();
-                                    Ok(Response::new(result_object_json.into()))
+                                    let status_object_json = serde_json::to_vec(&result).unwrap();
+                                    Ok(Response::new(BoxBody::new(Full::new(
+                                        status_object_json.into(),
+                                    ))))
                                 } else {
                                     Ok(status(
                                         StatusCode::NOT_FOUND,
@@ -787,9 +819,10 @@ pub(crate) async fn http_request_handler(
                                 let index_arc_clone = index_arc.clone();
                                 drop(apikey_list_ref);
                                 if let Ok(result) = get_synonyms_api(&index_arc_clone).await {
-                                    let result_object_json =
-                                        serde_json::to_string(&result).unwrap();
-                                    Ok(Response::new(result_object_json.into()))
+                                    let status_object_json = serde_json::to_vec(&result).unwrap();
+                                    Ok(Response::new(BoxBody::new(Full::new(
+                                        status_object_json.into(),
+                                    ))))
                                 } else {
                                     Ok(status(
                                         StatusCode::NOT_FOUND,
@@ -837,7 +870,7 @@ pub(crate) async fn http_request_handler(
                         ));
                     };
 
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
                     let request_string = str::from_utf8(&request_bytes).unwrap();
 
                     let apikey_list_ref = apikey_list.read().await;
@@ -867,8 +900,10 @@ pub(crate) async fn http_request_handler(
 
                                 index_documents_api(&index_arc_clone, document_object_vec).await
                             };
-                            let status_object_json = serde_json::to_string(&status_object).unwrap();
-                            Ok(Response::new(status_object_json.into()))
+                            let status_object_json = serde_json::to_vec(&status_object).unwrap();
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                status_object_json.into(),
+                            ))))
                         } else {
                             Ok(status(
                                 StatusCode::NOT_FOUND,
@@ -901,7 +936,7 @@ pub(crate) async fn http_request_handler(
                     get_apikey_hash(apikey.to_str().unwrap().to_string(), &apikey_list).await
                 {
                     let index_id: u64 = parts[3].parse().unwrap();
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
                     let request_string = str::from_utf8(&request_bytes).unwrap();
                     let apikey_list_ref = apikey_list.read().await;
                     let apikey_object = apikey_list_ref.get(&apikey_hash).unwrap();
@@ -937,8 +972,10 @@ pub(crate) async fn http_request_handler(
                         update_documents_api(&index_arc_clone, id_document_object_vec).await
                     };
 
-                    let status_object_json = serde_json::to_string(&status_object).unwrap();
-                    Ok(Response::new(status_object_json.into()))
+                    let status_object_json = serde_json::to_vec(&status_object).unwrap();
+                    Ok(Response::new(BoxBody::new(Full::new(
+                        status_object_json.into(),
+                    ))))
                 } else {
                     Ok(status(
                         StatusCode::UNAUTHORIZED,
@@ -982,7 +1019,7 @@ pub(crate) async fn http_request_handler(
                                     .header("Content-Type", "application/pdf")
                                     .header("content-length", file.len())
                                     .header("Content-Disposition", "attachment;filename=file.pdf")
-                                    .body(file.into())
+                                    .body(BoxBody::new(Full::new(file.into())))
                                     .unwrap();
                                 Ok(response)
                             } else {
@@ -1035,7 +1072,7 @@ pub(crate) async fn http_request_handler(
                         ));
                     };
 
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
                     let get_document_request = if !request_bytes.is_empty() {
                         let get_document_request: GetDocumentRequest =
@@ -1064,8 +1101,10 @@ pub(crate) async fn http_request_handler(
 
                             if let Some(status_object) = status_object {
                                 let status_object_json =
-                                    serde_json::to_string(&status_object).unwrap();
-                                Ok(Response::new(status_object_json.into()))
+                                    serde_json::to_vec(&status_object).unwrap();
+                                Ok(Response::new(BoxBody::new(Full::new(
+                                    status_object_json.into(),
+                                ))))
                             } else {
                                 Ok(status(
                                     StatusCode::NOT_FOUND,
@@ -1121,18 +1160,22 @@ pub(crate) async fn http_request_handler(
                             let status_object =
                                 delete_document_by_parameter_api(&index_arc_clone, document_id)
                                     .await;
-                            let status_object_json = serde_json::to_string(&status_object).unwrap();
-                            Ok(Response::new(status_object_json.into()))
+                            let status_object_json = serde_json::to_vec(&status_object).unwrap();
+                            Ok(Response::new(BoxBody::new(Full::new(
+                                status_object_json.into(),
+                            ))))
                         }
 
                         Err(_) => {
-                            let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
                             if *request_bytes == *b"clear" {
                                 let status_object = clear_index_api(&index_arc_clone).await;
                                 let status_object_json =
-                                    serde_json::to_string(&status_object).unwrap();
-                                Ok(Response::new(status_object_json.into()))
+                                    serde_json::to_vec(&status_object).unwrap();
+                                Ok(Response::new(BoxBody::new(Full::new(
+                                    status_object_json.into(),
+                                ))))
                             } else {
                                 match serde_json::from_slice::<SearchRequestObject>(&request_bytes)
                                 {
@@ -1143,8 +1186,10 @@ pub(crate) async fn http_request_handler(
                                         )
                                         .await;
                                         let status_object_json =
-                                            serde_json::to_string(&status_object).unwrap();
-                                        Ok(Response::new(status_object_json.into()))
+                                            serde_json::to_vec(&status_object).unwrap();
+                                        Ok(Response::new(BoxBody::new(Full::new(
+                                            status_object_json.into(),
+                                        ))))
                                     }
                                     Err(_) => {
                                         let request_string =
@@ -1185,8 +1230,10 @@ pub(crate) async fn http_request_handler(
                                             .await
                                         };
                                         let status_object_json =
-                                            serde_json::to_string(&status_object).unwrap();
-                                        Ok(Response::new(status_object_json.into()))
+                                            serde_json::to_vec(&status_object).unwrap();
+                                        Ok(Response::new(BoxBody::new(Full::new(
+                                            status_object_json.into(),
+                                        ))))
                                     }
                                 }
                             }
@@ -1214,7 +1261,7 @@ pub(crate) async fn http_request_handler(
                 let master_apikey_base64 = general_purpose::STANDARD.encode(master_apikey);
 
                 if apikey_header.to_str().unwrap_or("") == master_apikey_base64 {
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
                     let apikey_quota_object = match serde_json::from_slice(&request_bytes) {
                         Ok(apikey_quota_object) => apikey_quota_object,
                         Err(e) => {
@@ -1235,7 +1282,9 @@ pub(crate) async fn http_request_handler(
                     );
                     drop(apikey_list_mut);
 
-                    Ok(Response::new(api_key_base64.into()))
+                    Ok(Response::new(BoxBody::new(Full::new(
+                        api_key_base64.into(),
+                    ))))
                 } else {
                     Ok(status(
                         StatusCode::UNAUTHORIZED,
@@ -1258,7 +1307,8 @@ pub(crate) async fn http_request_handler(
                 let master_apikey_base64 = general_purpose::STANDARD.encode(master_apikey);
 
                 if apikey_header.to_str().unwrap_or("") == master_apikey_base64 {
-                    let request_bytes = body::to_bytes(req.into_body()).await.unwrap();
+                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+
                     let request_object: DeleteApikeyRequest =
                         match serde_json::from_slice(&request_bytes) {
                             Ok(request_object) => request_object,
@@ -1283,7 +1333,9 @@ pub(crate) async fn http_request_handler(
                     drop(apikey_list_mut);
 
                     match result {
-                        Ok(count) => Ok(Response::new(count.to_string().into())),
+                        Ok(count) => Ok(Response::new(BoxBody::new(Full::new(
+                            count.to_string().into(),
+                        )))),
                         Err(_) => Ok(status(
                             StatusCode::NOT_FOUND,
                             "api_key does not exists".to_string(),
@@ -1309,30 +1361,33 @@ pub(crate) async fn http_request_handler(
         )),
 
         (_, _, _, _, _, _, &Method::GET) => match path {
-            "/" => Ok(Response::new(INDEX_HTML.into())),
-            "/css/flexboxgrid.min.css" => Ok(Response::new(FLEXBOX_CSS.into())),
-            "/css/master.css" => Ok(Response::new(MASTER_CSS.into())),
-            "/js/master.js" => Ok(Response::new(MASTER_JS.into())),
-            "/js/jquery-3.7.1.min.js" => Ok(Response::new(JQUERY_JS.into())),
+            "/" => Ok(Response::new(BoxBody::new(INDEX_HTML.to_string()))),
+            "/css/flexboxgrid.min.css" => Ok(Response::new(BoxBody::new(FLEXBOX_CSS.to_string()))),
+            "/css/master.css" => Ok(Response::new(BoxBody::new(MASTER_CSS.to_string()))),
+            "/js/master.js" => Ok(Response::new(BoxBody::new(MASTER_JS.to_string()))),
+            "/js/jquery-3.7.1.min.js" => Ok(Response::new(BoxBody::new(JQUERY_JS.to_string()))),
 
-            "/css/bootstrap.histogram.slider.css" => Ok(Response::new(HISTOGRAM_CSS.into())),
-            "/css/histogram.slider.css" => Ok(Response::new(SLIDER_CSS.into())),
-            "/js/bootstrap.histogram.slider.js" => Ok(Response::new(HISTOGRAM_JS.into())),
-            "/js/bootstrap-slider.js" => Ok(Response::new(SLIDER_JS.into())),
+            "/css/bootstrap.histogram.slider.css" => {
+                Ok(Response::new(BoxBody::new(HISTOGRAM_CSS.to_string())))
+            }
+            "/css/histogram.slider.css" => Ok(Response::new(BoxBody::new(SLIDER_CSS.to_string()))),
+            "/js/bootstrap.histogram.slider.js" => {
+                Ok(Response::new(BoxBody::new(HISTOGRAM_JS.to_string())))
+            }
+            "/js/bootstrap-slider.js" => Ok(Response::new(BoxBody::new(SLIDER_JS.to_string()))),
 
             "/svg/logo.svg" => {
-                let body: Body = LOGO_SVG.into();
                 let response = Response::builder()
                     .header("Content-Type", "image/svg+xml")
                     .header("content-length", LOGO_SVG.len())
-                    .body(body)
+                    .body(BoxBody::new(Full::new(LOGO_SVG.into())))
                     .unwrap();
                 Ok(response)
             }
 
-            "/favicon-16x16.png" => Ok(Response::new(FAVICON_16.into())),
-            "/favicon-32x32.png" => Ok(Response::new(FAVICON_32.into())),
-            "/version" => Ok(Response::new(VERSION.into())),
+            "/favicon-16x16.png" => Ok(Response::new(BoxBody::new(Full::new(FAVICON_16.into())))),
+            "/favicon-32x32.png" => Ok(Response::new(BoxBody::new(Full::new(FAVICON_32.into())))),
+            "/version" => Ok(Response::new(BoxBody::new(Full::new(VERSION.into())))),
             _ => Ok(status(StatusCode::NOT_IMPLEMENTED, String::new())),
         },
         _ => Ok(status(
@@ -1348,54 +1403,71 @@ pub(crate) async fn http_server(
     local_ip: &String,
     local_port: &u16,
 ) {
-    let addr: SocketAddr = format!("{}:{}", local_ip, local_port)
+    let local_address: SocketAddr = format!("{}:{}", local_ip, local_port)
         .parse()
         .expect("Unable to parse socket address");
 
-    let make_svc = make_service_fn(move |conn: &AddrStream| {
-        let index_path = index_path.to_path_buf();
-        let addr = conn.remote_addr();
-        let apikey_list = apikey_list.clone();
-
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req| {
-                http_request_handler(index_path.clone(), apikey_list.clone(), req, addr)
-            }))
-        }
-    });
-
-    match Server::try_bind(&addr) {
-        Ok(s) => {
-            let server = s.serve(make_svc);
-
+    match TcpListener::bind(local_address).await {
+        Ok(listener) => {
             let mut hasher = Sha256::new();
             hasher.update(MASTER_KEY_SECRET.to_string());
-            let peer_master_apikey = hasher.finalize();
-            let peer_master_apikey_base64 = general_purpose::STANDARD.encode(peer_master_apikey);
+            let master_apikey = hasher.finalize();
+            let master_apikey_base64 = general_purpose::STANDARD.encode(master_apikey);
 
             println!(
-                "Listening on: {} {} index dir {} master key {}\n\n",
-                local_ip,
-                local_port,
+                "Listening on: {} index dir {} master key {}\n\n",
+                local_address,
                 index_path.display(),
-                peer_master_apikey_base64
+                master_apikey_base64
             );
 
             io::stdout().flush().unwrap();
 
-            if let Err(e) = server.await {
-                eprintln!("server error: {}", e);
+            let index_path = index_path.to_path_buf();
+
+            loop {
+                let (tcp, remote_address) = listener.accept().await.unwrap();
+                let io = TokioIo::new(tcp);
+
+                let index_path = index_path.clone();
+                let apikey_list = apikey_list.clone();
+
+                tokio::task::spawn(async move {
+                    if let Err(err) = Builder::new(TokioExecutor::new())
+                        .serve_connection(
+                            io,
+                            service_fn(move |request: Request<Incoming>| {
+                                let index_path = index_path.clone();
+                                let apikey_list = apikey_list.clone();
+                                async move {
+                                    let t: Result<_, Infallible> = http_request_handler(
+                                        index_path,
+                                        apikey_list,
+                                        request,
+                                        remote_address,
+                                    )
+                                    .await;
+
+                                    t
+                                }
+                            }),
+                        )
+                        .await
+                    {
+                        eprintln!("error serving connection: {:?}", err);
+                    }
+                });
             }
         }
 
         Err(_e) => {
             println!(
                 "Starting the server at {:?} failed. \
-                Check if there is another SeekStorm server instance running on the same port. \
-                Try changing the port.",
-                addr
+            Check if there is another SeekStorm server instance running on the same port. \
+            Try changing the port.",
+                local_address
             );
             process::exit(1)
         }
-    };
+    }
 }
