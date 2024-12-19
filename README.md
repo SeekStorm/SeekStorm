@@ -4,6 +4,7 @@
 [![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
 [![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+<a href="https://hub.docker.com/r/wolfgarbe/seekstorm_server"><img src="https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server"></a>
 <p>
   <a href="https://seekstorm.com">Website</a> | 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
