@@ -1,9 +1,11 @@
 #[cfg(target_arch = "x86_64")]
-use std::{arch::x86_64::{
-    __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
-    _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32, _SIDD_BIT_MASK,
-    _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
-}, mem::size_of //for docker
+use std::{
+    arch::x86_64::{
+        __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
+        _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
+        _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
+    },
+    mem::size_of, //for docker
 };
 
 #[cfg(target_arch = "aarch64")]

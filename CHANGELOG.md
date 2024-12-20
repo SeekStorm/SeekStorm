@@ -11,7 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Docker file and container added (#17)
 - https://hub.docker.com/r/wolfgarbe/seekstorm_server
-- `docker run -ti -p "8000:80" wolfgarbe/seekstorm_server:v0.12.2`
+- `docker run -ti -p "8000:80" wolfgarbe/seekstorm_server:v0.12.3`
+
+### Fixed
+
+- Exception handling if docker is run without the -ti parameter (run interactively with a tty session).
 
 ## [0.12.2] - 2024-12-14
 
