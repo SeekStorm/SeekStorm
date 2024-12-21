@@ -17,6 +17,22 @@
 <script src=js/bootstrap-slider.js></script>
 </head>
 <body>
+<div id=welcome style="display:none;align-items:center;justify-content:center;height:100vh;font-style:normal;font-size:14px;font-family:'JetBrains Mono',Montserrat,sans-serif;color:#0e5ba3">
+<div style=width:50%;height:50%>
+<p style=font-size:16px><b>Welcome to the SeekStorm 🌱 open-source ⚡ sub-millisecond 🔍 search server in 🦀 Rust!</b></p>
+<p>&nbsp;</p>
+<p>Please create an <b>API key</b> and <b>index</b> first via <b>REST API</b>: See <a href=https://seekstorm.apidocumentation.com>REST API documentation</a>.</p>
+<p>You find the required <b>master API key</b> in the <b>console</b> or in the <b>docker desktop</b> / view details / logs.</p>
+<p>Alternatively, you may create a demo API key also with the <b>search server console</b> command <b>"create"</b>.</p>
+<p>&nbsp;</p>
+<p>Then, reload the page to see the embedded search UI.</p>
+<p>Per default the search UI uses the demo API key and index_id 0.</p>
+<p>To overwrite the default API key and index_id use URL parameters:
+<p>http://127.0.0.1/?api_key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&index_id=0</p>
+<p>&nbsp;</p>
+<p>For more information visit <a href=https://github.com/SeekStorm/SeekStorm>https://github.com/SeekStorm/SeekStorm</a>.</p>
+</div>
+</div>
 <div class=h100 id=landingSearch>
 <div class="row center-xs middle-xs h100">
 <div class="col-xs-10 col-md-8 col-lg-6 content">
@@ -47,7 +63,7 @@ SeekStorm v<span id=version></span>
 <div id=footerSecondary>
 <a href=https://github.com/SeekStorm/SeekStorm/blob/master/ARCHITECTURE.md>Technology</a>
 <a href=https://seekstorm.com/blog/sneak-peek-seekstorm-rust/>Benchmark</a>
-<a href=https://seekstorm.apidocumentation.com/reference style=color:#00a4f0>API</a>
+<a href=https://seekstorm.apidocumentation.com style=color:#00a4f0>API</a>
 <a href=https://seekstorm.com/contact>Contact</a>
 <a href=https://github.com/SeekStorm/SeekStorm>GitHub</a>
 <a href=https://seekstorm.com/blog>Blog</a>
