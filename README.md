@@ -4,7 +4,7 @@
 [![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
 [![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
-<a href="https://hub.docker.com/r/wolfgarbe/seekstorm_server"><img src="https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server"></a>
+[![Docker](https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server)](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
 <p>
   <a href="https://seekstorm.com">Website</a> | 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
@@ -75,6 +75,7 @@ Result types
   * [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
   * Code first OpenAPI generated [REST API documentation](https://seekstorm.apidocumentation.com)
   * Cross-platform: runs on Linux, Windows, and macOS (other OS untested).
+  * Docker file and container image at [Docker Hub](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
 
 ---
 
@@ -795,13 +796,15 @@ The Rust port is not yet feature complete. The following features are currently 
 * Intra-query concurrency
 
 **Improvements**
+* ✅ Better REST API documentation: integrated OpenAPI generator
 * Faster indexing
 * Relevancy benchmarks: BeIR, MS MARCO
-* Better API documentation: integrated OpenAPI generator
 
 **New features**
+* ✅ Docker file and container image
 * Native vector search (currently PoC)
 * Distributed search cluster (currently PoC)
 * S3 object storage compatible index: cloud-native split of storage and compute
+* WebAssembly (Wasm)
 
 
