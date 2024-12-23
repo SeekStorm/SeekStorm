@@ -11,7 +11,6 @@ COPY . /seekstorm
 
 RUN cargo build --release
 
-# Copy the binary into a new container for a smaller docker image
 FROM debian:buster-slim
 
 COPY --from=build /seekstorm/target/release/seekstorm_server /
