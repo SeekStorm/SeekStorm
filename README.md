@@ -806,5 +806,6 @@ The Rust port is not yet feature complete. The following features are currently 
 * Distributed search cluster (currently PoC)
 * S3 object storage compatible index: cloud-native split of storage and compute
 * WebAssembly (Wasm)
+* Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
 
 
