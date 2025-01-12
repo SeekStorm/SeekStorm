@@ -127,6 +127,8 @@ impl Index {
             }
         }
 
+        let _ = self.docstore_file.flush();
+
         self.compressed_docstore_segment_block_buffer = vec![0; ROARING_BLOCK_SIZE * 4];
 
         if self.meta.access_type == AccessType::Mmap {

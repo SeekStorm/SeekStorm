@@ -10,8 +10,8 @@ use crate::{
     search::{FilterSparse, Ranges, ResultType, SearchResult},
     single::{single_blockid, single_docid},
     utils::{
-        block_copy, cast_byte_ulong_slice, cast_byte_ushort_slice, read_f32, read_f64, read_i16,
-        read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
+        block_copy, cast_byte_ulong_slice, cast_byte_ulong_slice_mut, cast_byte_ushort_slice,
+        read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
     },
 };
 
@@ -582,7 +582,7 @@ pub(crate) async fn union_count<'a>(
                     8192,
                 );
             } else {
-                let ulongs0 = cast_byte_ulong_slice(&bitmap_0);
+                let ulongs0 = cast_byte_ulong_slice_mut(&mut bitmap_0);
                 let ulongs1 = cast_byte_ulong_slice(
                     &plo.byte_array
                         [plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
@@ -697,7 +697,7 @@ pub(crate) async fn union_count<'a>(
             }
 
             CompressionType::Bitmap => {
-                let ulongs0 = cast_byte_ulong_slice(&bitmap_0);
+                let ulongs0 = cast_byte_ulong_slice_mut(&mut bitmap_0);
                 let ulongs1 = cast_byte_ulong_slice(
                     &plo.byte_array
                         [plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],

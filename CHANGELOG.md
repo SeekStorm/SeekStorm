@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.4] - 2025-01-12
+
+### Fixed
+
+- Fixed a subtract with overflow exception that occurred in debug mode when committing, and the previous commit was < 64k documents. Fixes issue #22 .
+- Changed cast_byte_ushort_slice and cast_byte_ulong_slice to either take mutable references and return mutable ones or take immutable references and return immutable ones.
+- Added index_file and docstore_file flush in commit.
+
 ## [0.12.3] - 2024-12-21
 
 ### Added

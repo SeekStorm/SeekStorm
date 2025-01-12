@@ -522,8 +522,10 @@ impl Index {
             value.posting_count += 1;
             value.position_count += positions_count_sum;
             value.size_compressed_positions_key += positions_stack;
-            value.docid_delta_max =
-                cmp::max(value.docid_delta_max, docid_lsb - value.docid_old - 1);
+            if docid_lsb > value.docid_old {
+                value.docid_delta_max =
+                    cmp::max(value.docid_delta_max, docid_lsb - value.docid_old - 1);
+            }
             value.docid_old = docid_lsb;
 
             write_u32(

@@ -268,6 +268,9 @@ impl Index {
         let _ = self
             .index_file
             .write(&self.compressed_index_segment_block_buffer[segment_head_position3..]);
+
+        let _ = self.index_file.flush();
+
         self.index_file
             .seek(SeekFrom::Start(segment_head_position2 as u64))
             .unwrap();

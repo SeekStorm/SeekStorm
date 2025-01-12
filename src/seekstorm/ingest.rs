@@ -262,7 +262,11 @@ impl IndexPdf for IndexArc {
                     };
 
                     if date_string.len() > 14
-                        && date_string.chars().nth(14).unwrap().to_ascii_lowercase() == 'z'
+                        && date_string
+                            .chars()
+                            .nth(14)
+                            .unwrap()
+                            .eq_ignore_ascii_case(&'z')
                     {
                         date_string = &date_string[0..14];
                     }
