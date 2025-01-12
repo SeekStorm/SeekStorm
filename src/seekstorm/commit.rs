@@ -69,7 +69,7 @@ pub trait Commit {
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
     ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
-    async fn commit(&mut self);
+    async fn commit(&self);
 }
 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
@@ -109,7 +109,7 @@ impl Commit for IndexArc {
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
     ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
-    async fn commit(&mut self) {
+    async fn commit(&self) {
         let index_ref = self.read().await;
         let index_permits = index_ref.permits.clone();
         drop(index_ref);
