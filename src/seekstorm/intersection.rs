@@ -1257,9 +1257,21 @@ pub(crate) async fn intersection_docid(
                 query_list[t1].run_end = runend1 as i32;
 
                 query_list[t2].p_run_count = ushorts2[0] as i32;
-                let mut runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
-                let mut runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
-                let mut runend2 = runstart2 + runlength2;
+                let mut runstart2;
+                let mut runlength2;
+                let mut runend2;
+                loop {
+                    runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
+                    runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
+                    runend2 = runstart2 + runlength2;
+
+                    if (runend2 as i32) <query_list[t1].docid {
+                        query_list[t2].p_run += 1;
+                        if query_list[t2].p_run == query_list[t2].p_run_count {
+                            break 'exit;
+                        }
+                    } else {break;}
+                }
                 query_list[t2].run_end = runend2 as i32;
 
                 'start: loop {
