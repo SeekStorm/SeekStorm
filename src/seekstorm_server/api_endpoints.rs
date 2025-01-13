@@ -513,7 +513,7 @@ pub(crate) async fn delete_index_api(
     )
 )]
 pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String> {
-    let mut index_arc_clone = index_arc.clone();
+    let index_arc_clone = index_arc.clone();
     let index_ref = index_arc.read().await;
     let indexed_doc_count = index_ref.indexed_doc_count;
 
