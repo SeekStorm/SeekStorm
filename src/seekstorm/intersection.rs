@@ -1270,6 +1270,7 @@ pub(crate) async fn intersection_docid(
                         if query_list[t2].p_run == query_list[t2].p_run_count {
                             break 'exit;
                         }
+                        query_list[t2].p_run_sum += ushorts2[(2 + query_list[t2].p_run * 2) as usize] as i32;
                     } else {break;}
                 }
                 query_list[t2].run_end = runend2 as i32;
