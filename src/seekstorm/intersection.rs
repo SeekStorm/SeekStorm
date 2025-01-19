@@ -1257,29 +1257,16 @@ pub(crate) async fn intersection_docid(
                 query_list[t1].run_end = runend1 as i32;
 
                 query_list[t2].p_run_count = ushorts2[0] as i32;
-                let mut runstart2;
-                let mut runlength2;
-                let mut runend2;
-                loop {
-                    runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
-                    runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
-                    runend2 = runstart2 + runlength2;
-
-                    if (runend2 as i32) <query_list[t1].docid {
-                        query_list[t2].p_run += 1;
-                        if query_list[t2].p_run == query_list[t2].p_run_count {
-                            break 'exit;
-                        }
-                        query_list[t2].p_run_sum += ushorts2[(2 + query_list[t2].p_run * 2) as usize] as i32;
-                    } else {break;}
-                }
+                let mut runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
+                let mut runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
+                let mut runend2 = runstart2 + runlength2;
                 query_list[t2].run_end = runend2 as i32;
 
                 'start: loop {
                     if runstart1 > runend2 {
                         query_list[t2].p_run += 1;
                         if query_list[t2].p_run == query_list[t2].p_run_count {
-                            break;
+                            break 'exit;
                         }
 
                         runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
@@ -1294,7 +1281,7 @@ pub(crate) async fn intersection_docid(
                             if query_list[t2].compression_type != CompressionType::Rle {
                                 query_list[t1].p_run += 1;
                                 if query_list[t1].p_run == query_list[t1].p_run_count {
-                                    break;
+                                    break 'exit;
                                 }
 
                                 query_list[t1].p_run_sum += read_u16(
@@ -1319,7 +1306,7 @@ pub(crate) async fn intersection_docid(
 
                         query_list[t1].p_run += 1;
                         if query_list[t1].p_run == query_list[t1].p_run_count {
-                            break;
+                            break 'exit;
                         }
 
                         runstart1 = ushorts1[(1 + query_list[t1].p_run * 2) as usize];
@@ -1345,6 +1332,7 @@ pub(crate) async fn intersection_docid(
                                 t2 += 1;
                                 if query_list[t2].compression_type != CompressionType::Rle {
                                     query_list[t1].docid = doc_id;
+
                                     continue 'restart;
                                 } else {
                                     ushorts2 = cast_byte_ushort_slice(
@@ -1393,14 +1381,15 @@ pub(crate) async fn intersection_docid(
 
                             query_list[t1].docid = doc_id + 1;
 
-                            for item in query_list.iter_mut().skip(1) {
+                            let mut flag = false;
+                            for item in query_list.iter_mut() {
                                 if item.compression_type == CompressionType::Array {
                                     item.p_docid += 1;
                                     if item.p_docid == item.p_docid_count {
                                         break 'exit;
                                     }
                                 } else if (item.compression_type == CompressionType::Rle)
-                                    && (doc_id == item.run_end)
+                                    && (doc_id >= item.run_end)
                                 {
                                     item.p_run += 1;
                                     if item.p_run == item.p_run_count {
@@ -1413,30 +1402,20 @@ pub(crate) async fn intersection_docid(
                                             + 4
                                             + (item.p_run << 2) as usize,
                                     ) as i32;
+
+                                    flag = true;
                                 }
                             }
 
                             t2 = 1;
                             if query_list[t2].compression_type != CompressionType::Rle {
-                                query_list[t1].docid = doc_id + 1;
-
                                 continue 'restart;
-                            }
-
-                            if (doc_id == query_list[t2].run_end) || (query_list.len() > 2) {
-                                ushorts2 = cast_byte_ushort_slice(
-                                    &query_list[t2].byte_array
-                                        [query_list[t2].compressed_doc_id_range..],
-                                );
-                                runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
-                                runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
-                                runend2 = runstart2 + runlength2;
-                                query_list[t2].run_end = runend2 as i32;
-                                break;
+                            } else if flag || (query_list.len() > 2) {
+                                continue 'exit;
                             }
                         }
 
-                        if query_list[t1].docid - 1 == query_list[t1].run_end {
+                        if query_list[t1].docid > query_list[t1].run_end {
                             query_list[t1].p_run += 1;
                             if query_list[t1].p_run == query_list[t1].p_run_count {
                                 break 'exit;
@@ -1447,9 +1426,22 @@ pub(crate) async fn intersection_docid(
                             query_list[t1].p_run_sum += runlength1 as i32;
                             query_list[t1].run_end = runend1 as i32;
                         }
+
+                        if query_list[t1].docid > query_list[t2].run_end {
+                            query_list[t2].p_run += 1;
+                            if query_list[t2].p_run == query_list[t2].p_run_count {
+                                break 'exit;
+                            }
+                            runstart2 = ushorts2[(1 + query_list[t2].p_run * 2) as usize];
+                            runlength2 = ushorts2[(2 + query_list[t2].p_run * 2) as usize];
+                            runend2 = runstart2 + runlength2;
+                            query_list[t2].p_run_sum += runlength2 as i32;
+                            query_list[t2].run_end = runend2 as i32;
+                        }
                     }
                 }
 
+                #[allow(unreachable_code)]
                 break;
             },
 
