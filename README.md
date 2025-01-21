@@ -797,7 +797,7 @@ The Rust port is not yet feature complete. The following features are currently 
 
 **Improvements**
 * ✅ Better REST API documentation: integrated OpenAPI generator
-* Faster indexing
+* 👷 Faster indexing
 * Relevancy benchmarks: BeIR, MS MARCO
 
 **New features**
