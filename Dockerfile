@@ -1,4 +1,4 @@
-FROM rust:slim-buster AS build
+FROM rust:slim-bookworm AS build
 
 LABEL org.opencontainers.image.title="SeekStorm server"
 LABEL maintainer="SeekStorm, Sp. z o.o. <info@seekstorm.com>"
