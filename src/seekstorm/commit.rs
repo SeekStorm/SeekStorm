@@ -24,8 +24,8 @@ use crate::{
         TermObject, FACET_VALUES_FILENAME, MAX_POSITIONS_PER_TERM, ROARING_BLOCK_SIZE, STOPWORDS,
     },
     utils::{
-        block_copy, block_copy_mut, cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16,
-        read_u32, read_u64, read_u8, write_u16, write_u32, write_u64,
+        block_copy, block_copy_mut, read_u16, read_u32, read_u64, read_u8, write_u16, write_u32,
+        write_u64,
     },
 };
 
@@ -132,6 +132,7 @@ impl Index {
         if !self.uncommitted {
             return;
         }
+
         let new_document_count = indexed_doc_count - self.committed_doc_count;
 
         let is_last_level_incomplete = self.is_last_level_incomplete;
@@ -718,13 +719,14 @@ impl Index {
 
         match compression_type {
             CompressionType::Array => {
-                let ushorts1 =
-                    cast_byte_ushort_slice(&byte_array[compressed_doc_id_range as usize..]);
-
                 for i in 0..=posting_count {
                     plo.p_docid = i as usize;
 
-                    let docid = (block_id << 16) | ushorts1[i as usize] as usize;
+                    let docid = (block_id << 16)
+                        | read_u16(
+                            &byte_array[compressed_doc_id_range as usize..],
+                            i as usize * 2,
+                        ) as usize;
 
                     self.add_docid(
                         &mut plo,
@@ -739,14 +741,19 @@ impl Index {
             }
 
             CompressionType::Rle => {
-                let ushorts1 =
-                    cast_byte_ushort_slice(&byte_array[compressed_doc_id_range as usize..]);
-                let runs_count = ushorts1[0] as i32;
+                let runs_count =
+                    read_u16(&byte_array[compressed_doc_id_range as usize..], 0) as i32;
 
                 plo.p_docid = 0;
                 for i in (1..(runs_count << 1) + 1).step_by(2) {
-                    let startdocid: u16 = ushorts1[i as usize];
-                    let runlength = ushorts1[(i + 1) as usize];
+                    let startdocid = read_u16(
+                        &byte_array[compressed_doc_id_range as usize..],
+                        i as usize * 2,
+                    );
+                    let runlength = read_u16(
+                        &byte_array[compressed_doc_id_range as usize..],
+                        (i + 1) as usize * 2,
+                    );
 
                     for j in 0..=runlength {
                         let docid = (block_id << 16) | (startdocid + j) as usize;
@@ -766,12 +773,13 @@ impl Index {
             }
 
             CompressionType::Bitmap => {
-                let ulongs1 =
-                    cast_byte_ulong_slice(&byte_array[compressed_doc_id_range as usize..]);
                 plo.p_docid = 0;
 
                 for ulong_pos in 0u64..1024 {
-                    let mut intersect: u64 = ulongs1[ulong_pos as usize];
+                    let mut intersect: u64 = read_u64(
+                        &byte_array[compressed_doc_id_range as usize..],
+                        ulong_pos as usize * 8,
+                    );
 
                     while intersect != 0 {
                         let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;

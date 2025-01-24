@@ -5,7 +5,7 @@ use std::{
         _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
         _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
     },
-    mem::size_of, //for docker
+    mem::size_of,
 };
 
 #[cfg(target_arch = "aarch64")]
@@ -238,9 +238,9 @@ const CMPESTRM_CTRL: i32 = _SIDD_UWORD_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MAS
 #[cfg(target_arch = "x86_64")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn intersection_vector16(
-    a: &[u16],
+    a: &[u8],
     s_a: usize,
-    b: &[u16],
+    b: &[u8],
     s_b: usize,
     result_count: &mut i32,
     block_id: usize,
@@ -256,6 +256,8 @@ pub(crate) fn intersection_vector16(
     phrase_query: bool,
     all_terms_frequent: bool,
 ) {
+    use crate::utils::read_u16;
+
     unsafe {
         let c = [0u16; 8];
 
@@ -266,10 +268,10 @@ pub(crate) fn intersection_vector16(
         let st_a = (s_a / vectorlength) * vectorlength;
         let st_b = (s_b / vectorlength) * vectorlength;
         if (i_a < st_a) && (i_b < st_b) {
-            let mut v_a = _mm_loadu_si128(a[i_a..].as_ptr() as *const __m128i);
-            let mut v_b = _mm_loadu_si128(b[i_b..].as_ptr() as *const __m128i);
+            let mut v_a = _mm_loadu_si128(a[(i_a * 2)..].as_ptr() as *const __m128i);
+            let mut v_b = _mm_loadu_si128(b[(i_b * 2)..].as_ptr() as *const __m128i);
 
-            while (a[i_a] == 0) || (b[i_b] == 0) {
+            while (read_u16(a, i_a * 2) == 0) || (read_u16(b, i_b * 2) == 0) {
                 let res_v =
                     _mm_cmpestrm(v_b, vectorlength_i32, v_a, vectorlength_i32, CMPESTRM_CTRL);
                 let r = _mm_extract_epi32(res_v, 0);
@@ -286,7 +288,7 @@ pub(crate) fn intersection_vector16(
                     if phrase_query || (result_type != &ResultType::Count) {
                         let bit_pos = _mm_tzcnt_32(mask) as usize;
                         mask = _blsr_u32(mask);
-                        while *item != b[i_b + bit_pos2] {
+                        while *item != read_u16(b, (i_b + bit_pos2) * 2) {
                             bit_pos2 += 1
                         }
                         query_list[0].p_docid = i_a + bit_pos;
@@ -311,21 +313,22 @@ pub(crate) fn intersection_vector16(
                     );
                 }
 
-                let a_max = a[i_a + vectorlength - 1];
-                let b_max = b[i_b + vectorlength - 1];
+                let a_max = read_u16(a, (i_a + vectorlength - 1) * 2);
+                let b_max = read_u16(b, (i_b + vectorlength - 1) * 2);
+
                 if a_max <= b_max {
                     i_a += vectorlength;
                     if i_a == st_a {
                         break;
                     }
-                    v_a = _mm_lddqu_si128(a[i_a..].as_ptr() as *const __m128i);
+                    v_a = _mm_lddqu_si128(a[(i_a * 2)..].as_ptr() as *const __m128i);
                 }
                 if b_max <= a_max {
                     i_b += vectorlength;
                     if i_b == st_b {
                         break;
                     }
-                    v_b = _mm_lddqu_si128(b[i_b..].as_ptr() as *const __m128i);
+                    v_b = _mm_lddqu_si128(b[(i_b * 2)..].as_ptr() as *const __m128i);
                 }
             }
 
@@ -351,7 +354,7 @@ pub(crate) fn intersection_vector16(
                         if phrase_query || (result_type != &ResultType::Count) {
                             let bit_pos = _mm_tzcnt_32(mask) as usize;
                             mask = _blsr_u32(mask);
-                            while *item != b[i_b + bit_pos2] {
+                            while *item != read_u16(b, (i_b + bit_pos2) * 2) {
                                 bit_pos2 += 1
                             }
                             query_list[0].p_docid = i_a + bit_pos;
@@ -376,28 +379,30 @@ pub(crate) fn intersection_vector16(
                         );
                     }
 
-                    let a_max = a[i_a + vectorlength - 1];
-                    let b_max = b[i_b + vectorlength - 1];
+                    let a_max = read_u16(a, (i_a + vectorlength - 1) * 2);
+                    let b_max = read_u16(b, (i_b + vectorlength - 1) * 2);
+
                     if a_max <= b_max {
                         i_a += vectorlength;
                         if i_a == st_a {
                             break;
                         }
-                        v_a = _mm_lddqu_si128(a[i_a..].as_ptr() as *const __m128i);
+                        v_a = _mm_lddqu_si128(a[(i_a * 2)..].as_ptr() as *const __m128i);
                     }
                     if b_max <= a_max {
                         i_b += vectorlength;
                         if i_b == st_b {
                             break;
                         }
-                        v_b = _mm_lddqu_si128(b[i_b..].as_ptr() as *const __m128i);
+                        v_b = _mm_lddqu_si128(b[(i_b * 2)..].as_ptr() as *const __m128i);
                     }
                 }
             }
         }
         while i_a < s_a && i_b < s_b {
-            let a = a[i_a];
-            let b = b[i_b];
+            let a = read_u16(a, i_a * 2);
+            let b = read_u16(b, i_b * 2);
+
             match a.cmp(&b) {
                 std::cmp::Ordering::Less => {
                     i_a += 1;
@@ -435,9 +440,9 @@ pub(crate) fn intersection_vector16(
 
 #[cfg(target_arch = "aarch64")]
 pub(crate) fn intersection_vector16(
-    a: &[u16],
+    a: &[u8],
     s_a: usize,
-    b: &[u16],
+    b: &[u8],
     s_b: usize,
     result_count: &mut i32,
     block_id: usize,
@@ -459,15 +464,16 @@ pub(crate) fn intersection_vector16(
         let vectorlength = mem::size_of::<uint16x8_t>() / mem::size_of::<u16>();
         let st_b = (s_b / vectorlength) * vectorlength;
         while i_a < s_a && i_b < st_b {
-            if a[i_a] < b[i_b] {
+            if read_u16(&a[..], i_a * 2) < read_u16(&b[..], i_b * 2) {
                 i_a += 1;
                 continue;
-            } else if a[i_a] > b[i_b + vectorlength - 1] {
+            } else if read_u16(&a[..], i_a * 2) > read_u16(&b[..], (i_b + vectorlength - 1) * 2) {
                 i_b += vectorlength;
                 continue;
             }
-            let v_a = vld1q_dup_u16(a[i_a..].as_ptr());
-            let v_b = vld1q_u16(b[i_b..].as_ptr());
+
+            let v_a = vld1q_dup_u16(a[(i_a * 2)..].as_ptr());
+            let v_b = vld1q_u16(b[(i_b * 2)..].as_ptr());
             let res_v = vceqq_u16(v_a, v_b);
             let mut res = [0u16; 8];
             vst1q_u16(res.as_mut_ptr(), res_v);
@@ -479,7 +485,7 @@ pub(crate) fn intersection_vector16(
                 query_list[1].p_docid = i_b + i;
                 add_result_multiterm_multifield(
                     index,
-                    (block_id << 16) | a[i_a] as usize,
+                    (block_id << 16) | read_u16(&a[..], i_a * 2) as usize,
                     result_count,
                     search_result,
                     top_k,
@@ -498,8 +504,8 @@ pub(crate) fn intersection_vector16(
             i_a += 1;
         }
         while i_a < s_a && i_b < s_b {
-            let a = a[i_a];
-            let b = b[i_b];
+            let a = read_u16(&a[..], i_a * 2);
+            let b = read_u16(&b[..], i_b * 2);
             match a.cmp(&b) {
                 std::cmp::Ordering::Less => {
                     i_a += 1;
@@ -537,9 +543,9 @@ pub(crate) fn intersection_vector16(
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub(crate) fn intersection_vector16(
-    a: &[u16],
+    a: &[u8],
     s_a: usize,
-    b: &[u16],
+    b: &[u8],
     s_b: usize,
     result_count: &mut i32,
     block_id: usize,
@@ -558,8 +564,8 @@ pub(crate) fn intersection_vector16(
     let mut i_a = 0;
     let mut i_b = 0;
     while i_a < s_a && i_b < s_b {
-        let a = a[i_a];
-        let b = b[i_b];
+        let a = read_u16(&a[..], i_a * 2);
+        let b = read_u16(&b[..], i_b * 2);
         match a.cmp(&b) {
             std::cmp::Ordering::Less => {
                 i_a += 1;

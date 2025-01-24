@@ -10,8 +10,8 @@ use crate::{
     search::{FilterSparse, Ranges, ResultType, SearchResult},
     single::{single_blockid, single_docid},
     utils::{
-        block_copy, cast_byte_ulong_slice, cast_byte_ulong_slice_mut, cast_byte_ushort_slice,
-        read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
+        block_copy, read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32,
+        read_u64, write_u64,
     },
 };
 
@@ -398,12 +398,11 @@ pub(crate) async fn union_scan<'a>(
         max_score += plo.blocks[plo.p_block as usize].max_block_score;
 
         if plo.compression_type == CompressionType::Bitmap {
-            let ulongs0 = cast_byte_ulong_slice(
-                &plo.byte_array[plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
-            );
-
             for ulong_pos in 0u64..1024 {
-                let mut intersect: u64 = ulongs0[ulong_pos as usize];
+                let mut intersect: u64 = read_u64(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ulong_pos as usize * 8,
+                );
 
                 while intersect != 0 {
                     let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;
@@ -414,20 +413,24 @@ pub(crate) async fn union_scan<'a>(
                 }
             }
         } else if plo.compression_type == CompressionType::Array {
-            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-
-            for item in &ushorts1[0..plo.p_docid_count] {
-                let docid = *item as usize;
+            for i in 0..plo.p_docid_count {
+                let docid =
+                    read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
 
                 query_terms_bitset_table[docid] |= mask;
             }
         } else {
-            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-            let runs_count = ushorts1[0] as i32;
+            let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
 
             for ii in (1..(runs_count << 1) + 1).step_by(2) {
-                let startdocid = ushorts1[ii as usize] as usize;
-                let runlength = ushorts1[(ii + 1) as usize] as usize;
+                let startdocid = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ii as usize * 2,
+                ) as usize;
+                let runlength = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    (ii + 1) as usize * 2,
+                ) as usize;
 
                 for j in 0..=runlength {
                     let docid = startdocid + j;
@@ -444,12 +447,11 @@ pub(crate) async fn union_scan<'a>(
         }
 
         if plo.compression_type == CompressionType::Bitmap {
-            let ulongs0 = cast_byte_ulong_slice(
-                &plo.byte_array[plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
-            );
-
             for ulong_pos in 0u64..1024 {
-                let mut intersect: u64 = ulongs0[ulong_pos as usize];
+                let mut intersect: u64 = read_u64(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ulong_pos as usize * 8,
+                );
 
                 while intersect != 0 {
                     let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;
@@ -460,20 +462,24 @@ pub(crate) async fn union_scan<'a>(
                 }
             }
         } else if plo.compression_type == CompressionType::Array {
-            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-
-            for item in &ushorts1[0..plo.p_docid_count] {
-                let docid = *item as usize;
+            for i in 0..plo.p_docid_count {
+                let docid =
+                    read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
 
                 query_terms_bitset_table[docid] = 0;
             }
         } else {
-            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-            let runs_count = ushorts1[0] as i32;
+            let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
 
             for ii in (1..(runs_count << 1) + 1).step_by(2) {
-                let startdocid = ushorts1[ii as usize] as usize;
-                let runlength = ushorts1[(ii + 1) as usize] as usize;
+                let startdocid = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ii as usize * 2,
+                ) as usize;
+                let runlength = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    (ii + 1) as usize * 2,
+                ) as usize;
 
                 for j in 0..=runlength {
                     let docid = startdocid + j;
@@ -565,6 +571,7 @@ pub(crate) async fn union_count<'a>(
 
     let mut result_count_local =
         query_list[0].blocks[query_list[0].p_block as usize].posting_count as u32 + 1;
+
     let mut bitmap_0: [u8; 8192] = [0u8; 8192];
 
     for (i, plo) in query_list.iter_mut().enumerate() {
@@ -582,31 +589,27 @@ pub(crate) async fn union_count<'a>(
                     8192,
                 );
             } else {
-                let ulongs0 = cast_byte_ulong_slice_mut(&mut bitmap_0);
-                let ulongs1 = cast_byte_ulong_slice(
-                    &plo.byte_array
-                        [plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
-                );
-
-                ulongs0.iter_mut().zip(ulongs1.iter()).for_each(|(x1, x2)| {
-                    result_count_local += u64::count_ones(!*x1 & *x2);
-                    *x1 |= *x2;
-                });
+                for i in (0..8192).step_by(8) {
+                    let x1 = read_u64(&bitmap_0, i);
+                    let x2 = read_u64(&plo.byte_array[plo.compressed_doc_id_range..], i);
+                    result_count_local += u64::count_ones(!x1 & x2);
+                    write_u64(x1 | x2, &mut bitmap_0, i);
+                }
             }
         } else if plo.compression_type == CompressionType::Array {
-            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-
             if i == 0 {
-                for item in ushorts1.iter().take(plo.p_docid_count) {
-                    let docid = *item as usize;
+                for i in 0..plo.p_docid_count {
+                    let docid =
+                        read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
                     let byte_index = docid >> 3;
                     let bit_index = docid & 7;
 
                     bitmap_0[byte_index] |= 1 << bit_index;
                 }
             } else {
-                for item in ushorts1.iter().take(plo.p_docid_count) {
-                    let docid = *item as usize;
+                for i in 0..plo.p_docid_count {
+                    let docid =
+                        read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
                     let byte_index = docid >> 3;
                     let bit_index = docid & 7;
 
@@ -617,13 +620,18 @@ pub(crate) async fn union_count<'a>(
                 }
             }
         } else {
-            let ushorts1 = cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-            let runs_count = ushorts1[0] as i32;
+            let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
 
             if i == 0 {
                 for ii in (1..(runs_count << 1) + 1).step_by(2) {
-                    let startdocid = ushorts1[ii as usize] as usize;
-                    let runlength = ushorts1[(ii + 1) as usize] as usize;
+                    let startdocid = read_u16(
+                        &plo.byte_array[plo.compressed_doc_id_range..],
+                        ii as usize * 2,
+                    ) as usize;
+                    let runlength = read_u16(
+                        &plo.byte_array[plo.compressed_doc_id_range..],
+                        (ii + 1) as usize * 2,
+                    ) as usize;
 
                     for j in 0..=runlength {
                         let docid = startdocid + j;
@@ -635,8 +643,14 @@ pub(crate) async fn union_count<'a>(
                 }
             } else {
                 for ii in (1..(runs_count << 1) + 1).step_by(2) {
-                    let startdocid = ushorts1[ii as usize] as usize;
-                    let runlength = ushorts1[(ii + 1) as usize] as usize;
+                    let startdocid = read_u16(
+                        &plo.byte_array[plo.compressed_doc_id_range..],
+                        ii as usize * 2,
+                    ) as usize;
+                    let runlength = read_u16(
+                        &plo.byte_array[plo.compressed_doc_id_range..],
+                        (ii + 1) as usize * 2,
+                    ) as usize;
 
                     for j in 0..=runlength {
                         let docid = startdocid + j;
@@ -660,11 +674,9 @@ pub(crate) async fn union_count<'a>(
 
         match plo.compression_type {
             CompressionType::Array => {
-                let ushorts1 =
-                    cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-
-                for item in ushorts1.iter().take(plo.p_docid_count) {
-                    let docid = *item as usize;
+                for i in 0..plo.p_docid_count {
+                    let docid =
+                        read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
                     let byte_index = docid >> 3;
                     let bit_index = docid & 7;
                     if bitmap_0[byte_index] & (1 << bit_index) != 0 {
@@ -675,13 +687,17 @@ pub(crate) async fn union_count<'a>(
             }
 
             CompressionType::Rle => {
-                let ushorts1 =
-                    cast_byte_ushort_slice(&plo.byte_array[plo.compressed_doc_id_range..]);
-                let runs_count = ushorts1[0] as i32;
+                let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
 
                 for i in (1..(runs_count << 1) + 1).step_by(2) {
-                    let startdocid: u16 = ushorts1[i as usize];
-                    let runlength = ushorts1[(i + 1) as usize];
+                    let startdocid = read_u16(
+                        &plo.byte_array[plo.compressed_doc_id_range..],
+                        i as usize * 2,
+                    );
+                    let runlength = read_u16(
+                        &plo.byte_array[plo.compressed_doc_id_range..],
+                        (i + 1) as usize * 2,
+                    );
 
                     for j in 0..=runlength {
                         let docid = (startdocid + j) as usize;
@@ -697,16 +713,12 @@ pub(crate) async fn union_count<'a>(
             }
 
             CompressionType::Bitmap => {
-                let ulongs0 = cast_byte_ulong_slice_mut(&mut bitmap_0);
-                let ulongs1 = cast_byte_ulong_slice(
-                    &plo.byte_array
-                        [plo.compressed_doc_id_range..plo.compressed_doc_id_range + 8192],
-                );
-
-                ulongs0.iter_mut().zip(ulongs1.iter()).for_each(|(x1, x2)| {
-                    result_count_local -= u64::count_ones(*x1 & *x2);
-                    *x1 &= !x2;
-                });
+                for i in (0..8192).step_by(8) {
+                    let x1 = read_u64(&bitmap_0, i);
+                    let x2 = read_u64(&plo.byte_array[plo.compressed_doc_id_range..], i);
+                    result_count_local -= u64::count_ones(x1 & x2);
+                    write_u64(x1 & !x2, &mut bitmap_0, i);
+                }
             }
 
             _ => {}
@@ -728,10 +740,9 @@ pub(crate) async fn union_count<'a>(
 
     if !search_result.query_facets.is_empty() || !facet_filter.is_empty() {
         let block_id_msb = block_id << 16;
-        let ulongs0 = cast_byte_ulong_slice(&bitmap_0);
-        for (ulong_pos, intersect) in ulongs0.iter().enumerate() {
+        for ulong_pos in 0usize..1024 {
             let ulong_pos_msb = block_id_msb | ulong_pos << 6;
-            let mut intersect: u64 = *intersect;
+            let mut intersect = read_u64(&bitmap_0, ulong_pos * 8);
             'next: while intersect != 0 {
                 let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as usize;
                 intersect = unsafe { _blsr_u64(intersect) };

@@ -150,21 +150,6 @@ pub(crate) fn block_copy(
         .copy_from_slice(&source[source_offset..(source_offset + len)]);
 }
 
-pub(crate) fn cast_byte_ushort_slice(vec8: &[u8]) -> &[u16] {
-    let a_ptr = vec8.as_ptr() as *const u16;
-    unsafe { std::slice::from_raw_parts(a_ptr, vec8.len() / 2) }
-}
-
-pub(crate) fn cast_byte_ulong_slice_mut(vec8: &mut [u8]) -> &mut [u64] {
-    let a_ptr = vec8.as_mut_ptr() as *mut u64;
-    unsafe { std::slice::from_raw_parts_mut(a_ptr, vec8.len() / 8) }
-}
-
-pub(crate) fn cast_byte_ulong_slice(vec8: &[u8]) -> &[u64] {
-    let a_ptr = vec8.as_ptr() as *const u64;
-    unsafe { std::slice::from_raw_parts(a_ptr, vec8.len() / 8) }
-}
-
 pub(crate) fn truncate(s: &str, max_chars: usize) -> &str {
     match s.char_indices().nth(max_chars) {
         None => s,

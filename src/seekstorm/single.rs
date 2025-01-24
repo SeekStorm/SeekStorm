@@ -12,7 +12,7 @@ use crate::{
     },
     intersection::{bitpacking32_get_delta, BlockObject},
     search::{FilterSparse, ResultType, SearchResult},
-    utils::{cast_byte_ulong_slice, cast_byte_ushort_slice, read_u16},
+    utils::{read_u16, read_u64},
 };
 
 use ahash::AHashSet;
@@ -161,14 +161,16 @@ pub(crate) async fn single_docid<'a>(
 
     match compression_type {
         CompressionType::Array => {
-            let ushorts1 = cast_byte_ushort_slice(&byte_array[compressed_doc_id_range as usize..]);
-
             for i in 0..=blo.posting_count {
                 plo.p_docid = i as i32;
 
                 add_result_singleterm_multifield(
                     index,
-                    ((blo.block_id as usize) << 16) | ushorts1[i as usize] as usize,
+                    ((blo.block_id as usize) << 16)
+                        | read_u16(
+                            byte_array,
+                            compressed_doc_id_range as usize + i as usize * 2,
+                        ) as usize,
                     result_count,
                     search_result,
                     top_k,
@@ -215,13 +217,18 @@ pub(crate) async fn single_docid<'a>(
         }
 
         CompressionType::Rle => {
-            let ushorts1 = cast_byte_ushort_slice(&byte_array[compressed_doc_id_range as usize..]);
-            let runs_count = ushorts1[0] as i32;
+            let runs_count = read_u16(&byte_array[compressed_doc_id_range as usize..], 0) as i32;
 
             plo.p_docid = 0;
             for i in (1..(runs_count << 1) + 1).step_by(2) {
-                let startdocid: u16 = ushorts1[i as usize];
-                let runlength = ushorts1[(i + 1) as usize];
+                let startdocid = read_u16(
+                    &byte_array[compressed_doc_id_range as usize..],
+                    i as usize * 2,
+                );
+                let runlength = read_u16(
+                    &byte_array[compressed_doc_id_range as usize..],
+                    (i + 1) as usize * 2,
+                );
 
                 for j in 0..=runlength {
                     add_result_singleterm_multifield(
@@ -244,12 +251,14 @@ pub(crate) async fn single_docid<'a>(
         }
 
         CompressionType::Bitmap => {
-            let ulongs1 = cast_byte_ulong_slice(&byte_array[compressed_doc_id_range as usize..]);
             plo.p_docid = 0;
             let block_id_msb = (blo.block_id as usize) << 16;
 
             for ulong_pos in 0u64..1024 {
-                let mut intersect: u64 = ulongs1[ulong_pos as usize];
+                let mut intersect: u64 = read_u64(
+                    &byte_array[compressed_doc_id_range as usize..],
+                    ulong_pos as usize * 8,
+                );
 
                 while intersect != 0 {
                     let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;

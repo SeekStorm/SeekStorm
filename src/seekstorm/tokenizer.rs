@@ -152,7 +152,6 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -184,7 +183,6 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
@@ -221,7 +219,6 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;

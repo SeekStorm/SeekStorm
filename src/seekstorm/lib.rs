@@ -120,6 +120,7 @@
 //!   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).unwrap();
 //!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 //! }
+//! println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
 //! ```
 //! ### get document
 //! ```rust
@@ -303,6 +304,7 @@
 //!   let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).unwrap();
 //!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 //! }
+//! println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
 //! ```
 //! ### display facets
 //! ```rust

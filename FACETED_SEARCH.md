@@ -270,6 +270,7 @@ for result in result_object.results.iter() {
   let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
+println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
 ```
 
 **display facets**

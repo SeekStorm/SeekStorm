@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.8] - 2025-01-24
+
+### Fixed
+
+- Removed unsafe std::slice::from_raw_parts to cast arrays of different element types, which caused unaligned data exceptions.
 
 ## [0.12.7] - 2025-01-19
 
@@ -36,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Docker file and container added (#17)
+- Docker file and container added (#17).
 - https://hub.docker.com/r/wolfgarbe/seekstorm_server
 - `docker run -ti -p "8000:80" wolfgarbe/seekstorm_server:v0.12.3`
 - Added a server welcome web page with instructions how to create an API key and index.
