@@ -1906,6 +1906,7 @@ impl Search for IndexArc {
                         &field_filter_set,
                         &facet_filter_sparse,
                         &mut matching_blocks,
+                        0,
                     )
                     .await;
                 } else {

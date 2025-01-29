@@ -961,11 +961,15 @@ pub(crate) async fn union_docid_2<'a>(
     )
     .await;
 
-    let result_count_local = if filtered {
+    let mut result_count_local = if filtered {
         count
     } else {
         (query_list[0].posting_count + query_list[1].posting_count) as usize
-    } - result_count_arc.load(Ordering::Relaxed);
+    };
+    let result_count_global = result_count_arc.load(Ordering::Relaxed);
+    if result_count_local > result_count_global {
+        result_count_local -= result_count_global
+    }
 
     if result_type == &ResultType::Count {
         result_count_arc.store(result_count_local, Ordering::Relaxed);
@@ -1042,6 +1046,7 @@ pub(crate) async fn union_docid_3<'a>(
     field_filter_set: &AHashSet<u16>,
     facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
+    recursion_count: usize,
 ) {
     let queue_object = query_queue.remove(0);
 
@@ -1154,20 +1159,23 @@ pub(crate) async fn union_docid_3<'a>(
                 );
             }
 
-            union_docid_3(
-                index,
-                non_unique_query_list,
-                query_queue,
-                not_query_list,
-                result_count_arc,
-                search_result,
-                top_k,
-                &ResultType::Topk,
-                field_filter_set,
-                facet_filter,
-                matching_blocks,
-            )
-            .await;
+            if recursion_count < 100 {
+                union_docid_3(
+                    index,
+                    non_unique_query_list,
+                    query_queue,
+                    not_query_list,
+                    result_count_arc,
+                    search_result,
+                    top_k,
+                    &ResultType::Topk,
+                    field_filter_set,
+                    facet_filter,
+                    matching_blocks,
+                    recursion_count + 1,
+                )
+                .await;
+            }
         }
     }
 

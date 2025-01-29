@@ -7,7 +7,7 @@ use crate::{
     compress_postinglist::compress_positions,
     index::{
         AccessType, CompressionType, Index, PostingListObject0, TermObject, FIELD_STOP_BIT_1,
-        FIELD_STOP_BIT_2, ROARING_BLOCK_SIZE, STOP_BIT,
+        FIELD_STOP_BIT_2, POSTING_BUFFER_SIZE, ROARING_BLOCK_SIZE, STOP_BIT,
     },
     search::binary_search,
     utils::{block_copy_mut, read_u16, read_u32, write_u16_ref, write_u32},
@@ -35,6 +35,11 @@ impl Index {
         if positions_count_sum == 0 {
             println!("empty posting {} docid {}", term.term, doc_id);
             return;
+        }
+
+        if self.postings_buffer_pointer > self.postings_buffer.len() - (POSTING_BUFFER_SIZE >> 4) {
+            self.postings_buffer
+                .resize(self.postings_buffer.len() + (POSTING_BUFFER_SIZE >> 2), 0);
         }
 
         let strip_object0 = self.segments_level0.get_mut(term.key0 as usize).unwrap();

@@ -6,7 +6,7 @@ use finl_unicode::categories::{CharacterCategories, MinorCategory};
 use crate::{
     index::{
         Index, NonUniqueTermObject, TermObject, TokenizerType, HASHER_32, HASHER_64,
-        STOPWORD_HASHSET,
+        MAX_TERM_NUMBER, STOPWORD_HASHSET,
     },
     search::QueryType,
 };
@@ -400,6 +400,10 @@ pub(crate) fn tokenizer(
         } else if !first_part.is_empty() {
             non_unique_terms_line.push(first_part);
         }
+    }
+
+    if is_query && non_unique_terms_line.len() > MAX_TERM_NUMBER {
+        non_unique_terms_line.truncate(MAX_TERM_NUMBER);
     }
 
     let mut position: u32 = 0;

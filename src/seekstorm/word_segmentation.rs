@@ -81,7 +81,6 @@ impl WordSegmentationTM {
             *item.1 = (*item.1 / self.n).log10();
         }
 
-        println!("count_sum: {}", count_sum);
         for i in 0..self.maximum_dictionary_word_length {
             self.probability_log_estimation
                 .push((10.0f64 / self.n / (i + 1).pow(10) as f64).log10() * 10.0f64);

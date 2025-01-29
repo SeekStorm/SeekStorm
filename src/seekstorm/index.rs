@@ -69,6 +69,9 @@ pub(crate) const SPEEDUP_FLAG: bool = true;
 pub(crate) const SORT_FLAG: bool = true;
 pub(crate) const BIGRAM_FLAG: bool = true;
 
+pub(crate) const POSTING_BUFFER_SIZE: usize = 400_000_000;
+pub(crate) const MAX_TERM_NUMBER: usize = 10;
+
 /// A document is a flattened, single level of key-value pairs, where key is an arbitrary string, and value represents any valid JSON value.
 pub type Document = HashMap<String, serde_json::Value>;
 
@@ -1089,7 +1092,7 @@ pub fn create_index(
 
                 block_id: 0,
                 strip_compressed_sum: 0,
-                postings_buffer: vec![0; 400_000_000],
+                postings_buffer: vec![0; POSTING_BUFFER_SIZE],
                 postings_buffer_pointer: 0,
 
                 docid_count: 0,

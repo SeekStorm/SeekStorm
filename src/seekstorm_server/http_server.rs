@@ -11,7 +11,7 @@ use std::{convert::Infallible, net::SocketAddr};
 
 use chrono::Utc;
 use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::TryRngCore;
 
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::{
@@ -1270,7 +1270,7 @@ pub(crate) async fn http_request_handler(
                     };
 
                     let mut apikey = [0u8; 32];
-                    OsRng.fill_bytes(&mut apikey);
+                    OsRng.try_fill_bytes(&mut apikey).unwrap();
                     let api_key_base64 = general_purpose::STANDARD.encode(apikey);
 
                     let mut apikey_list_mut = apikey_list.write().await;

@@ -21,7 +21,8 @@ use crate::{
         update_list_max_impact_score, update_stopwords_posting_counts, warmup, AccessType,
         BlockObjectIndex, CompressionType, Index, IndexArc, LevelIndex,
         NonUniquePostingListObjectQuery, PostingListObjectIndex, PostingListObjectQuery,
-        TermObject, FACET_VALUES_FILENAME, MAX_POSITIONS_PER_TERM, ROARING_BLOCK_SIZE, STOPWORDS,
+        TermObject, FACET_VALUES_FILENAME, MAX_POSITIONS_PER_TERM, POSTING_BUFFER_SIZE,
+        ROARING_BLOCK_SIZE, STOPWORDS,
     },
     utils::{
         block_copy, block_copy_mut, read_u16, read_u32, read_u64, read_u8, write_u16, write_u32,
@@ -329,7 +330,7 @@ impl Index {
         }
 
         self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
-        self.postings_buffer = vec![0; 400_000_000];
+        self.postings_buffer = vec![0; POSTING_BUFFER_SIZE];
 
         self.postings_buffer_pointer = 0;
         self.strip_compressed_sum = 0;

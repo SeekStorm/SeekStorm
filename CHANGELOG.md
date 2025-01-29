@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.9] - 2025-01-29
+
+### Fixed
+
+- Automatic resize of postings_buffer in index_posting.
+- Fixed a subtract with overflow exception when real time search was enabled.
+- Fixed exception if > 10 query terms.
+- Fixed stack overflow in some long union queries.
+- Fixed endless loop while intersecting RLE-compressed posting lists.
+- Updated rand from v0.8.5 to v0.9.0.
+
 ## [0.12.8] - 2025-01-24
 
 ### Fixed

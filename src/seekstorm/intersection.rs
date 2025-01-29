@@ -3,7 +3,7 @@ use crate::{
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
         AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
-        PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
+        PostingListObjectQuery, MAX_TERM_NUMBER, SORT_FLAG, SPEEDUP_FLAG,
     },
     intersection_simd::intersection_vector16,
     search::{FilterSparse, ResultType, SearchResult},
@@ -1634,7 +1634,10 @@ pub(crate) async fn intersection_docid(
 
                             if (query_list[t1].docid as u32 != doc_id) && (t2 > 1) {
                                 t2 = 1;
-                                query_list[t1].docid = doc_id as i32;
+                                if doc_id == 65_535 {
+                                    break 'exit;
+                                }
+                                query_list[t1].docid = doc_id as i32 + 1;
                                 continue 'restart;
                             }
                             query_list[t1].docid = doc_id as i32;
@@ -1665,7 +1668,10 @@ pub(crate) async fn intersection_docid(
 
                                 t2 += 1;
                                 if query_list[t2].compression_type != CompressionType::Bitmap {
-                                    query_list[t1].docid = doc_id as i32;
+                                    if doc_id == 65_535 {
+                                        break 'exit;
+                                    }
+                                    query_list[t1].docid = doc_id as i32 + 1;
                                     continue 'restart;
                                 } else {
                                     intersect &= read_u64(
@@ -1728,7 +1734,6 @@ pub(crate) async fn intersection_docid(
                                 block_score,
                                 all_terms_frequent,
                             );
-                            query_list[t1].docid = doc_id as i32 + 1;
 
                             for item in query_list.iter_mut().skip(1) {
                                 if item.compression_type == CompressionType::Array {
@@ -1767,6 +1772,9 @@ pub(crate) async fn intersection_docid(
                                     )
                                         as i32;
                                 }
+                                if doc_id == 65_535 {
+                                    break 'exit;
+                                }
                                 query_list[t1].docid = doc_id as i32 + 1;
                                 continue 'restart;
                             }
@@ -1781,8 +1789,14 @@ pub(crate) async fn intersection_docid(
 
                         t2 = 1;
                         if query_list[t2].compression_type != CompressionType::Bitmap {
-                            query_list[t1].docid =
-                                cmp::min(((ulong_pos + 1) << 6) as i32, runend1 as i32 + 1);
+                            if query_list[t1].docid == 65_535 {
+                                break 'exit;
+                            }
+
+                            query_list[t1].docid = cmp::max(
+                                query_list[t1].docid + 1,
+                                cmp::min(((ulong_pos + 1) << 6) as i32, runend1 as i32 + 1),
+                            );
 
                             continue 'restart;
                         }
@@ -2212,7 +2226,7 @@ pub(crate) async fn intersection_blockid<'a>(
                     }
 
                     if SPEEDUP_FLAG && SORT_FLAG && result_type != &ResultType::Count {
-                        let mut p_block_vec: Vec<i32> = vec![0; 10];
+                        let mut p_block_vec: Vec<i32> = vec![0; MAX_TERM_NUMBER];
                         for i in 0..query_list.len() {
                             p_block_vec[query_list[i].term_index_unique] = query_list[i].p_block
                         }
