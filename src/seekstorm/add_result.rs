@@ -188,7 +188,8 @@ pub(crate) fn add_result_singleterm_multifield(
                 if local_docid >= plo.docid as usize && local_docid <= plo.run_end as usize {
                     return;
                 } else {
-                    while (plo.p_run_sum as usize) < plo.p_docid_count
+                    while (plo.p_run_sum as usize) + ((plo.p_run as usize - 2) >> 2)
+                        < plo.p_docid_count
                         && local_docid > plo.run_end as usize
                     {
                         let startdocid = read_u16(
@@ -676,7 +677,8 @@ pub(crate) fn add_result_singleterm_singlefield(
                 if local_docid >= plo.docid as usize && local_docid <= plo.run_end as usize {
                     return;
                 } else {
-                    while (plo.p_run_sum as usize) < plo.p_docid_count
+                    while (plo.p_run_sum as usize) + ((plo.p_run as usize - 2) >> 2)
+                        < plo.p_docid_count
                         && local_docid > plo.run_end as usize
                     {
                         let startdocid = read_u16(
@@ -2618,7 +2620,8 @@ pub(crate) fn add_result_multiterm_multifield(
                 if local_docid >= plo.docid as usize && local_docid <= plo.run_end as usize {
                     return;
                 } else {
-                    while (plo.p_run_sum as usize) < plo.p_docid_count
+                    while (plo.p_run_sum as usize) + ((plo.p_run as usize - 2) >> 2)
+                        < plo.p_docid_count
                         && local_docid > plo.run_end as usize
                     {
                         let startdocid = read_u16(
@@ -3048,7 +3051,8 @@ pub(crate) fn add_result_multiterm_singlefield(
                 if local_docid >= plo.docid as usize && local_docid <= plo.run_end as usize {
                     return;
                 } else {
-                    while (plo.p_run_sum as usize) < plo.p_docid_count
+                    while (plo.p_run_sum as usize) + ((plo.p_run as usize - 2) >> 2)
+                        < plo.p_docid_count
                         && local_docid > plo.run_end as usize
                     {
                         let startdocid = read_u16(

@@ -388,7 +388,7 @@ pub(crate) async fn union_scan<'a>(
 
     let mut max_score = 0.0;
 
-    for (i, plo) in query_list.iter_mut().enumerate() {
+    for (i, plo) in query_list.iter_mut().take(8).enumerate() {
         if plo.end_flag {
             continue;
         }

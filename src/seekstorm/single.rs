@@ -169,7 +169,7 @@ pub(crate) async fn single_docid<'a>(
                     ((blo.block_id as usize) << 16)
                         | read_u16(
                             byte_array,
-                            compressed_doc_id_range as usize + i as usize * 2,
+                            compressed_doc_id_range as usize + (i as usize * 2),
                         ) as usize,
                     result_count,
                     search_result,

@@ -225,11 +225,21 @@ impl Index {
         for (field_id, field) in field_positions_vec.iter().enumerate() {
             if !field.is_empty() {
                 if field_positions_vec.len() == 1 {
-                    positions_meta_compressed_nonembedded_size +=
-                        if field.len() < 128 { 1 } else { 2 };
+                    positions_meta_compressed_nonembedded_size += if field.len() < 128 {
+                        1
+                    } else if field.len() < 16_384 {
+                        2
+                    } else {
+                        3
+                    };
                 } else if only_longest_field {
-                    positions_meta_compressed_nonembedded_size +=
-                        if field.len() < 64 { 1 } else { 2 };
+                    positions_meta_compressed_nonembedded_size += if field.len() < 64 {
+                        1
+                    } else if field.len() < 8_192 {
+                        2
+                    } else {
+                        3
+                    };
                 } else {
                     let required_position_count_bits = usize::BITS - field.len().leading_zeros();
                     let only_longest_field_bit = if field_vec.is_empty() { 1 } else { 0 };
@@ -609,8 +619,16 @@ pub(crate) fn write_field_vec(
                 *write_pointer += 1;
                 postings_buffer[*write_pointer] = (field.1 & 0b01111111) as u8 | STOP_BIT;
                 *write_pointer += 1;
+            } else if field.1 < 2_097_152 {
+                postings_buffer[*write_pointer] = (field.1 >> 14) as u8;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] = ((field.1 >> 7) & 0b01111111) as u8;
+                *write_pointer += 1;
+
+                postings_buffer[*write_pointer] = (field.1 & 0b01111111) as u8 | STOP_BIT;
+                *write_pointer += 1;
             } else {
-                println!("positionCount exceeded: {}", field.1);
+                println!("positionCount exceeded1: {}", field.1);
             }
         } else if only_longest_field {
             if field.1 < 64 {
@@ -621,8 +639,16 @@ pub(crate) fn write_field_vec(
                 *write_pointer += 1;
                 postings_buffer[*write_pointer] = (field.1 & 0b01111111) as u8 | STOP_BIT;
                 *write_pointer += 1;
+            } else if field.1 < 1_048_576 {
+                postings_buffer[*write_pointer] = (field.1 >> 14) as u8 | 0b01000000;
+                *write_pointer += 1;
+                postings_buffer[*write_pointer] = ((field.1 >> 7) & 0b01111111) as u8;
+                *write_pointer += 1;
+
+                postings_buffer[*write_pointer] = (field.1 & 0b01111111) as u8 | STOP_BIT;
+                *write_pointer += 1;
             } else {
-                println!("positionCount exceeded: {}", field.1);
+                println!("positionCount exceeded2: {}", field.1);
             }
         } else {
             let field_stop_bit = if i == nonempty_field_count as usize - 1 {

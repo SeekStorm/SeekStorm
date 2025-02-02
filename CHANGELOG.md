@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.10] - 2025-02-01
+
+### Fixed
+
+- Fixed indexing postings with more than 8_192 positions.
+- Fixed an issue with Chinese word segmentation, where a hyphen within a string was interpreted as a NOT ('-') operator in front of one of the resulting segmented words.
+- Fixed an issue with NOT query terms that are RLE compressed.
+- Fixed an issue for union > 8 terms with custom result sorting.
+
 ## [0.12.9] - 2025-01-29
 
 ### Fixed
