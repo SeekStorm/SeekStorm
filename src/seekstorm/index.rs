@@ -2340,11 +2340,22 @@ impl Index {
         self.document_length_normalized_average = 0.0;
         self.indexed_doc_count = 0;
         self.positions_sum_normalized = 0;
-        self.segment_number1 = 0;
 
         self.level_index = Vec::new();
         self.segments_index = Vec::new();
-        self.segments_level0 = Vec::new();
+        for _i in 0..self.segment_number1 {
+            self.segments_index.push(SegmentIndex {
+                byte_array_blocks: Vec::new(),
+                byte_array_blocks_pointer: Vec::new(),
+                segment: AHashMap::new(),
+            });
+        }
+        self.segments_level0 = vec![
+            SegmentLevel0 {
+                ..Default::default()
+            };
+            self.segment_number1
+        ];
 
         self.key_count_sum = 0;
         self.block_id = 0;
@@ -2353,9 +2364,9 @@ impl Index {
         self.docid_count = 0;
         self.size_compressed_docid_index = 0;
         self.size_compressed_positions_index = 0;
-
         self.position_count = 0;
         self.postinglist_count = 0;
+        self.is_last_level_incomplete = false;
     }
 
     /// Delete index from disc and ram
