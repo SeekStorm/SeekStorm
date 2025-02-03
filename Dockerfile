@@ -11,7 +11,7 @@ COPY . /seekstorm
 
 RUN cargo build --release
 
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 
 COPY --from=build /seekstorm/target/release/seekstorm_server /
 USER root
