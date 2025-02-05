@@ -13,9 +13,14 @@ The identical index file format for both RAM and memory mapping mode, allows to 
 * Ram: no disc access at search time for minimal latency, even after cold start, at the cost of longer index load time and higher RAM consumption as the whole index is preloaded to RAM.
 * Mmap: disc access via mmap during search time, for minimal RAM consumption, high scalability, and minimal index load time. With Mmap disk access is cached by the OS, being persistent between program starts until reboot.
 
-index.bin : contains posting lists with document IDs and term positions. Posting lists are compressed with roaring bitmaps. Term positions of each field are delta compressed and VINT encoded.
+</br>
 
-index.json : contains index meta data such as similarity (e.g. Bm25), access type (e.g. Ram/Mmap), tokenizer (e.g. AsciiAlphabetic).
+* index.bin : contains posting lists with document IDs and term positions. Posting lists are compressed with roaring bitmaps. Term positions of each field are delta compressed and VINT encoded.
+* index.json : contains index meta data such as similarity (e.g. Bm25), access type (e.g. Ram/Mmap), tokenizer (e.g. AsciiAlphabetic).
+* delete.bin : contains document IDs of deleted documents. By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
+* facet.bin : contains the serialized values of all facet fields of all documents in the index
+* facet.json : contains the unique values of all facet fields of all documents in the index
+* synonyms.json : contains the synonyms that were created with the synonyms parameter in create_index. Can be manually modified, but becomes effective only after restart and only for subsequently indexed documents.
 
 **SeekStorm server index directory structure**
 
@@ -31,6 +36,8 @@ seekstorm_index/
 │  ├─ 0  
 │  ├─ 1  
 ```
+
+* apikey.json : contains API key hash and quotas
 
 You can manually delete, copy, or backup and restore both API key and index directories (shutdown server first and then restart).
 
@@ -50,7 +57,7 @@ Every document can contain an arbitrary number of fields of different types.
 
 Every field can be searched and filtered individually or all field together globally.
 
-schema.json : contains the definition of fields, their field types, and whether they are stored and/or indexed.
+* schema.json : contains the definition of fields, their field types, and whether they are stored and/or indexed.
 
 ## Document store
 
@@ -58,7 +65,7 @@ The documents are stored in JSON format and compressed with Zstandard.
 
 The index schema defines which fields of the documents are stored in the document store and can be part of the returned search results.
 
-docstore.bin : contains the compressed documents
+* docstore.bin : contains the compressed documents
 
 ## Limits
 
@@ -69,4 +76,6 @@ There are **no** limits on the number of
 * field length
 * terms
 
-beyond limited hardware resources.
+There is a limit of maximum 65_536 distinct
+* string facet values per facet field. 
+* numerical ranges per facet field. 
