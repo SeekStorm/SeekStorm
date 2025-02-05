@@ -1986,6 +1986,10 @@ impl Search for IndexArc {
                     }
 
                     let v = if facet.ranges == Ranges::None {
+                        if index_ref.facets[i].values.is_empty() {
+                            continue;
+                        }
+
                         if index_ref.facets[i].field_type == FieldType::StringSet {
                             let mut hash_map: AHashMap<String, usize> = AHashMap::new();
                             for value in facet.values.iter() {
