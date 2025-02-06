@@ -1,0 +1,2487 @@
+openapi: 3.1.0
+info:
+  title: SeekStorm REST API documentation
+  description: Search engine library & multi-tenancy server
+  contact:
+    name: Wolf Garbe
+    email: wolf.garbe@seekstorm.com
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+  version: 0.12.11
+servers:
+- url: http://127.0.0.1
+  description: Local SeekStorm server
+paths:
+  /api/v1/apikey:
+    get:
+      tags:
+      - API Key
+      summary: Get API Key Info
+      description: Get info about all indices associated with the specified API key
+      operationId: get_apikey_indices_info_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      responses:
+        '200':
+          description: Indices found, returns a list of index info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexResponseObject'
+        '400':
+          description: Request object incorrect
+        '401':
+          description: API key does not exists
+        '404':
+          description: Index ID or API key missing
+    post:
+      tags:
+      - API Key
+      summary: Create API Key
+      description: |-
+        Creates an API key and returns the Base64 encoded API key.
+        Expects the Base64 encoded master API key in the header.
+        Use the master API key displayed in the server console at startup.
+
+        WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
+
+        For development purposes you may also use the SeekStorm server console command 'create' to create an demo API key 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='.
+      operationId: create_apikey_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_MASTER_API_KEY
+        required: true
+        schema:
+          type: string
+        example: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Quota per API key
+              required:
+              - indices_max
+              - indices_size_max
+              - documents_max
+              - operations_max
+              - rate_limit
+              properties:
+                indices_max:
+                  type: integer
+                  format: int64
+                  description: number of indices per API key
+                  minimum: 0
+                indices_size_max:
+                  type: integer
+                  format: int64
+                  description: combined index size per API key in MB
+                  minimum: 0
+                documents_max:
+                  type: integer
+                  format: int64
+                  description: combined number of documents in all indices per API key
+                  minimum: 0
+                operations_max:
+                  type: integer
+                  format: int64
+                  description: 'operations per month per API key: index/update/delete/query doc'
+                  minimum: 0
+                rate_limit:
+                  type: integer
+                  format: int64
+                  description: queries per sec per API key
+                  minimum: 0
+        required: true
+      responses:
+        '200':
+          description: API key created, returns Base64 encoded API key
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: master_apikey missing
+    delete:
+      tags:
+      - API Key
+      summary: Delete API Key
+      description: |-
+        Deletes an API and returns the number of remaining API keys.
+        Expects the Base64 encoded master API key in the header.
+
+        WARNING: This will delete all indices and documents associated with the API key.
+      operationId: delete_apikey_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_MASTER_API_KEY
+        required: true
+        schema:
+          type: string
+        example: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+      responses:
+        '200':
+          description: API key deleted, returns number of remaining API keys
+          content:
+            text/plain:
+              schema:
+                type: integer
+                format: int64
+                minimum: 0
+        '401':
+          description: master_apikey missing
+  /api/v1/index:
+    post:
+      tags:
+      - Index
+      summary: Create Index
+      description: Create an index within the directory associated with the specified API key and return the index_id.
+      operationId: create_index_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Create index request object
+              required:
+              - index_name
+              - schema
+              - synonyms
+              properties:
+                index_name:
+                  type: string
+                  example: demo_index
+                schema:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SchemaField'
+                  example:
+                  - boost: 10.0
+                    field: title
+                    field_type: Text
+                    indexed: true
+                    stored: true
+                  - field: body
+                    field_type: Text
+                    indexed: true
+                    stored: true
+                  - field: url
+                    field_type: Text
+                    indexed: false
+                    stored: true
+                  - facet: true
+                    field: date
+                    field_type: Timestamp
+                    indexed: false
+                    stored: true
+                similarity:
+                  $ref: '#/components/schemas/SimilarityType'
+                tokenizer:
+                  $ref: '#/components/schemas/TokenizerType'
+                synonyms:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Synonym'
+                  example:
+                  - multiway: false
+                    terms:
+                    - berry
+                    - lingonberry
+                    - blueberry
+                    - gooseberry
+        required: true
+      responses:
+        '200':
+          description: Index created, returns the index_id
+          content:
+            text/plain:
+              schema:
+                type: integer
+                format: int64
+                minimum: 0
+        '400':
+          description: Request object incorrect
+        '401':
+          description: API key does not exists
+        '404':
+          description: API key does not exists
+  /api/v1/index/{index_id}:
+    get:
+      tags:
+      - Index
+      summary: Get Index Info
+      description: Get index Info from index with index_id
+      operationId: get_index_info_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Index found, returns the index info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponseObject'
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+    delete:
+      tags:
+      - Index
+      summary: Delete Index
+      description: Delete an index within the directory associated with the specified API key and return the number of remaining indices.
+      operationId: delete_index_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Index deleted, returns the number of indices
+          content:
+            text/plain:
+              schema:
+                type: integer
+                format: int64
+                minimum: 0
+        '400':
+          description: index_id invalid or missing
+        '401':
+          description: api_key missing
+        '404':
+          description: api_key does not exists
+    patch:
+      tags:
+      - Index
+      summary: Commit Index
+      description: |-
+        Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
+        to the final compressed data structure (roaring bitmap) on Mmap or disk -
+        which is persistent, more compact, with lower query latency and allows search with realtime=false.
+        Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+        There is no way to prevent this automatic commit by not manually invoking it.
+        But commit can also be invoked manually at any time at any number of newly indexed documents.
+        commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
+        is invoked implicitly with every index_doc,
+        i.e. the document can immediately searched and included in the search results
+        if it matches the query AND the query paramter realtime=true is enabled.
+
+        **Use commit with caution, as it is an expensive operation**.
+        **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+        Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
+        There are only 2 reasons that justify a manual commit:
+        1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+        2. if after indexing new documents there won't be more documents indexed (for some time),
+           so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+           but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
+      operationId: commit_index_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Index committed, returns the number of committed documents
+          content:
+            text/plain:
+              schema:
+                type: integer
+                format: int64
+                minimum: 0
+        '400':
+          description: Index id invalid or missing
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+  /api/v1/index/{index_id}/doc:
+    post:
+      tags:
+      - Document
+      summary: Index Document(s)
+      description: |-
+        Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
+
+        Index documents enables true real-time search (as opposed to near realtime.search):
+        When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+        Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
+      operationId: index_document_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        description: JSON document or array of JSON documents, each consisting of key-value pairs
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+              propertyNames:
+                type: string
+            example:
+              body: body1
+              title: title1 test
+              url: url1
+        required: true
+      responses:
+        '200':
+          description: Document indexed, returns the number of indexed documents
+          content:
+            text/plain:
+              schema:
+                type: integer
+                minimum: 0
+        '400':
+          description: Document object invalid
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+    delete:
+      tags:
+      - Document
+      summary: Delete Document(s) by Request Object
+      description: |-
+        Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
+
+        Immediately effective, indpendent of commit.
+        Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
+        By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
+
+        Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
+        For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
+        BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
+
+        Document ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.
+      operationId: delete_document_by_object_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        description: "Specifies the document(s) to delete by different request objects\n- 'clear' : delete all documents in index (clear index)\n- u64 : delete single doc ID\n- [u64] : delete array of doc ID \n- SearchRequestObject : delete documents by query"
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequestObject'
+            example:
+              field_filter:
+              - title
+              - body
+              length: 10
+              offset: 0
+              query: test
+              realtime: false
+        required: true
+      responses:
+        '200':
+          description: Document deleted, returns indexed documents count
+          content:
+            text/plain:
+              schema:
+                type: integer
+                minimum: 0
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: api_key does not exists
+    patch:
+      tags:
+      - Document
+      summary: Update Document(s)
+      description: |-
+        Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
+
+        Update document is a combination of delete_document and index_document.
+        All current limitations of delete_document apply.
+
+        Update documents enables true real-time search (as opposed to near realtime.search):
+        When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+        Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
+      operationId: update_document_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        description: Tuple of (doc_id, JSON document) or array of tuples (doc_id, JSON documents), each JSON document consisting of arbitrary key-value pairs
+        content:
+          application/json:
+            schema:
+              type: array
+              items: false
+              prefixItems:
+              - type: integer
+                format: int64
+                minimum: 0
+              - type: object
+                additionalProperties: {}
+                propertyNames:
+                  type: string
+            example:
+            - 0
+            - body: body1
+              title: title1 test
+              url: url1
+        required: true
+      responses:
+        '200':
+          description: Document indexed, returns the number of indexed documents
+          content:
+            text/plain:
+              schema:
+                type: integer
+                minimum: 0
+        '400':
+          description: Document object invalid
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+  /api/v1/index/{index_id}/file:
+    post:
+      tags:
+      - PDF File
+      summary: Index PDF file
+      description: |-
+        Index PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.
+        - Converts PDF to a JSON document with "title", "body", "url" and "date" fields and indexes it.
+        - extracts title from metatag, or first line of text, or from filename
+        - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+        - copies all ingested pdf files to "files" subdirectory in index
+      operationId: index_file_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: file
+        in: header
+        description: filepath from header for JSON 'url' field
+        required: true
+        schema:
+          type: string
+      - name: date
+        in: header
+        description: date (timestamp) from header, as fallback for JSON 'date' field, if PDF date meta tag unaivailable
+        required: true
+        schema:
+          type: string
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: array
+              items:
+                type: integer
+                format: int32
+                minimum: 0
+        required: true
+      responses:
+        '200':
+          description: PDF file indexed, returns the number of indexed documents
+          content:
+            text/plain:
+              schema:
+                type: integer
+                minimum: 0
+        '400':
+          description: Document object invalid
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+  /api/v1/index/{index_id}/doc/{document_id}:
+    get:
+      tags:
+      - Document
+      summary: Get Document
+      description: Get document from index with index_id
+      operationId: get_document_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: document_id
+        in: path
+        description: document id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetDocumentRequest'
+            example:
+              fields:
+              - title
+              - body
+              highlights:
+              - field: title
+                fragment_number: 0
+                fragment_size: 1000
+                highlight_markup: true
+              - field: body
+                fragment_number: 2
+                fragment_size: 160
+                highlight_markup: true
+              - field: body
+                fragment_number: 0
+                fragment_size: 4000
+                highlight_markup: true
+                name: body2
+              query_terms:
+              - test
+        required: true
+      responses:
+        '200':
+          description: Document found, returns the JSON document consisting of arbitrary key-value pairs
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                propertyNames:
+                  type: string
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: api_key does not exists
+    delete:
+      tags:
+      - Document
+      summary: Delete Document
+      description: |-
+        Delete document by document_id from index with index_id
+
+        Document ID can by obtained by search.
+        Immediately effective, indpendent of commit.
+        Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
+        By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
+
+        Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
+        For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
+        BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
+      operationId: delete_document_by_parameter_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: document_id
+        in: path
+        description: document id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Document deleted, returns indexed documents count
+          content:
+            text/plain:
+              schema:
+                type: integer
+                minimum: 0
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: api_key does not exists
+  /api/v1/index/{index_id}/file/{document_id}:
+    get:
+      tags:
+      - PDF File
+      summary: Get PDF file
+      description: Get PDF file from index with index_id
+      operationId: get_file_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: document_id
+        in: path
+        description: document id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: PDF file found, returns the PDF file as byte array
+          content:
+            application/octet-stream:
+              schema:
+                type: array
+                items:
+                  type: integer
+                  format: int32
+                  minimum: 0
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: api_key does not exists
+  /api/v1/index/{index_id}/query:
+    get:
+      tags:
+      - Query
+      summary: Query Index
+      description: |-
+        Query results from index with index_id.
+
+        Query index via GET is a convenience function, that offers only a limited set of parameters compared to Query Index via POST.
+      operationId: query_index_api_get
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+        example: 0
+      - name: query
+        in: query
+        description: query string
+        required: true
+        schema:
+          type: string
+        example: hello
+      - name: offset
+        in: query
+        description: result offset
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+        example: 0
+      - name: length
+        in: query
+        description: result length
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+        example: 10
+      - name: realtime
+        in: query
+        description: include uncommitted documents
+        required: true
+        schema:
+          type: boolean
+        example: false
+      responses:
+        '200':
+          description: Results found, returns the SearchResultObject
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResultObject'
+        '400':
+          description: No query specified
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+    post:
+      tags:
+      - Query
+      summary: Query Index
+      description: |-
+        Query results from index with index_id
+
+        The following parameters are supported:
+        - Result type
+        - Result sorting
+        - Realtime search
+        - Field filter
+        - Fields to include in search results
+        - Distance fields: derived fields from distance calculations
+        - Highlights: keyword-in-context snippets and term highlighting
+        - Query facets: which facets fields to calculate and return at query time
+        - Facet filter: filter facets by field and value
+        - Result sort: sort results by field and direction
+        - Query type default: default query type, if not specified in query
+      operationId: query_index_api_post
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Search request object
+              required:
+              - query
+              - offset
+              properties:
+                query:
+                  type: string
+                  description: Query string, search operators + - "" are recognized.
+                offset:
+                  type: integer
+                  description: Offset of search results to return.
+                  example: 0
+                  minimum: 0
+                length:
+                  type: integer
+                  description: Number of search results to return.
+                  example: 10
+                  minimum: 1
+                result_type:
+                  $ref: '#/components/schemas/ResultType'
+                realtime:
+                  type: boolean
+                  description: 'True realtime search: include indexed, but uncommitted documents into search results.'
+                highlights:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Highlight'
+                field_filter:
+                  type: array
+                  items:
+                    type: string
+                  description: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If empty then all indexed fields are searched.
+                  example:
+                  - title
+                fields:
+                  type: array
+                  items:
+                    type: string
+                distance_fields:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DistanceField'
+                query_facets:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/QueryFacet'
+                facet_filter:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/FacetFilter'
+                result_sort:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ResultSort'
+                  description: |-
+                    Sort field and order:
+
+                    Search results are sorted by the specified facet field, either in ascending or descending order.
+                    If no sort field is specified, then the search results are sorted by rank in descending order per default.
+                    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+                    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+                    until the n-th field value is either not equal or the last field is reached.
+                    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+                    Sort is only enabled on facet fields that are defined in schema at create_index!
+
+                    Examples:
+                    - result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+                    - result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+                  example:
+                  - base: None
+                    field: date
+                    order: Ascending
+                query_type_default:
+                  $ref: '#/components/schemas/QueryType'
+        required: true
+      responses:
+        '200':
+          description: Results found, returns the SearchResultObject
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResultObject'
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: API key does not exist
+components:
+  schemas:
+    DistanceField:
+      type: object
+      description: DistanceField defines a field for proximity search.
+      required:
+      - field
+      - distance
+      - base
+      - unit
+      properties:
+        field:
+          type: string
+          description: field name of a numeric facet field (currently onyl Point field type supported)
+        distance:
+          type: string
+          description: field name of the distance field we are deriving from the numeric facet field (Point type) and the base (Point type)
+        base:
+          $ref: '#/components/schemas/Vec'
+          description: base point (lat,lon) for distance calculation
+        unit:
+          $ref: '#/components/schemas/DistanceUnit'
+          description: 'distance unit for the distance field: kilometers or miles'
+    DistanceUnit:
+      type: string
+      description: 'DistanceUnit defines the unit for distance calculation: kilometers or miles.'
+      enum:
+      - Kilometers
+      - Miles
+    FacetFilter:
+      oneOf:
+      - type: object
+        description: U8 range filter
+        required:
+        - U8
+        properties:
+          U8:
+            type: object
+            description: U8 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeU8'
+                description: 'filter: range start, range end'
+      - type: object
+        description: U16 range filter
+        required:
+        - U16
+        properties:
+          U16:
+            type: object
+            description: U16 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeU16'
+                description: 'filter: range start, range end'
+      - type: object
+        description: U32 range filter
+        required:
+        - U32
+        properties:
+          U32:
+            type: object
+            description: U32 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeU32'
+                description: 'filter: range start, range end'
+      - type: object
+        description: U64 range filter
+        required:
+        - U64
+        properties:
+          U64:
+            type: object
+            description: U64 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeU64'
+                description: 'filter: range start, range end'
+      - type: object
+        description: I8 range filter
+        required:
+        - I8
+        properties:
+          I8:
+            type: object
+            description: I8 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeI8'
+                description: 'filter: range start, range end'
+      - type: object
+        description: I16 range filter
+        required:
+        - I16
+        properties:
+          I16:
+            type: object
+            description: I16 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeI16'
+                description: 'filter: range start, range end'
+      - type: object
+        description: I32 range filter
+        required:
+        - I32
+        properties:
+          I32:
+            type: object
+            description: I32 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeI32'
+                description: 'filter: range start, range end'
+      - type: object
+        description: I64 range filter
+        required:
+        - I64
+        properties:
+          I64:
+            type: object
+            description: I64 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeI64'
+                description: 'filter: range start, range end'
+      - type: object
+        description: 'Timestamp range filter, Unix timestamp: the number of seconds since 1 January 1970'
+        required:
+        - Timestamp
+        properties:
+          Timestamp:
+            type: object
+            description: 'Timestamp range filter, Unix timestamp: the number of seconds since 1 January 1970'
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeI64'
+                description: 'filter: range start, range end'
+      - type: object
+        description: F32 range filter
+        required:
+        - F32
+        properties:
+          F32:
+            type: object
+            description: F32 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeF32'
+                description: 'filter: range start, range end'
+      - type: object
+        description: F64 range filter
+        required:
+        - F64
+        properties:
+          F64:
+            type: object
+            description: F64 range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                $ref: '#/components/schemas/RangeF64'
+                description: 'filter: range start, range end'
+      - type: object
+        description: String filter
+        required:
+        - String
+        properties:
+          String:
+            type: object
+            description: String filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                type: array
+                items:
+                  type: string
+                description: 'filter: array of facet string values'
+      - type: object
+        description: StringSet filter
+        required:
+        - StringSet
+        properties:
+          StringSet:
+            type: object
+            description: StringSet filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                type: array
+                items:
+                  type: string
+                description: 'filter: array of facet string values'
+      - type: object
+        description: Point proximity range filter
+        required:
+        - Point
+        properties:
+          Point:
+            type: object
+            description: Point proximity range filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                type: array
+                items: false
+                prefixItems:
+                - type: array
+                  items:
+                    type: number
+                    format: double
+                - type: object
+                  description: F64 range filter
+                  required:
+                  - start
+                  - end
+                  properties:
+                    start:
+                      type: number
+                      format: double
+                      description: range start
+                    end:
+                      type: number
+                      format: double
+                      description: range end
+                - type: string
+                  description: 'DistanceUnit defines the unit for distance calculation: kilometers or miles.'
+                  enum:
+                  - Kilometers
+                  - Miles
+                description: 'filter: base point (latitude/lat, longitude/lon), proximity range start, proximity range end, distance unit'
+      description: |-
+        FacetFilter:
+        either numerical range facet filter (range start/end) or
+        string facet filter (vector of strings) at least one (boolean OR) must match.
+    FacetValue:
+      oneOf:
+      - type: object
+        description: Boolean value
+        required:
+        - Bool
+        properties:
+          Bool:
+            type: boolean
+            description: Boolean value
+      - type: object
+        description: Unsigned 8-bit integer
+        required:
+        - U8
+        properties:
+          U8:
+            type: integer
+            format: int32
+            description: Unsigned 8-bit integer
+            minimum: 0
+      - type: object
+        description: Unsigned 16-bit integer
+        required:
+        - U16
+        properties:
+          U16:
+            type: integer
+            format: int32
+            description: Unsigned 16-bit integer
+            minimum: 0
+      - type: object
+        description: Unsigned 32-bit integer
+        required:
+        - U32
+        properties:
+          U32:
+            type: integer
+            format: int32
+            description: Unsigned 32-bit integer
+            minimum: 0
+      - type: object
+        description: Unsigned 64-bit integer
+        required:
+        - U64
+        properties:
+          U64:
+            type: integer
+            format: int64
+            description: Unsigned 64-bit integer
+            minimum: 0
+      - type: object
+        description: Signed 8-bit integer
+        required:
+        - I8
+        properties:
+          I8:
+            type: integer
+            format: int32
+            description: Signed 8-bit integer
+      - type: object
+        description: Signed 16-bit integer
+        required:
+        - I16
+        properties:
+          I16:
+            type: integer
+            format: int32
+            description: Signed 16-bit integer
+      - type: object
+        description: Signed 32-bit integer
+        required:
+        - I32
+        properties:
+          I32:
+            type: integer
+            format: int32
+            description: Signed 32-bit integer
+      - type: object
+        description: Signed 64-bit integer
+        required:
+        - I64
+        properties:
+          I64:
+            type: integer
+            format: int64
+            description: Signed 64-bit integer
+      - type: object
+        description: 'Unix timestamp: the number of seconds since 1 January 1970'
+        required:
+        - Timestamp
+        properties:
+          Timestamp:
+            type: integer
+            format: int64
+            description: 'Unix timestamp: the number of seconds since 1 January 1970'
+      - type: object
+        description: 32-bit floating point number
+        required:
+        - F32
+        properties:
+          F32:
+            type: number
+            format: float
+            description: 32-bit floating point number
+      - type: object
+        description: 64-bit floating point number
+        required:
+        - F64
+        properties:
+          F64:
+            type: number
+            format: double
+            description: 64-bit floating point number
+      - type: object
+        description: String value
+        required:
+        - String
+        properties:
+          String:
+            type: string
+            description: String value
+      - type: object
+        description: String set value
+        required:
+        - StringSet
+        properties:
+          StringSet:
+            type: array
+            items:
+              type: string
+            description: String set value
+      - type: object
+        description: 'Point value: latitude/lat, longitude/lon'
+        required:
+        - Point
+        properties:
+          Point:
+            $ref: '#/components/schemas/Vec'
+            description: 'Point value: latitude/lat, longitude/lon'
+      - type: string
+        description: No value
+        enum:
+        - None
+      description: 'FacetValue: Facet field value types'
+    FieldType:
+      type: string
+      description: 'FieldType defines the type of a field in the document: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, point, string, stringset, text.'
+      enum:
+      - U8
+      - U16
+      - U32
+      - U64
+      - I8
+      - I16
+      - I32
+      - I64
+      - Timestamp
+      - F32
+      - F64
+      - Bool
+      - String
+      - StringSet
+      - Point
+      - Text
+    GetDocumentRequest:
+      type: object
+      description: Specifies which document and which field to return
+      properties:
+        query_terms:
+          type: array
+          items:
+            type: string
+          description: query terms for highlighting
+        highlights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Highlight'
+          description: 'which fields to highlight: create keyword-in-context fragments and highlight terms'
+        fields:
+          type: array
+          items:
+            type: string
+          description: which fields to return
+        distance_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DistanceField'
+          description: which distance fields to derive and return
+    Highlight:
+      type: object
+      description: |-
+        Specifies the number and size of fragments (snippets, summaries) to generate from each specified field to provide a "keyword in context" (KWIC) functionality.
+        With highlight_markup the matching query terms within the fragments can be highlighted with HTML markup.
+      required:
+      - field
+      properties:
+        field:
+          type: string
+          description: Specifies the field from which the fragments  (snippets, summaries) are created.
+        name:
+          type: string
+          description: |-
+            Allows to specifiy multiple highlight result fields from the same source field, leaving the original field intact,
+            Default: if name is empty then field is used instead, i.e the original field is overwritten with the highlight.
+        fragment_number:
+          type: integer
+          description: If 0/default then return the full original text without fragmenting.
+          minimum: 0
+        fragment_size:
+          type: integer
+          description: |-
+            Specifies the length of a highlight fragment.
+            The default 0 returns the full original text without truncating, but still with highlighting if highlight_markup is enabled.
+          minimum: 0
+        highlight_markup:
+          type: boolean
+          description: if true, the matching query terms within the fragments are highlighted with HTML markup **\<b\>term\<\/b\>**.
+    IndexResponseObject:
+      type: object
+      required:
+      - id
+      - name
+      - schema
+      - indexed_doc_count
+      - operations_count
+      - query_count
+      - version
+      - facets_minmax
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Index ID
+          minimum: 0
+        name:
+          type: string
+          description: Index name
+          example: demo_index
+        schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SchemaField'
+          propertyNames:
+            type: string
+          example:
+            body:
+              field: body
+              field_id: 1
+              field_type: Text
+              indexed: true
+              stored: true
+            date:
+              facet: true
+              field: date
+              field_id: 3
+              field_type: Timestamp
+              indexed: false
+              stored: true
+            title:
+              boost: 10.0
+              field: title
+              field_id: 0
+              field_type: Text
+              indexed: true
+              stored: true
+            url:
+              field: url
+              field_id: 2
+              field_type: Text
+              indexed: false
+              stored: true
+        indexed_doc_count:
+          type: integer
+          description: Number of indexed documents
+          minimum: 0
+        operations_count:
+          type: integer
+          format: int64
+          description: 'Number of operations: index, update, delete, queries'
+          minimum: 0
+        query_count:
+          type: integer
+          format: int64
+          description: Number of queries, for quotas and billing
+          minimum: 0
+        version:
+          type: string
+          description: SeekStorm version the index was created with
+          example: 0.11.1
+        facets_minmax:
+          type: object
+          description: Minimum and maximum values of numeric facet fields
+          additionalProperties:
+            $ref: '#/components/schemas/MinMaxFieldJson'
+          propertyNames:
+            type: string
+          example:
+            date:
+              max: 1730901447
+              min: 831306011
+    MinMaxFieldJson:
+      type: object
+      description: MinMaxFieldJson is a JSON representation of the minimum and maximum value of a field.
+      required:
+      - min
+      - max
+      properties:
+        min:
+          description: minimum value of the field
+        max:
+          description: maximum value of the field
+    QueryFacet:
+      oneOf:
+      - type: object
+        description: Range segment definition for numerical facet field values of type u8
+        required:
+        - U8
+        properties:
+          U8:
+            type: object
+            description: Range segment definition for numerical facet field values of type u8
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int32
+                    minimum: 0
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type u16
+        required:
+        - U16
+        properties:
+          U16:
+            type: object
+            description: Range segment definition for numerical facet field values of type u16
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int32
+                    minimum: 0
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type u32
+        required:
+        - U32
+        properties:
+          U32:
+            type: object
+            description: Range segment definition for numerical facet field values of type u32
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int32
+                    minimum: 0
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type u64
+        required:
+        - U64
+        properties:
+          U64:
+            type: object
+            description: Range segment definition for numerical facet field values of type u64
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int64
+                    minimum: 0
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type i8
+        required:
+        - I8
+        properties:
+          I8:
+            type: object
+            description: Range segment definition for numerical facet field values of type i8
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int32
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type i16
+        required:
+        - I16
+        properties:
+          I16:
+            type: object
+            description: Range segment definition for numerical facet field values of type i16
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int32
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type i32
+        required:
+        - I32
+        properties:
+          I32:
+            type: object
+            description: Range segment definition for numerical facet field values of type i32
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int32
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type i64
+        required:
+        - I64
+        properties:
+          I64:
+            type: object
+            description: Range segment definition for numerical facet field values of type i64
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int64
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type Unix timestamp
+        required:
+        - Timestamp
+        properties:
+          Timestamp:
+            type: object
+            description: Range segment definition for numerical facet field values of type Unix timestamp
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: integer
+                    format: int64
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type f32
+        required:
+        - F32
+        properties:
+          F32:
+            type: object
+            description: Range segment definition for numerical facet field values of type f32
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: number
+                    format: float
+                description: range label, range start
+      - type: object
+        description: Range segment definition for numerical facet field values of type f64
+        required:
+        - F64
+        properties:
+          F64:
+            type: object
+            description: Range segment definition for numerical facet field values of type f64
+            required:
+            - field
+            - range_type
+            - ranges
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: number
+                    format: double
+                description: range label, range start
+      - type: object
+        description: Facet field values of type string
+        required:
+        - String
+        properties:
+          String:
+            type: object
+            description: Facet field values of type string
+            required:
+            - field
+            - prefix
+            - length
+            properties:
+              field:
+                type: string
+                description: field name
+              prefix:
+                type: string
+                description: Prefix filter of facet values to return
+              length:
+                type: integer
+                format: int32
+                description: maximum number of facet values to return
+                minimum: 0
+      - type: object
+        description: Facet field values of type string set
+        required:
+        - StringSet
+        properties:
+          StringSet:
+            type: object
+            description: Facet field values of type string set
+            required:
+            - field
+            - prefix
+            - length
+            properties:
+              field:
+                type: string
+                description: field name
+              prefix:
+                type: string
+                description: Prefix filter of facet values to return
+              length:
+                type: integer
+                format: int32
+                description: maximum number of facet values to return
+                minimum: 0
+      - type: object
+        description: Range segment definition for numerical facet field values of type Point (distance between base of type Point and facet field of type Point)
+        required:
+        - Point
+        properties:
+          Point:
+            type: object
+            description: Range segment definition for numerical facet field values of type Point (distance between base of type Point and facet field of type Point)
+            required:
+            - field
+            - range_type
+            - ranges
+            - base
+            - unit
+            properties:
+              field:
+                type: string
+                description: field name
+              range_type:
+                $ref: '#/components/schemas/RangeType'
+                description: range type (CountWithinRange,CountBelowRange,CountAboveRange)
+              ranges:
+                type: array
+                items:
+                  type: array
+                  items: false
+                  prefixItems:
+                  - type: string
+                  - type: number
+                    format: double
+                description: range label, range start
+              base:
+                $ref: '#/components/schemas/Vec'
+                description: base point (latitude/lat, longitude/lon)
+              unit:
+                $ref: '#/components/schemas/DistanceUnit'
+                description: distance unit (kilometers/miles)
+      - type: string
+        description: No query facet
+        enum:
+        - None
+      description: |-
+        Defines the query facets:
+        - string facet field values
+        - range segments for numerical facet field values
+    QueryType:
+      type: string
+      description: |-
+        Specifies the default QueryType: The following query types are supported:
+        - **Union** (OR, disjunction),
+        - **Intersection** (AND, conjunction),
+        - **Phrase** (""),
+        - **Not** (-).
+
+        The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+      enum:
+      - Union
+      - Intersection
+      - Phrase
+      - Not
+    RangeF32:
+      type: object
+      description: F32 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: number
+          format: float
+          description: range start
+        end:
+          type: number
+          format: float
+          description: range end
+    RangeF64:
+      type: object
+      description: F64 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: number
+          format: double
+          description: range start
+        end:
+          type: number
+          format: double
+          description: range end
+    RangeI16:
+      type: object
+      description: I16 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int32
+          description: range start
+        end:
+          type: integer
+          format: int32
+          description: range end
+    RangeI32:
+      type: object
+      description: I32 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int32
+          description: range start
+        end:
+          type: integer
+          format: int32
+          description: range end
+    RangeI64:
+      type: object
+      description: I64 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int64
+          description: range start
+        end:
+          type: integer
+          format: int64
+          description: range end
+    RangeI8:
+      type: object
+      description: I8 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int32
+          description: range start
+        end:
+          type: integer
+          format: int32
+          description: range end
+    RangeType:
+      type: string
+      description: |-
+        Create query_list and non_unique_query_list
+        blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
+        then the intersect_docid within a single block is executed  (=segments?)
+        specifies how to count the frequency of numerical facet field values
+      enum:
+      - CountWithinRange
+      - CountAboveRange
+      - CountBelowRange
+    RangeU16:
+      type: object
+      description: U16 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int32
+          description: range start
+          minimum: 0
+        end:
+          type: integer
+          format: int32
+          description: range end
+          minimum: 0
+    RangeU32:
+      type: object
+      description: U32 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int32
+          description: range start
+          minimum: 0
+        end:
+          type: integer
+          format: int32
+          description: range end
+          minimum: 0
+    RangeU64:
+      type: object
+      description: U64 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int64
+          description: range start
+          minimum: 0
+        end:
+          type: integer
+          format: int64
+          description: range end
+          minimum: 0
+    RangeU8:
+      type: object
+      description: U8 range filter
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: integer
+          format: int32
+          description: range start
+          minimum: 0
+        end:
+          type: integer
+          format: int32
+          description: range end
+          minimum: 0
+    ResultSort:
+      type: object
+      description: Specifies the sort order for the search results.
+      required:
+      - field
+      - order
+      - base
+      properties:
+        field:
+          type: string
+          description: name of the facet field to sort by
+        order:
+          $ref: '#/components/schemas/SortOrder'
+          description: 'Sort order: Ascending or Descending'
+        base:
+          $ref: '#/components/schemas/FacetValue'
+          description: Base value/point for (geo) proximity sorting
+    ResultType:
+      type: string
+      description: |-
+        The following result types are supported:
+        - **Count** (count all results that match the query, but returning top-k results is not required)
+        - **Topk** (returns the top-k results per query, but counting all results that match the query is not required)
+        - **TopkCount** (returns the top-k results per query + count all results that match the query)
+      enum:
+      - Count
+      - Topk
+      - TopkCount
+    SchemaField:
+      type: object
+      description: 'Defines a field in index schema: field, stored, indexed , field_type, facet, boost.'
+      required:
+      - field
+      - stored
+      - indexed
+      - field_type
+      properties:
+        field:
+          type: string
+          description: unique name of a field
+        stored:
+          type: boolean
+          description: only stored fields are returned in the search results
+        indexed:
+          type: boolean
+          description: only indexed fields can be searched
+        field_type:
+          $ref: '#/components/schemas/FieldType'
+          description: type of a field
+        facet:
+          type: boolean
+          description: |-
+            optional faceting for a field
+            Faceting can be enabled both for string field type and numerical field types.
+            both numerical and string fields can be indexed (indexed=true) and stored (stored=true) in the json document,
+            but with field_facet=true they are additionally stored in a binary format, for fast faceting and sorting without docstore access (decompression, deserialization)
+        boost:
+          type: number
+          format: float
+          description: optional custom weight factor for Bm25 ranking
+    SearchRequestObject:
+      type: object
+      description: Search request object
+      required:
+      - query
+      - offset
+      properties:
+        query:
+          type: string
+          description: Query string, search operators + - "" are recognized.
+        offset:
+          type: integer
+          description: Offset of search results to return.
+          example: 0
+          minimum: 0
+        length:
+          type: integer
+          description: Number of search results to return.
+          example: 10
+          minimum: 1
+        result_type:
+          $ref: '#/components/schemas/ResultType'
+        realtime:
+          type: boolean
+          description: 'True realtime search: include indexed, but uncommitted documents into search results.'
+        highlights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Highlight'
+        field_filter:
+          type: array
+          items:
+            type: string
+          description: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If empty then all indexed fields are searched.
+          example:
+          - title
+        fields:
+          type: array
+          items:
+            type: string
+        distance_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DistanceField'
+        query_facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryFacet'
+        facet_filter:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetFilter'
+        result_sort:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultSort'
+          description: |-
+            Sort field and order:
+
+            Search results are sorted by the specified facet field, either in ascending or descending order.
+            If no sort field is specified, then the search results are sorted by rank in descending order per default.
+            Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+            The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+            until the n-th field value is either not equal or the last field is reached.
+            A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+            Sort is only enabled on facet fields that are defined in schema at create_index!
+
+            Examples:
+            - result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+            - result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+          example:
+          - base: None
+            field: date
+            order: Ascending
+        query_type_default:
+          $ref: '#/components/schemas/QueryType'
+    SearchResultObject:
+      type: object
+      required:
+      - time
+      - query
+      - offset
+      - length
+      - count
+      - count_total
+      - query_terms
+      - results
+      - facets
+      - suggestions
+      properties:
+        time:
+          type: integer
+          minimum: 0
+        query:
+          type: string
+        offset:
+          type: integer
+          minimum: 0
+        length:
+          type: integer
+          minimum: 0
+        count:
+          type: integer
+          minimum: 0
+        count_total:
+          type: integer
+          minimum: 0
+        query_terms:
+          type: array
+          items:
+            type: string
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+            propertyNames:
+              type: string
+        facets:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: array
+              items: false
+              prefixItems:
+              - type: string
+              - type: integer
+                minimum: 0
+          propertyNames:
+            type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+    SimilarityType:
+      type: string
+      description: |-
+        Similarity type defines the scoring and ranking of the search results:
+        - Bm25f: considers documents composed from several fields, with different field lengths and importance
+        - Bm25fProximity: considers term proximity, e.g. for implicit phrase search with improved relevancy
+      enum:
+      - Bm25f
+      - Bm25fProximity
+    SortOrder:
+      type: string
+      description: Specifies the sort order for the search results.
+      enum:
+      - Ascending
+      - Descending
+    Synonym:
+      type: object
+      description: Defines synonyms for terms per index.
+      required:
+      - terms
+      properties:
+        terms:
+          type: array
+          items:
+            type: string
+          description: List of terms that are synonyms.
+        multiway:
+          type: boolean
+          description: |-
+            Creates alternative versions of documents where in each copy a term is replaced with one of its synonyms.
+            Doesn't impact the query latency, but does increase the index size.
+            Multi-way synonyms (default): all terms are synonyms of each other.
+            One-way synonyms: only the first term is a synonym of the following terms, but not vice versa.
+            E.g. [street, avenue, road] will result in searches for street to return documents containing any of the terms street, avenue or road,
+            but searches for avenue will only return documents containing avenue, but not documents containing street or road.
+            Currently only single terms without spaces are supported.
+            Synonyms are supported in result highlighting.
+            The synonyms that were created with the synonyms parameter in create_index are stored in synonyms.json in the index directory contains
+            Can be manually modified, but becomes effective only after restart and only for newly indexed documents.
+    TokenizerType:
+      type: string
+      description: |-
+        Defines tokenizer behavior:
+
+        AsciiAlphabetic
+        - Mainly for for benchmark compatibility
+        - Only ASCII alphabetic chars are recognized as token.
+
+        UnicodeAlphanumeric
+        - All Unicode alphanumeric chars are recognized as token.
+        - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+
+        UnicodeAlphanumericFolded
+        - All Unicode alphanumeric chars are recognized as token.
+        - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+        - Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
+        - Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
+        - Tokenizing might be slower due to folding and apostroph processing.
+
+        UnicodeAlphanumericZH
+        - Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
+        - Supports mixed Latin and Chinese texts
+        - Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.
+        - Requires feature #[cfg(feature = "zh")]
+      enum:
+      - AsciiAlphabetic
+      - UnicodeAlphanumeric
+      - UnicodeAlphanumericFolded
+      - UnicodeAlphanumericZH
+    Vec:
+      type: array
+      items:
+        type: number
+        format: double
+tags:
+- name: API Key
+  description: Create and delete API keys
+- name: Index
+  description: Create and delete indices
+- name: Document
+  description: Index, update, get and delete documents
+- name: PDF File
+  description: Index, and get PDF file
+- name: Query
+  description: Query an index

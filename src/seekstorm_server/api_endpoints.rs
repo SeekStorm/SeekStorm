@@ -476,7 +476,6 @@ pub(crate) async fn delete_index_api(
 }
 
 /// Commit Index
-/// Delete an index within the directory associated with the specified API key and return the number of remaining indices.
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
 /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
