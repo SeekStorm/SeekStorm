@@ -2330,7 +2330,11 @@ impl Index {
             unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
         let index_path = Path::new(&self.index_path_string);
         let _ = fs::remove_file(index_path.join(FACET_VALUES_FILENAME));
-        self.facets.clear();
+        for facet in self.facets.iter_mut() {
+            facet.values.clear();
+            facet.min = ValueType::None;
+            facet.max = ValueType::None;
+        }
 
         if !self.stored_field_names.is_empty() && self.meta.access_type == AccessType::Mmap {
             self.docstore_file_mmap =
