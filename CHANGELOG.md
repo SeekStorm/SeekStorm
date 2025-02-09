@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixes an issue for queries with length=0 and ResultType::TopK or ResultType::TopkCount. 
+- Fixes issue #31 for queries with query parameter length=0 and ResultType::TopK or ResultType::TopkCount. 
   - If you specify length=0, resultType::TopkCount will automatically downgraded to resultType::Count and return the number of results only, without returning the results itself.
   - If you don't specify the length in the REST API, a default of 10 will be used.
 
