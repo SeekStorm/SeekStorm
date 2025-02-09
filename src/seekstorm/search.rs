@@ -732,6 +732,7 @@ pub type Point = Vec<f64>;
 ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
+///    With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
 /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -781,6 +782,7 @@ pub trait Search {
     ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
+    ///    With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -951,6 +953,7 @@ impl Search for IndexArc {
     ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
+    ///    With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -1005,6 +1008,14 @@ impl Search for IndexArc {
         let mut query_type_mut = query_type_default;
 
         let mut result_object: ResultObject = Default::default();
+
+        let mut result_type = result_type;
+        if length == 0 && result_type != ResultType::Count {
+            if result_type == ResultType::Topk {
+                return result_object;
+            }
+            result_type = ResultType::Count;
+        }
 
         if index_ref.segments_index.is_empty() {
             return result_object;

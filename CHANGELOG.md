@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.13] - 2025-02-08
+
+### Improved
+
+- Intersection speed for ResultType::Count improved.
+
+### Fixed
+
+- Fixes an issue for queries with length=0 and ResultType::TopK or ResultType::TopkCount. 
+  - If you specify length=0, resultType::TopkCount will automatically downgraded to resultType::Count and return the number of results only, without returning the results itself.
+  - If you don't specify the length in the REST API, a default of 10 will be used.
+
 ## [0.12.12] - 2025-02-07
 
 ### Fixed

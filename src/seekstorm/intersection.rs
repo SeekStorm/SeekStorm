@@ -645,8 +645,10 @@ pub(crate) async fn intersection_docid(
 
                         if SPEEDUP_FLAG
                             && !filtered
-                            && (search_result.topk_candidates.current_heap_size == top_k)
-                            && (block_score <= search_result.topk_candidates._elements[0].score)
+                            && (result_type == &ResultType::Count
+                                || ((search_result.topk_candidates.current_heap_size == top_k)
+                                    && (block_score
+                                        <= search_result.topk_candidates._elements[0].score)))
                         {
                             if result_type != &ResultType::Topk {
                                 *result_count += 1;

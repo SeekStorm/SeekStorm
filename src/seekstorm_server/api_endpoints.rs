@@ -41,11 +41,13 @@ pub struct SearchRequestObject {
     /// Query string, search operators + - "" are recognized.
     #[serde(rename = "query")]
     pub query_string: String,
-    #[schema(required = true, minimum = 0, example = 0)]
+    #[serde(default)]
+    #[schema(required = false, minimum = 0, default = 0, example = 0)]
     /// Offset of search results to return.
     pub offset: usize,
     /// Number of search results to return.
-    #[schema(required = false, minimum = 1, example = 10)]
+    #[serde(default = "length_api")]
+    #[schema(required = false, minimum = 1, default = 10, example = 10)]
     pub length: usize,
     #[serde(default)]
     pub result_type: ResultType,
@@ -87,6 +89,10 @@ pub struct SearchRequestObject {
 
 fn query_type_api() -> QueryType {
     QueryType::Intersection
+}
+
+fn length_api() -> usize {
+    10
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]

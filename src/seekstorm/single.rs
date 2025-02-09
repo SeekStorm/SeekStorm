@@ -42,8 +42,9 @@ pub(crate) async fn single_docid<'a>(
         || (!search_result.query_facets.is_empty() || !facet_filter.is_empty())
             && result_type != &ResultType::Topk;
     if SPEEDUP_FLAG
-        && search_result.topk_candidates.current_heap_size == top_k
-        && block_score <= search_result.topk_candidates._elements[0].score
+        && (result_type == &ResultType::Count
+            || (search_result.topk_candidates.current_heap_size == top_k
+                && block_score <= search_result.topk_candidates._elements[0].score))
         && (!filtered || result_type == &ResultType::Topk)
     {
         return;
