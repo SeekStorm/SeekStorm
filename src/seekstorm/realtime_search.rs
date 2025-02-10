@@ -1636,8 +1636,7 @@ impl Index {
     ) {
         query_list.sort_by(|a, b| b.posting_count.partial_cmp(&a.posting_count).unwrap());
 
-        let mut result_count_local =
-            query_list[0].blocks[query_list[0].p_block as usize].posting_count as u32 + 1;
+        let mut result_count_local = query_list[0].posting_count;
         let mut bitmap_0: [u8; 8192] = [0u8; 8192];
 
         for (i, item) in query_list.iter_mut().enumerate() {

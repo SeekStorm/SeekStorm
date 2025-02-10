@@ -2298,6 +2298,11 @@ impl Index {
     pub fn clear_index(&mut self) {
         let _ = self.index_file.rewind();
         let _ = self.index_file.set_len(0);
+
+        if !self.compressed_docstore_segment_block_buffer.is_empty() {
+            self.compressed_docstore_segment_block_buffer = vec![0; ROARING_BLOCK_SIZE * 4];
+        };
+
         write_u16(
             INDEX_FORMAT_VERSION_MAJOR,
             &mut self.compressed_index_segment_block_buffer,
@@ -2311,21 +2316,25 @@ impl Index {
         let _ = self
             .index_file
             .write(&self.compressed_index_segment_block_buffer[0..INDEX_HEADER_SIZE as usize]);
+        let _ = self.index_file.flush();
 
         self.index_file_mmap =
             unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
 
         let _ = self.docstore_file.rewind();
         let _ = self.docstore_file.set_len(0);
+        let _ = self.docstore_file.flush();
 
         let _ = self.delete_file.rewind();
         let _ = self.delete_file.set_len(0);
+        let _ = self.delete_file.flush();
         self.delete_hashset.clear();
 
         let _ = self.facets_file.rewind();
         let _ = self
             .facets_file
             .set_len((self.facets_size_sum * ROARING_BLOCK_SIZE) as u64);
+        let _ = self.facets_file.flush();
         self.facets_file_mmap =
             unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
         let index_path = Path::new(&self.index_path_string);
