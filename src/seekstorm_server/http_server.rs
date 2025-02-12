@@ -389,7 +389,7 @@ pub(crate) async fn http_request_handler(
                     index_count.to_string().into(),
                 ))))
             } else {
-                return HttpServerError::Unauthorized.into();
+                HttpServerError::Unauthorized.into()
             }
         }
 
