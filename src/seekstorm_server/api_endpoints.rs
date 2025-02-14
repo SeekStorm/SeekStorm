@@ -672,6 +672,7 @@ pub(crate) async fn index_document_api(
     document: Document,
 ) -> Result<usize, String> {
     index_arc.index_document(document, FileType::None).await;
+
     Ok(index_arc.read().await.indexed_doc_count)
 }
 

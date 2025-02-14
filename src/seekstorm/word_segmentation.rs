@@ -162,9 +162,11 @@ impl WordSegmentationTM {
                     } else {
                         result_array.push(input_chars[last..(i + 1)].iter().collect());
                     }
+
                     last = i + 1;
                 }
             }
+
             if !result_array.is_empty() && ['+', '-'].contains(&input_chars[last]) {
                 result_array.push(input_chars[last..].iter().skip(1).collect());
             } else {

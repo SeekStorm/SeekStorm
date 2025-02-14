@@ -283,15 +283,27 @@ use an asynchronous Rust runtime
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 ```
 
-create index
+create schema (from JSON)
 ```rust
-let index_path=Path::new("C:/index/");
-
 let schema_json = r#"
 [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 {"field":"body","field_type":"Text","stored":true,"indexed":true},
 {"field":"url","field_type":"Text","stored":false,"indexed":false}]"#;
 let schema=serde_json::from_str(schema_json).unwrap();
+```
+
+create schema (from SchemaField)
+```rust
+let schema= vec![
+    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false, 1.0),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,1.0),
+    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,1.0),
+];
+```
+
+create index
+```rust
+let index_path=Path::new("C:/index/");
 
 let meta = IndexMetaObject {
     id: 0,
@@ -313,7 +325,7 @@ let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path,false).await.unwrap(); 
 ```
 
-index documents
+index documents (from JSON)
 ```rust
 let documents_json = r#"
 [{"title":"title1 test","body":"body1","url":"url1"},
@@ -322,6 +334,17 @@ let documents_json = r#"
 let documents_vec=serde_json::from_str(documents_json).unwrap();
 
 index_arc.index_documents(documents_vec).await; 
+```
+
+index document (from Document)
+```rust
+let document= Document::from([
+    ("title".to_string(), Value::String("title4 test".to_string())),
+    ("body".to_string(), Value::String("body4 test".to_string())),
+    ("url".to_string(), Value::String("url4".to_string())),
+]);
+
+idx.0.index_document(document,FileType::None).await;
 ```
 
 commit documents

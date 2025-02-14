@@ -690,7 +690,7 @@ pub(crate) fn write_field_vec(
                     (field_id_position_count & 0b01111111) as u8 | STOP_BIT;
                 *write_pointer += 1;
             } else {
-                println!("positionCount exceeded: {} ", field_id_position_count);
+                println!("positionCount exceeded3: {} ", field_id_position_count);
             }
         }
     }

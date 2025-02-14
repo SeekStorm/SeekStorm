@@ -188,7 +188,7 @@ impl Index {
     /// * `doc_id`: Specifies which document to load from the document store of the index.
     /// * `include_uncommited`: Return also documents which have not yet been committed.
     /// * `highlighter_option`: Specifies the extraction of keyword-in-context (KWIC) fragments from fields in documents, and the highlighting of the query terms within.
-    /// * `fields`: Specifies which of the stored fields to return with each document. Default: If empty return all stoed fields
+    /// * `fields`: Specifies which of the stored fields to return with each document. Default: If empty return all stored fields
     /// * `distance_fields`: insert distance fields into result documents, calculating the distance between a specified facet field of type Point and a base Point, in kilometers or miles.
     ///   using Euclidian distance (Pythagoras theorem) with Equirectangular approximation.
     pub fn get_document(

@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.12.15"
+version = "0.12.16"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -21,6 +21,7 @@ zh = []
 [lib]
 name = "seekstorm"
 path = "src/seekstorm/lib.rs"
+doctest = false
 
 [[bin]]
 name = "seekstorm_server"

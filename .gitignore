@@ -2,6 +2,7 @@
 # will have compiled files and executables
 debug/
 target/
+tests/index_test/
 .vscode/
 .idea
 

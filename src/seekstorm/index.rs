@@ -981,7 +981,6 @@ pub fn create_index(
             let index_file_mmap;
             let docstore_file_mmap = if meta.access_type == AccessType::Mmap {
                 index_file_mmap = unsafe { Mmap::map(&index_file).expect("Unable to create Mmap") };
-
                 unsafe { Mmap::map(&docstore_file).expect("Unable to create Mmap") }
             } else {
                 index_file_mmap = unsafe {
@@ -1466,7 +1465,7 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
     }
 }
 
-/// Loads the index from disk into RAM.
+/// Loads the index from disk into RAM or MMAP.
 /// * `index_path` - index path.  
 /// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
 pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, String> {
@@ -2056,6 +2055,16 @@ pub(crate) fn norm_frequency(term_frequency: u32) -> u8 {
     }
 }
 
+pub(crate) fn unmap_mmap(mmap_in: &mut Mmap) {
+    let mut mmap_options = MmapOptions::new();
+    *mmap_in = mmap_options
+        .len(8)
+        .map_anon()
+        .unwrap()
+        .make_read_only()
+        .unwrap();
+}
+
 impl Index {
     /// Get number of index levels. One index level comprises 64K documents.
     pub fn level_count(index: &Index) -> usize {
@@ -2296,8 +2305,11 @@ impl Index {
 
     /// Reset index to empty, while maintaining schema
     pub fn clear_index(&mut self) {
+        unmap_mmap(&mut self.index_file_mmap);
         let _ = self.index_file.rewind();
-        let _ = self.index_file.set_len(0);
+        if let Err(e) = self.index_file.set_len(0) {
+            println!("Unable to index_file.set_len in clear_index {:?}", e)
+        };
 
         if !self.compressed_docstore_segment_block_buffer.is_empty() {
             self.compressed_docstore_segment_block_buffer = vec![0; ROARING_BLOCK_SIZE * 4];
@@ -2322,19 +2334,27 @@ impl Index {
             unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
 
         let _ = self.docstore_file.rewind();
-        let _ = self.docstore_file.set_len(0);
+        if let Err(e) = self.docstore_file.set_len(0) {
+            println!("Unable to docstore_file.set_len in clear_index {:?}", e)
+        };
         let _ = self.docstore_file.flush();
 
         let _ = self.delete_file.rewind();
-        let _ = self.delete_file.set_len(0);
+        if let Err(e) = self.delete_file.set_len(0) {
+            println!("Unable to delete_file.set_len in clear_index {:?}", e)
+        };
         let _ = self.delete_file.flush();
         self.delete_hashset.clear();
 
         let _ = self.facets_file.rewind();
-        let _ = self
+        if let Err(e) = self
             .facets_file
-            .set_len((self.facets_size_sum * ROARING_BLOCK_SIZE) as u64);
+            .set_len((self.facets_size_sum * ROARING_BLOCK_SIZE) as u64)
+        {
+            println!("Unable to facets_file.set_len in clear_index {:?}", e)
+        };
         let _ = self.facets_file.flush();
+
         self.facets_file_mmap =
             unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
         let index_path = Path::new(&self.index_path_string);
@@ -2352,9 +2372,11 @@ impl Index {
 
         self.document_length_normalized_average = 0.0;
         self.indexed_doc_count = 0;
+        self.committed_doc_count = 0;
         self.positions_sum_normalized = 0;
 
         self.level_index = Vec::new();
+
         self.segments_index = Vec::new();
         for _i in 0..self.segment_number1 {
             self.segments_index.push(SegmentIndex {
@@ -2363,6 +2385,7 @@ impl Index {
                 segment: AHashMap::new(),
             });
         }
+
         self.segments_level0 = vec![
             SegmentLevel0 {
                 ..Default::default()
@@ -2379,6 +2402,7 @@ impl Index {
         self.size_compressed_positions_index = 0;
         self.position_count = 0;
         self.postinglist_count = 0;
+
         self.is_last_level_incomplete = false;
     }
 
@@ -2458,6 +2482,11 @@ impl Index {
             self.segment_number_mask1,
         );
         Ok(merged_synonyms.len())
+    }
+
+    /// Current document count: indexed document count - deleted document count
+    pub fn current_doc_count(&self) -> usize {
+        self.indexed_doc_count - self.delete_hashset.len()
     }
 }
 

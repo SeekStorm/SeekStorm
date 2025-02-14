@@ -133,16 +133,18 @@ impl Index {
         if !self.uncommitted {
             return;
         }
-
         let new_document_count = indexed_doc_count - self.committed_doc_count;
 
         let is_last_level_incomplete = self.is_last_level_incomplete;
         if self.is_last_level_incomplete {
             self.merge_incomplete_index_level_to_level0();
 
-            let _ = self
+            if let Err(e) = self
                 .index_file
-                .set_len(self.last_level_index_file_start_pos);
+                .set_len(self.last_level_index_file_start_pos)
+            {
+                println!("Unable to index_file.set_len in commit {:?}", e)
+            };
             let _ = self
                 .index_file
                 .seek(SeekFrom::Start(self.last_level_index_file_start_pos));
@@ -291,12 +293,13 @@ impl Index {
             if self.facets_file.metadata().unwrap().len()
                 != (self.facets_size_sum * (self.level_index.len() + 1) * ROARING_BLOCK_SIZE) as u64
             {
-                self.facets_file
-                    .set_len(
-                        (self.facets_size_sum * (self.level_index.len() + 1) * ROARING_BLOCK_SIZE)
-                            as u64,
-                    )
-                    .expect("Unable to set len");
+                if let Err(e) = self.facets_file.set_len(
+                    (self.facets_size_sum * (self.level_index.len() + 1) * ROARING_BLOCK_SIZE)
+                        as u64,
+                ) {
+                    println!("Unable to facets_file.set_len in commit {:?}", e)
+                };
+
                 self.facets_file_mmap =
                     unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
             }

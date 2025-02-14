@@ -810,7 +810,6 @@ pub(crate) async fn http_request_handler(
             let Some(apikey_hash) = get_apikey_hash(apikey, &apikey_list).await else {
                 return HttpServerError::Unauthorized.into();
             };
-
             let Ok(index_id) = parts[3].parse() else {
                 return HttpServerError::BadRequest("index_id invalid or missing".to_string())
                     .into();
@@ -933,7 +932,6 @@ pub(crate) async fn http_request_handler(
                                                 .into();
                                         }
                                     };
-
                                     delete_documents_by_object_api(
                                         &index_arc_clone,
                                         document_id_vec,
@@ -956,7 +954,6 @@ pub(crate) async fn http_request_handler(
             let Some(apikey_header) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
-
             let mut hasher = Sha256::new();
             hasher.update(MASTER_KEY_SECRET.to_string());
             let master_apikey = hasher.finalize();
@@ -976,7 +973,6 @@ pub(crate) async fn http_request_handler(
             let mut apikey = [0u8; 32];
             OsRng.try_fill_bytes(&mut apikey).unwrap();
             let api_key_base64 = general_purpose::STANDARD.encode(apikey);
-
             let mut apikey_list_mut = apikey_list.write().await;
             create_apikey_api(
                 &index_path,
@@ -1015,7 +1011,6 @@ pub(crate) async fn http_request_handler(
             let Ok(apikey) = general_purpose::STANDARD.decode(&request_object.apikey_base64) else {
                 return HttpServerError::Unauthorized.into();
             };
-
             let apikey_hash = calculate_hash(&apikey) as u128;
 
             let mut apikey_list_mut = apikey_list.write().await;
