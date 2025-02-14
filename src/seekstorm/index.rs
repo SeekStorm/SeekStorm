@@ -2055,16 +2055,6 @@ pub(crate) fn norm_frequency(term_frequency: u32) -> u8 {
     }
 }
 
-pub(crate) fn unmap_mmap(mmap_in: &mut Mmap) {
-    let mut mmap_options = MmapOptions::new();
-    *mmap_in = mmap_options
-        .len(8)
-        .map_anon()
-        .unwrap()
-        .make_read_only()
-        .unwrap();
-}
-
 impl Index {
     /// Get number of index levels. One index level comprises 64K documents.
     pub fn level_count(index: &Index) -> usize {
@@ -2305,7 +2295,12 @@ impl Index {
 
     /// Reset index to empty, while maintaining schema
     pub fn clear_index(&mut self) {
-        unmap_mmap(&mut self.index_file_mmap);
+        self.index_file_mmap = unsafe {
+            MmapOptions::new()
+                .len(0)
+                .map(&self.index_file)
+                .expect("Unable to create Mmap")
+        };
         let _ = self.index_file.rewind();
         if let Err(e) = self.index_file.set_len(0) {
             println!("Unable to index_file.set_len in clear_index {:?}", e)
@@ -2333,6 +2328,12 @@ impl Index {
         self.index_file_mmap =
             unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
 
+        self.docstore_file_mmap = unsafe {
+            MmapOptions::new()
+                .len(0)
+                .map(&self.docstore_file)
+                .expect("Unable to create Mmap")
+        };
         let _ = self.docstore_file.rewind();
         if let Err(e) = self.docstore_file.set_len(0) {
             println!("Unable to docstore_file.set_len in clear_index {:?}", e)
@@ -2346,6 +2347,12 @@ impl Index {
         let _ = self.delete_file.flush();
         self.delete_hashset.clear();
 
+        self.facets_file_mmap = unsafe {
+            MmapOptions::new()
+                .len(0)
+                .map_mut(&self.facets_file)
+                .expect("Unable to create Mmap")
+        };
         let _ = self.facets_file.rewind();
         if let Err(e) = self
             .facets_file
