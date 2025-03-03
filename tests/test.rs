@@ -4,8 +4,8 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    create_index, open_index, AccessType, DeleteDocument, FileType, IndexDocument, IndexDocuments,
-    IndexMetaObject, SimilarityType, TokenizerType,
+    AccessType, DeleteDocument, FileType, IndexDocument, IndexDocuments, IndexMetaObject,
+    SimilarityType, TokenizerType, create_index, open_index,
 };
 use seekstorm::search::{QueryType, ResultType, Search};
 use std::collections::HashSet;

@@ -213,9 +213,9 @@ pub(crate) fn top_fragments_from_field(
 
             if let Some(schema_field) = index.schema_map.get(&highlight.field) {
                 let text = match schema_field.field_type {
-                    FieldType::Text | FieldType::String => serde_json::from_str(&value.to_string())
-                        .unwrap_or(value.to_string())
-                        .to_string(),
+                    FieldType::Text | FieldType::String => {
+                        serde_json::from_value::<String>(value.clone()).unwrap_or(value.to_string())
+                    }
                     _ => value.to_string(),
                 };
 

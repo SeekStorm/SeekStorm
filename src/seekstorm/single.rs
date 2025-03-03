@@ -1,16 +1,16 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use crate::{
-    add_result::{add_result_singleterm_multifield, PostingListObjectSingle},
+    add_result::{PostingListObjectSingle, add_result_singleterm_multifield},
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
         AccessType, BlockObjectIndex, CompressionType, Index, NonUniquePostingListObjectQuery,
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
     },
-    intersection::{bitpacking32_get_delta, BlockObject},
+    intersection::{BlockObject, bitpacking32_get_delta},
     search::{FilterSparse, ResultType, SearchResult},
     utils::{read_u16, read_u64},
 };

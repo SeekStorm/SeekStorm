@@ -9,7 +9,7 @@ use num_derive::FromPrimitive;
 
 use num_format::{Locale, ToFormattedString};
 
-use search::{decode_posting_list_object, QueryType, Search};
+use search::{QueryType, Search, decode_posting_list_object};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::{
@@ -34,8 +34,8 @@ use crate::{
     search::{self, FacetFilter, Point, QueryFacet, Ranges, ResultObject, ResultSort, ResultType},
     tokenizer::tokenizer,
     utils::{
-        self, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, read_u8_ref, write_f32,
-        write_f64, write_i16, write_i32, write_i64, write_i8, write_u32, write_u64,
+        self, read_u8_ref, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, write_f32,
+        write_f64, write_i8, write_i16, write_i32, write_i64, write_u32, write_u64,
     },
 };
 
@@ -546,7 +546,6 @@ pub(crate) struct IndexedField {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IndexMetaObject {
     /// unique index ID
-    #[serde(skip)]
     pub id: u64,
     /// index name: used informational purposes
     pub name: String,
@@ -817,7 +816,7 @@ pub(crate) fn get_synonyms_map(
                         [&hashes[..i], &hashes[(i + 1)..]].concat()
                     };
 
-                    if let Some(item) = synonyms_map.get_mut(&hash.1 .0) {
+                    if let Some(item) = synonyms_map.get_mut(&hash.1.0) {
                         *item = item
                             .clone()
                             .into_iter()
@@ -826,11 +825,11 @@ pub(crate) fn get_synonyms_map(
                             .into_iter()
                             .collect();
                     } else {
-                        synonyms_map.insert(hash.1 .0, new_synonyms);
+                        synonyms_map.insert(hash.1.0, new_synonyms);
                     }
                 }
             } else {
-                synonyms_map.insert(hashes[0].1 .0, hashes[1..].to_vec());
+                synonyms_map.insert(hashes[0].1.0, hashes[1..].to_vec());
             }
         }
     }
@@ -1931,24 +1930,25 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                             if !mute {
                                 println!(
-                        "{} name {} id {} version {} {} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
-                        INDEX_FILENAME,
-                        index.meta.name,
-                        index.meta.id,
-                        index.index_format_version_major.to_string() + "." + &index.index_format_version_minor.to_string(),
-                        INDEX_FORMAT_VERSION_MAJOR.to_string() + "." + &INDEX_FORMAT_VERSION_MINOR.to_string(),
-
-                        index.level_index.len(),
-
-                        index.indexed_field_vec.len(),
-                        index.schema_map.len(),
-                        index.facets.len(),
-
-                        index.indexed_doc_count.to_formatted_string(&Locale::en),
-                        index.delete_hashset.len().to_formatted_string(&Locale::en),
-                        index.segment_number1,
-                        elapsed_time/1_000_000_000
-                    );
+                                    "{} name {} id {} version {} {} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
+                                    INDEX_FILENAME,
+                                    index.meta.name,
+                                    index.meta.id,
+                                    index.index_format_version_major.to_string()
+                                        + "."
+                                        + &index.index_format_version_minor.to_string(),
+                                    INDEX_FORMAT_VERSION_MAJOR.to_string()
+                                        + "."
+                                        + &INDEX_FORMAT_VERSION_MINOR.to_string(),
+                                    index.level_index.len(),
+                                    index.indexed_field_vec.len(),
+                                    index.schema_map.len(),
+                                    index.facets.len(),
+                                    index.indexed_doc_count.to_formatted_string(&Locale::en),
+                                    index.delete_hashset.len().to_formatted_string(&Locale::en),
+                                    index.segment_number1,
+                                    elapsed_time / 1_000_000_000
+                                );
                             }
                             let index_arc = Arc::new(RwLock::new(index));
                             warmup(&index_arc).await;
@@ -2243,8 +2243,8 @@ impl Index {
             if self.facets[i].field_type == FieldType::StringSet {
                 let mut hash_map: AHashMap<String, usize> = AHashMap::new();
                 for value in self.facets[i].values.iter() {
-                    for term in value.1 .0.iter() {
-                        *hash_map.entry(term.clone()).or_insert(0) += value.1 .1;
+                    for term in value.1.0.iter() {
+                        *hash_map.entry(term.clone()).or_insert(0) += value.1.1;
                     }
                 }
 
@@ -2282,7 +2282,7 @@ impl Index {
         for (i, facet) in self.facets.iter().enumerate() {
             if facet.field_type == FieldType::StringSet {
                 for (idx, value) in facet.values.iter().enumerate() {
-                    for term in value.1 .0.iter() {
+                    for term in value.1.0.iter() {
                         self.string_set_to_single_term_id_vec[i]
                             .entry(term.to_string())
                             .or_insert(AHashSet::from_iter(vec![idx as u16]))
@@ -2724,9 +2724,8 @@ impl IndexDocument for IndexArc {
 
                     let text = match schema_field.field_type {
                         FieldType::Text | FieldType::String => {
-                            serde_json::from_str(&field_value.to_string())
+                            serde_json::from_value::<String>(field_value.clone())
                                 .unwrap_or(field_value.to_string())
-                                .to_string()
                         }
                         _ => field_value.to_string(),
                     };
@@ -3048,9 +3047,8 @@ impl IndexDocument2 for IndexArc {
                         }
                         FieldType::String => {
                             if facet.values.len() < u16::MAX as usize {
-                                let key = serde_json::from_str(&field_value.to_string())
-                                    .unwrap_or(field_value.to_string())
-                                    .to_string();
+                                let key = serde_json::from_value::<String>(field_value.clone())
+                                    .unwrap_or(field_value.to_string());
 
                                 let key_string = key.clone();
                                 let key = vec![key];
@@ -3151,8 +3149,8 @@ impl IndexDocument2 for IndexArc {
                     if let Some(synonym) = synonym {
                         for synonym_term in synonym {
                             let mut term_clone = term.1.clone();
-                            term_clone.key_hash = synonym_term.1 .0;
-                            term_clone.key0 = synonym_term.1 .1;
+                            term_clone.key_hash = synonym_term.1.0;
+                            term_clone.key0 = synonym_term.1.1;
                             term_clone.term = synonym_term.0.clone();
 
                             if let Some(existing) = unique_terms.get_mut(&synonym_term.0) {

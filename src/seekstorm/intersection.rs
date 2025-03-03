@@ -2,8 +2,8 @@ use crate::{
     add_result::add_result_multiterm_multifield,
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
-        AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
-        PostingListObjectQuery, MAX_TERM_NUMBER, SORT_FLAG, SPEEDUP_FLAG,
+        AccessType, CompressionType, Index, MAX_TERM_NUMBER, NonUniquePostingListObjectQuery,
+        PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
     },
     intersection_simd::intersection_vector16,
     search::{FilterSparse, ResultType, SearchResult},
@@ -15,8 +15,8 @@ use std::{
     cmp,
     cmp::Ordering as OtherOrdering,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -2134,9 +2134,19 @@ pub(crate) async fn intersection_docid(
             },
 
             _ => {
-                println!("forbidden compression combination:  block: {}  t1: {} {} {} {:?}   t2: {} {} {} {:?} {} ",  block_id , 
-                t1, query_list[t1].term , query_list[t1].blocks[query_list[t1].p_block as usize].posting_count , query_list[t1].compression_type,
-                t2, query_list[t2].term , query_list[t2].blocks[query_list[t2].p_block as usize].posting_count , query_list[t2].compression_type , query_list.len());
+                println!(
+                    "forbidden compression combination:  block: {}  t1: {} {} {} {:?}   t2: {} {} {} {:?} {} ",
+                    block_id,
+                    t1,
+                    query_list[t1].term,
+                    query_list[t1].blocks[query_list[t1].p_block as usize].posting_count,
+                    query_list[t1].compression_type,
+                    t2,
+                    query_list[t2].term,
+                    query_list[t2].blocks[query_list[t2].p_block as usize].posting_count,
+                    query_list[t2].compression_type,
+                    query_list.len()
+                );
             }
         }
 

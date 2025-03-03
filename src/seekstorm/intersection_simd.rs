@@ -1,9 +1,9 @@
 #[cfg(target_arch = "x86_64")]
 use std::{
     arch::x86_64::{
-        __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
-        _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
-        _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
+        __m128i, _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS, _blsr_u32, _mm_cmpestrm,
+        _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128, _mm_loadu_si128, _mm_shuffle_epi8,
+        _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
     },
     mem::size_of,
 };
@@ -20,6 +20,7 @@ use crate::{
     add_result::add_result_multiterm_multifield,
     index::{Index, NonUniquePostingListObjectQuery, PostingListObjectQuery},
     search::{FilterSparse, ResultType, SearchResult},
+    utils::read_u16,
 };
 
 /// Fast SIMD intersection and union partially ported and modified from Daniel Lemire's CRoaring project (which is dual licensed Apache/MIT).
@@ -256,8 +257,6 @@ pub(crate) fn intersection_vector16(
     phrase_query: bool,
     all_terms_frequent: bool,
 ) {
-    use crate::utils::read_u16;
-
     unsafe {
         let c = [0u16; 8];
 
@@ -472,8 +471,8 @@ pub(crate) fn intersection_vector16(
                 continue;
             }
 
-            let v_a = vld1q_dup_u16(a[(i_a * 2)..].as_ptr());
-            let v_b = vld1q_u16(b[(i_b * 2)..].as_ptr());
+            let v_a = vld1q_dup_u16(a[(i_a * 2)..].as_ptr() as *const _);
+            let v_b = vld1q_u16(b[(i_b * 2)..].as_ptr() as *const _);
             let res_v = vceqq_u16(v_a, v_b);
             let mut res = [0u16; 8];
             vst1q_u16(res.as_mut_ptr(), res_v);

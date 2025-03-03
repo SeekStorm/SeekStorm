@@ -1,6 +1,6 @@
-use base64::{engine::general_purpose, Engine};
+use base64::{Engine, engine::general_purpose};
 use colored::Colorize;
-use crossbeam_channel::{bounded, select, Receiver};
+use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
     index::{SimilarityType, TokenizerType},
     ingest::{IngestJson, IngestPdf},
@@ -20,7 +20,7 @@ use crate::{
         create_apikey_api, create_index_api, delete_apikey_api, generate_openapi, open_all_apikeys,
     },
     http_server::{calculate_hash, http_server},
-    multi_tenancy::{get_apikey_hash, ApikeyObject, ApikeyQuotaObject},
+    multi_tenancy::{ApikeyObject, ApikeyQuotaObject, get_apikey_hash},
 };
 
 const WIKIPEDIA_FILENAME: &str = "wiki-articles.json";
@@ -35,7 +35,6 @@ fn ctrl_channel() -> Result<Receiver<()>, ctrlc::Error> {
 }
 
 async fn commandline(sender: crossbeam_channel::Sender<String>) {
-    #[allow(clippy::manual_flatten)]
     for line in std::io::stdin().lines() {
         if let Ok(line) = line {
             if sender.send(line.clone()).is_err() {
@@ -45,6 +44,9 @@ async fn commandline(sender: crossbeam_channel::Sender<String>) {
             if line.to_lowercase() == "quit" {
                 return;
             }
+        } else {
+            println!("stdin read error, try using -ti parameter in docker environment");
+            break;
         }
     }
 }

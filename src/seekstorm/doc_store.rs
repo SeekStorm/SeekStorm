@@ -1,14 +1,14 @@
 use memmap2::Mmap;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{self, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use crate::geo_search::euclidian_distance;
-use crate::highlighter::{top_fragments_from_field, Highlighter};
+use crate::highlighter::{Highlighter, top_fragments_from_field};
 use crate::index::{
-    AccessType, DistanceField, Document, FieldType, Index, FILE_PATH, ROARING_BLOCK_SIZE,
+    AccessType, DistanceField, Document, FILE_PATH, FieldType, Index, ROARING_BLOCK_SIZE,
 };
 use crate::search::FacetValue;
 use crate::utils::{read_u32, write_u32};

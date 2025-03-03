@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.18] - 2025-03-03
+
+### Fixed
+
+- Fixes intersection_vector16 for target_arch != "x86_64".
+- Fixes issue where multiple indices per API key were not correctly reloaded after server restart (IndexMetaObject.id #[serde(skip)] removed).
+- Fixes issue #39 with commandline() in server.rs for docker environment without -ti parameter (run interactively with a tty session).
+
+### Changed
+
+- Updated to Rust edition 2024.
+- Changed serde_json::from_str(&value.to_string()).unwrap_or(value.to_string()).to_string() -> serde_json::from_value::<String>(value.clone()).unwrap_or(value.to_string())
+
 ## [0.12.17] - 2025-02-15
 
 ### Fixed

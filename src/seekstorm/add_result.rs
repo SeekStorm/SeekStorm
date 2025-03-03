@@ -1,19 +1,19 @@
 use ahash::AHashSet;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::cmp::Ordering;
 
 use crate::{
     geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
-        get_document_length_compressed_mmap, AccessType, CompressionType, Index,
-        NonUniquePostingListObjectQuery, PostingListObjectQuery, SimilarityType, FIELD_STOP_BIT_1,
-        FIELD_STOP_BIT_2, SPEEDUP_FLAG, STOP_BIT,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index,
+        NonUniquePostingListObjectQuery, PostingListObjectQuery, SPEEDUP_FLAG, STOP_BIT,
+        SimilarityType, get_document_length_compressed_mmap,
     },
     min_heap,
     search::{FilterSparse, Ranges, ResultType, SearchResult},
     utils::{
-        read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
-        read_u8,
+        read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u8, read_u16, read_u32,
+        read_u64,
     },
 };
 
@@ -1885,7 +1885,7 @@ pub(crate) fn read_multifield_vec(
                 positions_count |= positions_count2 & 0b01111111
             } else {
                 positions_count = (positions_count << 7)
-                    | (positions_count2 & 0b01111111) << 7
+                    | ((positions_count2 & 0b01111111) << 7)
                     | (byte_array[*positions_pointer] & 0b01111111) as u32;
                 *positions_pointer += 1;
             }
@@ -1904,7 +1904,7 @@ pub(crate) fn read_multifield_vec(
                 positions_count |= positions_count2 & 0b01111111
             } else {
                 positions_count = (positions_count << 7)
-                    | (positions_count2 & 0b01111111) << 7
+                    | ((positions_count2 & 0b01111111) << 7)
                     | (byte_array[*positions_pointer] & 0b01111111) as u32;
                 *positions_pointer += 1;
             }
@@ -1932,14 +1932,14 @@ pub(crate) fn read_multifield_vec(
                 *positions_pointer += 1;
 
                 field_id_position_count =
-                    field_id_position_count << 7 | (byte as usize & 0b01111111);
+                    (field_id_position_count << 7) | (byte as usize & 0b01111111);
 
                 if (byte & STOP_BIT) == 0 {
                     byte = byte_array[*positions_pointer];
                     *positions_pointer += 1;
 
                     field_id_position_count =
-                        field_id_position_count << 7 | (byte as usize & 0b01111111);
+                        (field_id_position_count << 7) | (byte as usize & 0b01111111);
                 }
             }
 
@@ -2229,7 +2229,7 @@ pub(crate) fn read_singlefield_value(
             positions_count_internal |= positions_count2 & 0b01111111
         } else {
             positions_count_internal = (positions_count_internal << 7)
-                | (positions_count2 & 0b01111111) << 7
+                | ((positions_count2 & 0b01111111) << 7)
                 | (byte_array[*positions_pointer as usize] & 0b01111111) as u32;
         }
     };

@@ -1,6 +1,6 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use ahash::{AHashMap, AHashSet};
@@ -8,11 +8,11 @@ use smallvec::SmallVec;
 
 use crate::{
     add_result::{
-        facet_count, is_facet_filter, read_multifield_vec, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA,
+        B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA, facet_count, is_facet_filter, read_multifield_vec,
     },
     index::{
-        Index, NonUniquePostingListObjectQuery, NonUniqueTermObject, PostingListObjectQuery,
-        SimilarityType, TermObject, DUMMY_VEC_8, STOP_BIT,
+        DUMMY_VEC_8, Index, NonUniquePostingListObjectQuery, NonUniqueTermObject,
+        PostingListObjectQuery, STOP_BIT, SimilarityType, TermObject,
     },
     min_heap,
     search::{FilterSparse, QueryType, ResultType, SearchResult},

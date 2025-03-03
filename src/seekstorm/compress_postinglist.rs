@@ -3,12 +3,12 @@ use std::cmp;
 use smallvec::SmallVec;
 
 use crate::{
-    add_result::{decode_positions_commit, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
+    add_result::{B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA, decode_positions_commit},
     compatible::_lzcnt_u32,
-    index::{CompressionType, Index, SimilarityType, STOPWORDS, STOP_BIT},
+    index::{CompressionType, Index, STOP_BIT, STOPWORDS, SimilarityType},
     utils::{
-        block_copy, read_u16_ref, read_u32_ref, write_u16, write_u16_ref, write_u32_ref,
-        write_u64_ref, write_u8_ref,
+        block_copy, read_u16_ref, read_u32_ref, write_u8_ref, write_u16, write_u16_ref,
+        write_u32_ref, write_u64_ref,
     },
 };
 

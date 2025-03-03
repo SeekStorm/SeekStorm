@@ -14,12 +14,12 @@ use utoipa::{OpenApi, ToSchema};
 
 use seekstorm::{
     commit::Commit,
-    highlighter::{highlighter, Highlight},
+    highlighter::{Highlight, highlighter},
     index::{
-        create_index, open_index, AccessType, DeleteDocument, DeleteDocuments,
-        DeleteDocumentsByQuery, DistanceField, Document, Facet, FileType, IndexArc, IndexDocument,
-        IndexDocuments, IndexMetaObject, MinMaxFieldJson, SchemaField, SimilarityType, Synonym,
-        TokenizerType, UpdateDocument, UpdateDocuments,
+        AccessType, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
+        Document, Facet, FileType, IndexArc, IndexDocument, IndexDocuments, IndexMetaObject,
+        MinMaxFieldJson, SchemaField, SimilarityType, Synonym, TokenizerType, UpdateDocument,
+        UpdateDocuments, create_index, open_index,
     },
     ingest::IndexPdfBytes,
     search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
@@ -28,9 +28,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::{
+    VERSION,
     http_server::calculate_hash,
     multi_tenancy::{ApikeyObject, ApikeyQuotaObject},
-    VERSION,
 };
 
 const APIKEY_PATH: &str = "apikey.json";

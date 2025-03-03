@@ -6,7 +6,7 @@ use crate::{
     index::{FieldType, Index},
     search::{FacetValue, ResultSortIndex, SortOrder},
     utils::{
-        read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
+        read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32, read_u64,
     },
 };
 
@@ -325,7 +325,7 @@ impl<'a> MinHeap<'a> {
                         .get_index((facet_id_1).into())
                         .unwrap()
                         .1
-                         .0[0]
+                        .0[0]
                         .clone();
 
                     let facet_value_2 = self.index.facets[field.idx]
@@ -333,7 +333,7 @@ impl<'a> MinHeap<'a> {
                         .get_index((facet_id_2).into())
                         .unwrap()
                         .1
-                         .0[0]
+                        .0[0]
                         .clone();
 
                     let order = if field.order == SortOrder::Descending {
@@ -364,7 +364,7 @@ impl<'a> MinHeap<'a> {
                         .get_index((facet_id_1).into())
                         .unwrap()
                         .1
-                         .0[0]
+                        .0[0]
                         .clone();
 
                     let facet_value_2 = self.index.facets[field.idx]
@@ -372,7 +372,7 @@ impl<'a> MinHeap<'a> {
                         .get_index((facet_id_2).into())
                         .unwrap()
                         .1
-                         .0[0]
+                        .0[0]
                         .clone();
 
                     let order = if field.order == SortOrder::Descending {

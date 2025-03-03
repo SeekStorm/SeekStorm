@@ -11,21 +11,20 @@ use std::{
 
 use crate::{
     add_result::{
-        decode_positions_multiterm_multifield, decode_positions_multiterm_singlefield,
-        get_next_position_multifield, get_next_position_singlefield, B,
-        DOCUMENT_LENGTH_COMPRESSION, K,
+        B, DOCUMENT_LENGTH_COMPRESSION, K, decode_positions_multiterm_multifield,
+        decode_positions_multiterm_singlefield, get_next_position_multifield,
+        get_next_position_singlefield,
     },
     compatible::{_blsr_u64, _mm_tzcnt_64},
     compress_postinglist::compress_postinglist,
     index::{
-        update_list_max_impact_score, update_stopwords_posting_counts, warmup, AccessType,
-        BlockObjectIndex, CompressionType, Index, IndexArc, LevelIndex,
-        NonUniquePostingListObjectQuery, PostingListObjectIndex, PostingListObjectQuery,
-        TermObject, FACET_VALUES_FILENAME, MAX_POSITIONS_PER_TERM, POSTING_BUFFER_SIZE,
-        ROARING_BLOCK_SIZE, STOPWORDS,
+        AccessType, BlockObjectIndex, CompressionType, FACET_VALUES_FILENAME, Index, IndexArc,
+        LevelIndex, MAX_POSITIONS_PER_TERM, NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE,
+        PostingListObjectIndex, PostingListObjectQuery, ROARING_BLOCK_SIZE, STOPWORDS, TermObject,
+        update_list_max_impact_score, update_stopwords_posting_counts, warmup,
     },
     utils::{
-        block_copy, block_copy_mut, read_u16, read_u32, read_u64, read_u8, write_u16, write_u32,
+        block_copy, block_copy_mut, read_u8, read_u16, read_u32, read_u64, write_u16, write_u32,
         write_u64,
     },
 };

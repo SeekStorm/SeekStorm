@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    fs::{metadata, File},
+    fs::{File, metadata},
     io::{self, BufReader, Read},
     path::Path,
     sync::Arc,
@@ -12,7 +12,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use colored::Colorize;
 use num_format::{Locale, ToFormattedString};
 use pdfium_render::prelude::{PdfDocumentMetadataTagType, Pdfium};
-use serde_json::{json, Deserializer};
+use serde_json::{Deserializer, json};
 use tokio::sync::RwLock;
 use walkdir::WalkDir;
 
@@ -106,7 +106,9 @@ impl IndexPdfFile for IndexArc {
                 Err("can't read PDF".to_string())
             }
         } else {
-            println!("Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries");
+            println!(
+                "Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries"
+            );
             Err("Pdfium library not found".to_string())
         }
     }
@@ -174,7 +176,9 @@ impl IndexPdfBytes for IndexArc {
                 Err("can't read PDF".to_string())
             }
         } else {
-            println!("Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries");
+            println!(
+                "Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries"
+            );
             Err("Pdfium library not found".to_string())
         }
     }
@@ -448,7 +452,9 @@ impl IngestPdf for IndexArc {
                 }
             }
         } else {
-            println!("Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries")
+            println!(
+                "Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries"
+            )
         }
     }
 }

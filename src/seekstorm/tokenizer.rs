@@ -5,8 +5,8 @@ use finl_unicode::categories::{CharacterCategories, MinorCategory};
 
 use crate::{
     index::{
-        Index, NonUniqueTermObject, TermObject, TokenizerType, HASHER_32, HASHER_64,
-        MAX_TERM_NUMBER, STOPWORD_HASHSET,
+        HASHER_32, HASHER_64, Index, MAX_TERM_NUMBER, NonUniqueTermObject, STOPWORD_HASHSET,
+        TermObject, TokenizerType,
     },
     search::QueryType,
 };

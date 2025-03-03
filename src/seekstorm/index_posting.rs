@@ -6,8 +6,8 @@ use crate::{
     commit::KEY_HEAD_SIZE,
     compress_postinglist::compress_positions,
     index::{
-        AccessType, CompressionType, Index, PostingListObject0, TermObject, FIELD_STOP_BIT_1,
-        FIELD_STOP_BIT_2, POSTING_BUFFER_SIZE, ROARING_BLOCK_SIZE, STOP_BIT,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index,
+        POSTING_BUFFER_SIZE, PostingListObject0, ROARING_BLOCK_SIZE, STOP_BIT, TermObject,
     },
     search::binary_search,
     utils::{block_copy_mut, read_u16, read_u32, write_u16_ref, write_u32},
@@ -583,7 +583,16 @@ impl Index {
         };
 
         if !embed_flag && positions_stack != compressed_position_size {
-            println!("size conflict: term {} bigram {} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {}",term.term,term.is_bigram, only_longest_field,positions_count_sum, positions_stack, compressed_position_size,positions_compressed_pointer);
+            println!(
+                "size conflict: term {} bigram {} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {}",
+                term.term,
+                term.is_bigram,
+                only_longest_field,
+                positions_count_sum,
+                positions_stack,
+                compressed_position_size,
+                positions_compressed_pointer
+            );
         }
 
         write_u16_ref(

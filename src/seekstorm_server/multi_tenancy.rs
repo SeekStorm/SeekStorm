@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use seekstorm::index::IndexArc;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

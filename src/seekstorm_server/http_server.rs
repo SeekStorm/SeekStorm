@@ -1,5 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::io::Write;
@@ -10,14 +10,14 @@ use std::sync::Arc;
 use std::{convert::Infallible, net::SocketAddr};
 
 use chrono::Utc;
-use rand::rngs::OsRng;
 use rand::TryRngCore;
+use rand::rngs::OsRng;
 
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::{
+    Method, Request, Response, StatusCode,
     body::{Bytes, Incoming},
     service::service_fn,
-    Method, Request, Response, StatusCode,
 };
 use hyper_util::{
     rt::{TokioExecutor, TokioIo},
@@ -32,17 +32,17 @@ use sha2::Sha256;
 
 use tokio::net::TcpListener;
 
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 
-use crate::api_endpoints::update_document_api;
-use crate::api_endpoints::update_documents_api;
 use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
+use crate::api_endpoints::update_document_api;
+use crate::api_endpoints::update_documents_api;
+use crate::api_endpoints::{GetDocumentRequest, delete_apikey_api};
+use crate::api_endpoints::{SearchRequestObject, create_index_api};
 use crate::api_endpoints::{add_synonyms_api, get_index_info_api, set_synonyms_api};
 use crate::api_endpoints::{clear_index_api, close_index_api};
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
-use crate::api_endpoints::{create_index_api, SearchRequestObject};
-use crate::api_endpoints::{delete_apikey_api, GetDocumentRequest};
 use crate::api_endpoints::{
     delete_document_by_object_api, delete_document_by_parameter_api, index_documents_api,
 };
@@ -51,8 +51,8 @@ use crate::api_endpoints::{delete_index_api, get_file_api};
 use crate::api_endpoints::{get_apikey_indices_info_api, index_file_api};
 use crate::api_endpoints::{get_document_api, get_synonyms_api};
 use crate::api_endpoints::{index_document_api, query_index_api_get, query_index_api_post};
-use crate::multi_tenancy::get_apikey_hash;
 use crate::multi_tenancy::ApikeyObject;
+use crate::multi_tenancy::get_apikey_hash;
 use crate::{MASTER_KEY_SECRET, VERSION};
 
 const INDEX_HTML: &str = include_str!("web/index.html");

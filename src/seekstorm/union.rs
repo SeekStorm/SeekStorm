@@ -10,7 +10,7 @@ use crate::{
     search::{FilterSparse, Ranges, ResultType, SearchResult},
     single::{single_blockid, single_docid},
     utils::{
-        block_copy, read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32,
+        block_copy, read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32,
         read_u64, write_u64,
     },
 };
@@ -741,7 +741,7 @@ pub(crate) async fn union_count<'a>(
     if !search_result.query_facets.is_empty() || !facet_filter.is_empty() {
         let block_id_msb = block_id << 16;
         for ulong_pos in 0usize..1024 {
-            let ulong_pos_msb = block_id_msb | ulong_pos << 6;
+            let ulong_pos_msb = block_id_msb | (ulong_pos << 6);
             let mut intersect = read_u64(&bitmap_0, ulong_pos * 8);
             'next: while intersect != 0 {
                 let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as usize;

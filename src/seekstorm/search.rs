@@ -5,15 +5,15 @@ use crate::min_heap::Result;
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
 use crate::utils::{
-    read_f32, read_f64, read_i16, read_i32, read_i64, read_i8, read_u16, read_u32, read_u64,
-    read_u8,
+    read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u8, read_u16, read_u32,
+    read_u64,
 };
 use crate::{
     index::{
-        get_max_score, AccessType, BlockObjectIndex, Index, IndexArc,
-        NonUniquePostingListObjectQuery, NonUniqueTermObject, PostingListObjectIndex,
-        PostingListObjectQuery, QueueObject, SegmentIndex, SimilarityType, TermObject, DUMMY_VEC,
-        DUMMY_VEC_8, MAX_POSITIONS_PER_TERM, SPEEDUP_FLAG,
+        AccessType, BlockObjectIndex, DUMMY_VEC, DUMMY_VEC_8, Index, IndexArc,
+        MAX_POSITIONS_PER_TERM, NonUniquePostingListObjectQuery, NonUniqueTermObject,
+        PostingListObjectIndex, PostingListObjectQuery, QueueObject, SPEEDUP_FLAG, SegmentIndex,
+        SimilarityType, TermObject, get_max_score,
     },
     intersection::intersection_blockid,
     min_heap::MinHeap,
@@ -28,8 +28,8 @@ use smallvec::SmallVec;
 use std::mem;
 use std::ops::Range;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 use utoipa::ToSchema;
 
@@ -416,7 +416,7 @@ impl Index {
                         .get_index((facet_id).into())
                         .unwrap();
 
-                    FacetValue::String(facet_value.1 .0[0].clone())
+                    FacetValue::String(facet_value.1.0[0].clone())
                 }
 
                 FieldType::StringSet => {
@@ -430,7 +430,7 @@ impl Index {
                         .get_index((facet_id).into())
                         .unwrap();
 
-                    FacetValue::StringSet(facet_value.1 .0.clone())
+                    FacetValue::StringSet(facet_value.1.0.clone())
                 }
 
                 FieldType::Point => {
@@ -2009,7 +2009,7 @@ impl Search for IndexArc {
                                     .get_index((*value.0).into())
                                     .unwrap();
 
-                                for term in value2.1 .0.iter() {
+                                for term in value2.1.0.iter() {
                                     *hash_map.entry(term.clone()).or_insert(0) += value.1;
                                 }
                             }
