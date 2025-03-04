@@ -546,6 +546,7 @@ pub(crate) struct IndexedField {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IndexMetaObject {
     /// unique index ID
+    #[serde(skip)]
     pub id: u64,
     /// index name: used informational purposes
     pub name: String,
@@ -1479,7 +1480,15 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
     match File::open(Path::new(index_path).join(META_FILENAME)) {
         Ok(meta_file) => {
-            let meta = serde_json::from_reader(BufReader::new(meta_file)).unwrap();
+            let mut meta: IndexMetaObject =
+                serde_json::from_reader(BufReader::new(meta_file)).unwrap();
+
+            meta.id = index_path
+                .components()
+                .last()
+                .and_then(|c| c.as_os_str().to_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or_default();
 
             match File::open(Path::new(index_path).join(SCHEMA_FILENAME)) {
                 Ok(schema_file) => {
