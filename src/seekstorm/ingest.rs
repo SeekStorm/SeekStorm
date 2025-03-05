@@ -11,6 +11,7 @@ use std::{
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use colored::Colorize;
 use num_format::{Locale, ToFormattedString};
+#[cfg(feature = "pdf")]
 use pdfium_render::prelude::{PdfDocumentMetadataTagType, Pdfium};
 use serde_json::{Deserializer, json};
 use tokio::sync::RwLock;
@@ -24,6 +25,12 @@ use crate::{
 
 use lazy_static::lazy_static;
 
+#[cfg(feature = "pdf")]
+type PdfDocument<'a> = pdfium_render::prelude::PdfDocument<'a>;
+#[cfg(not(feature = "pdf"))]
+type PdfDocument<'a> = ();
+
+#[cfg(feature = "pdf")]
 lazy_static! {
     pub(crate) static ref pdfium_option: Option<Pdfium> = if let Ok(pdfium) =
         Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
@@ -76,40 +83,48 @@ impl IndexPdfFile for IndexArc {
     /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
     /// - copies all ingested pdf files to "files" subdirectory in index
     async fn index_pdf_file(&self, file_path: &Path) -> Result<(), String> {
-        if let Some(pdfium) = pdfium_option.as_ref() {
-            let file_size = file_path.metadata().unwrap().len() as usize;
+        #[cfg(feature = "pdf")]
+        {
+            if let Some(pdfium) = pdfium_option.as_ref() {
+                let file_size = file_path.metadata().unwrap().len() as usize;
 
-            let date: DateTime<Utc> = if let Ok(metadata) = metadata(file_path) {
-                if let Ok(time) = metadata.created() {
-                    time
+                let date: DateTime<Utc> = if let Ok(metadata) = metadata(file_path) {
+                    if let Ok(time) = metadata.created() {
+                        time
+                    } else {
+                        SystemTime::now()
+                    }
                 } else {
                     SystemTime::now()
                 }
-            } else {
-                SystemTime::now()
-            }
-            .into();
-            let file_date = date.timestamp();
+                .into();
+                let file_date = date.timestamp();
 
-            if let Ok(pdf) = pdfium.load_pdf_from_file(file_path, None) {
-                self.index_pdf(
-                    file_path,
-                    file_size,
-                    file_date,
-                    FileType::Path(file_path.into()),
-                    pdf,
-                )
-                .await;
-                Ok(())
+                if let Ok(pdf) = pdfium.load_pdf_from_file(file_path, None) {
+                    self.index_pdf(
+                        file_path,
+                        file_size,
+                        file_date,
+                        FileType::Path(file_path.into()),
+                        pdf,
+                    )
+                    .await;
+                    Ok(())
+                } else {
+                    println!("can't read PDF {} {}", file_path.display(), file_size);
+                    Err("can't read PDF".to_string())
+                }
             } else {
-                println!("can't read PDF {} {}", file_path.display(), file_size);
-                Err("can't read PDF".to_string())
+                println!(
+                    "Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries"
+                );
+                Err("Pdfium library not found".to_string())
             }
-        } else {
-            println!(
-                "Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries"
-            );
-            Err("Pdfium library not found".to_string())
+        }
+        #[cfg(not(feature = "pdf"))]
+        {
+            println!("pdf feature flag not enabled");
+            Err("pdf feature flag not enabled".to_string())
         }
     }
 }
@@ -143,6 +158,7 @@ pub trait IndexPdfBytes {
     ) -> Result<(), String>;
 }
 
+#[cfg(feature = "pdf")]
 impl IndexPdfBytes for IndexArc {
     /// Index PDF file from byte array.
     /// - converts pdf to text and indexes it
@@ -184,6 +200,28 @@ impl IndexPdfBytes for IndexArc {
     }
 }
 
+#[cfg(not(feature = "pdf"))]
+impl IndexPdfBytes for IndexArc {
+    /// Index PDF file from byte array.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    /// # Arguments
+    /// * `file_path` - Path to the file (fallback, if title and date can't be extracted)
+    /// * `file_date` - File creation date (Unix timestamp: the number of seconds since 1 January 1970) (fallback, if date can't be extracted)
+    /// * `file_bytes` - Byte array of the file
+    async fn index_pdf_bytes(
+        &self,
+        file_path: &Path,
+        file_date: i64,
+        file_bytes: &[u8],
+    ) -> Result<(), String> {
+        println!("pdf feature flag not enabled");
+        Err("pdf feature flag not enabled".to_string())
+    }
+}
+
 /// Index PDF file from local disk or byte array.
 /// - converts pdf to text and indexes it
 /// - extracts title from metatag, or first line of text, or from filename
@@ -203,10 +241,11 @@ trait IndexPdf {
         file_size: usize,
         file_date: i64,
         file: FileType,
-        pdf: pdfium_render::prelude::PdfDocument<'_>,
+        pdf: PdfDocument<'_>,
     );
 }
 
+#[cfg(feature = "pdf")]
 impl IndexPdf for IndexArc {
     /// Index PDF file from local disk or byte array.
     /// - converts pdf to text and indexes it
@@ -219,7 +258,7 @@ impl IndexPdf for IndexArc {
         file_size: usize,
         file_date: i64,
         file: FileType,
-        pdf: pdfium_render::prelude::PdfDocument<'_>,
+        pdf: PdfDocument<'_>,
     ) {
         let mut text = String::with_capacity(file_size);
 
@@ -356,6 +395,25 @@ impl IndexPdf for IndexArc {
     }
 }
 
+#[cfg(not(feature = "pdf"))]
+impl IndexPdf for IndexArc {
+    /// Index PDF file from local disk or byte array.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    async fn index_pdf(
+        &self,
+        file_path: &Path,
+        file_size: usize,
+        file_date: i64,
+        file: FileType,
+        pdf: PdfDocument<'_>,
+    ) {
+        println!("pdf feature flag not enabled");
+    }
+}
+
 pub(crate) async fn path_recurse(
     index_arc: &Arc<RwLock<Index>>,
     data_path: &Path,
@@ -397,6 +455,7 @@ pub trait IngestPdf {
     async fn ingest_pdf(&mut self, file_path: &Path);
 }
 
+#[cfg(feature = "pdf")]
 impl IngestPdf for IndexArc {
     /// Index PDF files from local disk directory and sub-directories or from file.
     /// - converts pdf to text and indexes it
@@ -456,6 +515,18 @@ impl IngestPdf for IndexArc {
                 "Pdfium library not found: download and copy into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries"
             )
         }
+    }
+}
+
+#[cfg(not(feature = "pdf"))]
+impl IngestPdf for IndexArc {
+    /// Index PDF files from local disk directory and sub-directories or from file.
+    /// - converts pdf to text and indexes it
+    /// - extracts title from metatag, or first line of text, or from filename
+    /// - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
+    /// - copies all ingested pdf files to "files" subdirectory in index
+    async fn ingest_pdf(&mut self, data_path: &Path) {
+        println!("pdf feature flag not enabled");
     }
 }
 

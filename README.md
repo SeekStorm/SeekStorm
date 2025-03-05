@@ -257,6 +257,26 @@ cargo build --release
 ```
 cargo doc --no-deps
 ```
+
+### Feature Flags
+
+#### zh (default)
+
+- Enables TokenizerType.UnicodeAlphanumericZH that implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
+
+#### pdf (default)
+
+- Enables PDF ingestion
+
+You can disable the SeekStorm default features by using default-features = false in the cargo.toml of your application.
+
+This can be useful to reduce the size of your application or if there are dependency version conflicts.
+
+```cargo
+[dependencies]
+seekstorm = { version = "0.12.19", default-features = false }
+```
+
 **Access documentation locally**
 
 SeekStorm\target\doc\seekstorm\index.html  

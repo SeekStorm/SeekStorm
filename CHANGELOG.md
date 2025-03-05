@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.20] - 2025-03-05
+
+### Changed
+
+- PDF ingestion via `pdfium` dependency moved behind a new `pdf` feature flag which is enabled by default.  
+  You can disable the SeekStorm default features by using `seekstorm = { version = "0.12.19", default-features = false }` in the cargo.toml of your application.  
+  This can be useful to reduce the size of your application or if there are dependency version conflicts.
+- feature flags documented in README.md
+
 ## [0.12.19] - 2025-03-04
 
 ### Fixed
