@@ -9,6 +9,7 @@ use num_derive::FromPrimitive;
 
 use num_format::{Locale, ToFormattedString};
 
+use rust_stemmers::{Algorithm, Stemmer};
 use search::{QueryType, Search, decode_posting_list_object};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -160,6 +161,51 @@ pub enum TokenizerType {
     /// Requires feature #[cfg(feature = "zh")]
     #[cfg(feature = "zh")]
     UnicodeAlphanumericZH = 3,
+}
+
+/// Defines stemming behavior, reducing inflected words to their word stem, base or root form.
+/// Stemming increases recall, but decreases precision. It can introduce false positive results.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default, ToSchema)]
+pub enum StemmerType {
+    /// No stemming
+    #[default]
+    None = 0,
+    /// Arabic stemmer
+    Arabic = 1,
+    /// Danish stemmer
+    Danish = 2,
+    /// Dutch stemmer
+    Dutch = 3,
+    /// English stemmer
+    English = 4,
+    /// Finnish stemmer
+    Finnish = 5,
+    /// French stemmer
+    French = 6,
+    /// German stemmer
+    German = 7,
+    /// Hungarian stemmer
+    Greek = 8,
+    /// Hungarian stemmer
+    Hungarian = 9,
+    /// Italian stemmer
+    Italian = 10,
+    /// Norwegian stemmer
+    Norwegian = 11,
+    /// Portuguese stemmer
+    Portuguese = 12,
+    /// Romanian stemmer
+    Romanian = 13,
+    /// Russian stemmer
+    Russian = 14,
+    /// Spanish stemmer
+    Spanish = 15,
+    /// Swedish stemmer
+    Swedish = 16,
+    /// Tamil stemmer
+    Tamil = 17,
+    /// Turkish stemmer
+    Turkish = 18,
 }
 
 pub(crate) struct LevelIndex {
@@ -554,9 +600,16 @@ pub struct IndexMetaObject {
     pub similarity: SimilarityType,
     /// TokenizerType defines the tokenizer behavior: AsciiAlphabetic, UnicodeAlphanumeric, UnicodeAlphanumericFolded, UnicodeAlphanumericZH
     pub tokenizer: TokenizerType,
+    /// StemmerType defines the stemming behavior: None, Arabic, Armenian, Danish, Dutch, English, French, German, Greek, Hungarian, Italian, Norwegian, Portuguese, Romanian, Russian, Spanish, Swedish, Tamil, Turkish
+    #[serde(default = "stemmer_type_api")]
+    pub stemmer: StemmerType,
 
     /// AccessType defines where the index resides during search: Ram or Mmap
     pub access_type: AccessType,
+}
+
+fn stemmer_type_api() -> StemmerType {
+    StemmerType::None
 }
 
 #[derive(Debug, Clone, Default)]
@@ -777,6 +830,7 @@ pub struct Index {
 
     #[cfg(feature = "zh")]
     pub(crate) word_segmentation_option: Option<WordSegmentationTM>,
+    pub(crate) stemmer: Option<Stemmer>,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -1039,6 +1093,28 @@ pub fn create_index(
                 None
             };
 
+            let stemmer = match meta.stemmer {
+                StemmerType::Arabic => Some(Stemmer::create(Algorithm::Arabic)),
+                StemmerType::Danish => Some(Stemmer::create(Algorithm::Danish)),
+                StemmerType::Dutch => Some(Stemmer::create(Algorithm::Dutch)),
+                StemmerType::English => Some(Stemmer::create(Algorithm::English)),
+                StemmerType::Finnish => Some(Stemmer::create(Algorithm::Finnish)),
+                StemmerType::French => Some(Stemmer::create(Algorithm::French)),
+                StemmerType::German => Some(Stemmer::create(Algorithm::German)),
+                StemmerType::Greek => Some(Stemmer::create(Algorithm::Greek)),
+                StemmerType::Hungarian => Some(Stemmer::create(Algorithm::Hungarian)),
+                StemmerType::Italian => Some(Stemmer::create(Algorithm::Italian)),
+                StemmerType::Norwegian => Some(Stemmer::create(Algorithm::Norwegian)),
+                StemmerType::Portuguese => Some(Stemmer::create(Algorithm::Portuguese)),
+                StemmerType::Romanian => Some(Stemmer::create(Algorithm::Romanian)),
+                StemmerType::Russian => Some(Stemmer::create(Algorithm::Russian)),
+                StemmerType::Spanish => Some(Stemmer::create(Algorithm::Spanish)),
+                StemmerType::Swedish => Some(Stemmer::create(Algorithm::Swedish)),
+                StemmerType::Tamil => Some(Stemmer::create(Algorithm::Tamil)),
+                StemmerType::Turkish => Some(Stemmer::create(Algorithm::Turkish)),
+                _ => None,
+            };
+
             let mut index = Index {
                 index_format_version_major: INDEX_FORMAT_VERSION_MAJOR,
                 index_format_version_minor: INDEX_FORMAT_VERSION_MINOR,
@@ -1112,6 +1188,7 @@ pub fn create_index(
                 synonyms_map,
                 #[cfg(feature = "zh")]
                 word_segmentation_option,
+                stemmer,
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -2310,6 +2387,7 @@ impl Index {
                 .map(&self.index_file)
                 .expect("Unable to create Mmap")
         };
+
         let _ = self.index_file.rewind();
         if let Err(e) = self.index_file.set_len(0) {
             println!("Unable to index_file.set_len in clear_index {:?}", e)

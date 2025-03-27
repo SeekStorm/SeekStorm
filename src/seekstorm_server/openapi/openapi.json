@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "0.12.11"
+    "version": "0.12.21"
   },
   "servers": [
     {
@@ -263,6 +263,9 @@
                   },
                   "tokenizer": {
                     "$ref": "#/components/schemas/TokenizerType"
+                  },
+                  "stemmer": {
+                    "$ref": "#/components/schemas/StemmerType"
                   },
                   "synonyms": {
                     "type": "array",
@@ -1176,8 +1179,7 @@
                 "type": "object",
                 "description": "Search request object",
                 "required": [
-                  "query",
-                  "offset"
+                  "query"
                 ],
                 "properties": {
                   "query": {
@@ -1187,12 +1189,14 @@
                   "offset": {
                     "type": "integer",
                     "description": "Offset of search results to return.",
+                    "default": 0,
                     "example": 0,
                     "minimum": 0
                   },
                   "length": {
                     "type": "integer",
                     "description": "Number of search results to return.",
+                    "default": 10,
                     "example": 10,
                     "minimum": 1
                   },
@@ -2064,6 +2068,14 @@
           "highlight_markup": {
             "type": "boolean",
             "description": "if true, the matching query terms within the fragments are highlighted with HTML markup **\\<b\\>term\\<\\/b\\>**."
+          },
+          "pre_tags": {
+            "type": "string",
+            "description": "Specifies the markup tags to insert **before** each highlighted term (e.g. \\\"\\<b\\>\\\" or \\\"\\<em\\>\\\"). This can be any string, but is most often an HTML or XML tag.\nOnly used when **highlight_markup** is set to true."
+          },
+          "post_tags": {
+            "type": "string",
+            "description": "Specifies the markup tags to insert **after** each highlighted term. (e.g. \\\"\\<\\/b\\>\\\" or \\\"\\<\\/em\\>\\\"). This can be any string, but is most often an HTML or XML tag.\nOnly used when **highlight_markup** is set to true."
           }
         }
       },
@@ -3122,8 +3134,7 @@
         "type": "object",
         "description": "Search request object",
         "required": [
-          "query",
-          "offset"
+          "query"
         ],
         "properties": {
           "query": {
@@ -3133,12 +3144,14 @@
           "offset": {
             "type": "integer",
             "description": "Offset of search results to return.",
+            "default": 0,
             "example": 0,
             "minimum": 0
           },
           "length": {
             "type": "integer",
             "description": "Number of search results to return.",
+            "default": 10,
             "example": 10,
             "minimum": 1
           },
@@ -3306,6 +3319,31 @@
         "enum": [
           "Ascending",
           "Descending"
+        ]
+      },
+      "StemmerType": {
+        "type": "string",
+        "description": "Defines stemming behavior, reducing inflected words to their word stem, base or root form.\nStemming increases recall, but decreases precision. It can introduce false positive results.",
+        "enum": [
+          "None",
+          "Arabic",
+          "Danish",
+          "Dutch",
+          "English",
+          "Finnish",
+          "French",
+          "German",
+          "Greek",
+          "Hungarian",
+          "Italian",
+          "Norwegian",
+          "Portuguese",
+          "Romanian",
+          "Russian",
+          "Spanish",
+          "Swedish",
+          "Tamil",
+          "Turkish"
         ]
       },
       "Synonym": {

@@ -101,7 +101,6 @@ pub(crate) fn tokenizer(
     non_unique_terms: &mut Vec<NonUniqueTermObject>,
     tokenizer: TokenizerType,
     segment_number_mask1: u32,
-
     nonunique_terms_count: &mut u32,
     token_per_field_max: u32,
     position_per_term_max: usize,
@@ -133,7 +132,7 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
+                        //end of term
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -143,18 +142,19 @@ pub(crate) fn tokenizer(
                     };
                 }
             }
-
+            //else {
             TokenizerType::UnicodeAlphanumeric => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
                     start = match char.1 {
+                        //start of term
                         token if regex_syntax::is_word_character(token) => {
                             if !start {
                                 start_pos = char.0;
                             }
-                            true
+                            true //start
                         }
-
+                        //wol126 es wird nicht unterschieden ob am anfang oder inmitten des terms
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -186,8 +186,14 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
+                        //end of term
                         _ => {
+                            /*
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            */
+                            //wol100
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
                                 if apostroph {
@@ -212,17 +218,20 @@ pub(crate) fn tokenizer(
                 }
             }
 
+            //wol310 query
             #[cfg(feature = "zh")]
             TokenizerType::UnicodeAlphanumericZH => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
                     start = match char.1 {
+                        //start of term
                         token if regex_syntax::is_word_character(token) => {
                             if !start {
                                 start_pos = char.0;
                             }
-                            true
+                            true //start
                         }
+                        //wol126 es wird nicht unterschieden ob am anfang oder inmitten des terms
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -417,7 +426,7 @@ pub(crate) fn tokenizer(
 
     let mut bigrams: Vec<TermObject> = Vec::new();
     for term_string in non_unique_terms_line.iter_mut() {
-        if is_query {
+        let term_string = if is_query {
             let mut query_type_term = if is_phrase {
                 QueryType::Phrase
             } else {
@@ -449,14 +458,26 @@ pub(crate) fn tokenizer(
                 continue;
             }
 
+            let term_string = if let Some(stemmer) = index.stemmer.as_ref() {
+                stemmer.stem(term_string).to_string()
+            } else {
+                term_string.to_string()
+            };
+
             non_unique_terms.push(NonUniqueTermObject {
                 term: term_string.to_string(),
-                term_bigram1: "".to_string(),
-                term_bigram2: "".to_string(),
+                term_bigram1: "".into(),
+                term_bigram2: "".into(),
                 is_bigram: false,
                 op: query_type_term,
             });
-        }
+
+            term_string
+        } else if let Some(stemmer) = index.stemmer.as_ref() {
+            stemmer.stem(term_string).to_string()
+        } else {
+            term_string.to_string()
+        };
 
         let term_hash;
         let term_positions_len;
@@ -489,7 +510,7 @@ pub(crate) fn tokenizer(
                 || (non_unique_terms[non_unique_terms.len() - 1].op == QueryType::Phrase
                     && non_unique_terms[non_unique_terms.len() - 2].op == QueryType::Phrase))
         {
-            let bigram_term_string = previous_term_string.to_string() + " " + term_string;
+            let bigram_term_string = previous_term_string.to_string() + " " + &term_string;
             let bigram_term_hash = HASHER_64.hash_one(bigram_term_string.as_bytes());
 
             if is_query {

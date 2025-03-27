@@ -120,7 +120,7 @@ pub(crate) fn read_i64(vec8: &[u8], pos: usize) -> i64 {
 
 #[inline]
 pub(crate) fn read_f32(vec8: &[u8], pos: usize) -> f32 {
-    f32::from_le_bytes(vec8[pos..pos + 8].try_into().unwrap())
+    f32::from_le_bytes(vec8[pos..pos + 4].try_into().unwrap())
 }
 
 #[inline]

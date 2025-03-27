@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.12.20"
+version = "0.12.21"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -31,9 +31,9 @@ path = "src/seekstorm_server/main.rs"
 [dependencies]
 crossbeam-channel = "0.5.14"
 ctrlc = "3.4.5"
-serde = { version = "1.0.218", features = ["derive"] }
+serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-tokio = { version = "1.43.0", features = ["full"] }
+tokio = { version = "1.44.1", features = ["full"] }
 base64 = "0.22.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.11", features = ["serde"]}
@@ -57,7 +57,7 @@ aho-corasick = "1.1.3"
 smallvec = "1.14.0"
 memmap2 = "0.9.5"
 regex-syntax = "0.8.5"
-indexmap = { version = "2.7.1", features = ["serde"]}
+indexmap = { version = "2.8.0", features = ["serde"]}
 unicode-normalization = "0.1.24"
 finl_unicode = "1.3.0"
 colored = "3.0.0"
@@ -65,6 +65,7 @@ walkdir = "2.5.0"
 pdfium-render = { version ="0.8.29",  features = ["thread_safe","sync"], optional = true}
 chrono = "0.4.40"
 utoipa = { version ="5.3.1",  features = ["preserve_order","preserve_path_order","yaml"]}
+rust-stemmers = "1.2.0"
 
 [lints.rust]
 missing_docs = "warn"

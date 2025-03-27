@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 0.12.11
+  version: 0.12.21
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -197,6 +197,8 @@ paths:
                   $ref: '#/components/schemas/SimilarityType'
                 tokenizer:
                   $ref: '#/components/schemas/TokenizerType'
+                stemmer:
+                  $ref: '#/components/schemas/StemmerType'
                 synonyms:
                   type: array
                   items:
@@ -891,7 +893,6 @@ paths:
               description: Search request object
               required:
               - query
-              - offset
               properties:
                 query:
                   type: string
@@ -899,11 +900,13 @@ paths:
                 offset:
                   type: integer
                   description: Offset of search results to return.
+                  default: 0
                   example: 0
                   minimum: 0
                 length:
                   type: integer
                   description: Number of search results to return.
+                  default: 10
                   example: 10
                   minimum: 1
                 result_type:
@@ -1509,6 +1512,16 @@ components:
         highlight_markup:
           type: boolean
           description: if true, the matching query terms within the fragments are highlighted with HTML markup **\<b\>term\<\/b\>**.
+        pre_tags:
+          type: string
+          description: |-
+            Specifies the markup tags to insert **before** each highlighted term (e.g. \"\<b\>\" or \"\<em\>\"). This can be any string, but is most often an HTML or XML tag.
+            Only used when **highlight_markup** is set to true.
+        post_tags:
+          type: string
+          description: |-
+            Specifies the markup tags to insert **after** each highlighted term. (e.g. \"\<\/b\>\" or \"\<\/em\>\"). This can be any string, but is most often an HTML or XML tag.
+            Only used when **highlight_markup** is set to true.
     IndexResponseObject:
       type: object
       required:
@@ -2270,7 +2283,6 @@ components:
       description: Search request object
       required:
       - query
-      - offset
       properties:
         query:
           type: string
@@ -2278,11 +2290,13 @@ components:
         offset:
           type: integer
           description: Offset of search results to return.
+          default: 0
           example: 0
           minimum: 0
         length:
           type: integer
           description: Number of search results to return.
+          default: 10
           example: 10
           minimum: 1
         result_type:
@@ -2415,6 +2429,31 @@ components:
       enum:
       - Ascending
       - Descending
+    StemmerType:
+      type: string
+      description: |-
+        Defines stemming behavior, reducing inflected words to their word stem, base or root form.
+        Stemming increases recall, but decreases precision. It can introduce false positive results.
+      enum:
+      - None
+      - Arabic
+      - Danish
+      - Dutch
+      - English
+      - Finnish
+      - French
+      - German
+      - Greek
+      - Hungarian
+      - Italian
+      - Norwegian
+      - Portuguese
+      - Romanian
+      - Russian
+      - Spanish
+      - Swedish
+      - Tamil
+      - Turkish
     Synonym:
       type: object
       description: Defines synonyms for terms per index.

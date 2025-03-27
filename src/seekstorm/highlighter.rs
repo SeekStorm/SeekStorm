@@ -25,6 +25,14 @@ pub struct Highlight {
     /// if true, the matching query terms within the fragments are highlighted with HTML markup **\<b\>term\<\/b\>**.
     #[serde(default)]
     pub highlight_markup: bool,
+    /// Specifies the markup tags to insert **before** each highlighted term (e.g. \"\<b\>\" or \"\<em\>\"). This can be any string, but is most often an HTML or XML tag.
+    /// Only used when **highlight_markup** is set to true.
+    #[serde(default = "default_pre_tag")]
+    pub pre_tags: String,
+    /// Specifies the markup tags to insert **after** each highlighted term. (e.g. \"\<\/b\>\" or \"\<\/em\>\"). This can be any string, but is most often an HTML or XML tag.
+    /// Only used when **highlight_markup** is set to true.
+    #[serde(default = "default_post_tag")]
+    pub post_tags: String,
 }
 
 impl Default for Highlight {
@@ -35,8 +43,18 @@ impl Default for Highlight {
             fragment_number: 1,
             fragment_size: usize::MAX,
             highlight_markup: true,
+            pre_tags: default_pre_tag(),
+            post_tags: default_post_tag(),
         }
     }
+}
+
+fn default_pre_tag() -> String {
+    "<b>".into()
+}
+
+fn default_post_tag() -> String {
+    "</b>".into()
 }
 
 /// Highlighter object used as get_document parameter for extracting keyword-in-context (KWIC) fragments from fields in documents, and highlighting the query terms within.
@@ -309,7 +327,12 @@ pub(crate) fn top_fragments_from_field(
                 }
 
                 if highlight.highlight_markup && !no_score_no_highlight {
-                    highlight_terms(&mut combined_string, query_terms_ac);
+                    highlight_terms(
+                        &mut combined_string,
+                        query_terms_ac,
+                        &highlight.pre_tags,
+                        &highlight.post_tags,
+                    );
                 }
 
                 Ok(combined_string)
@@ -320,15 +343,20 @@ pub(crate) fn top_fragments_from_field(
     }
 }
 
-pub(crate) fn highlight_terms(text: &mut String, query_terms_ac: &AhoCorasick) {
+pub(crate) fn highlight_terms(
+    text: &mut String,
+    query_terms_ac: &AhoCorasick,
+    pre_tags: &str,
+    post_tags: &str,
+) {
     let mut result = String::new();
     let mut prev_end = 0;
 
     for mat in query_terms_ac.find_iter(&text) {
         result.push_str(&text[prev_end..mat.start()]);
-        result.push_str("<b>");
+        result.push_str(pre_tags);
         result.push_str(&text[mat.start()..mat.end()]);
-        result.push_str("</b>");
+        result.push_str(post_tags);
         prev_end = mat.end();
     }
 

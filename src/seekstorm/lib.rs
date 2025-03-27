@@ -36,6 +36,7 @@
 //! name: "test_index".to_string(),
 //! similarity:SimilarityType::Bm25f,
 //! tokenizer:TokenizerType::AsciiAlphabetic,
+//! stemmer: StemmerType::None,
 //! access_type: AccessType::Mmap,
 //! };
 //! let segment_number_bits1=11;
@@ -252,6 +253,7 @@
 //!     name: "test_index".to_string(),
 //!     similarity:SimilarityType::Bm25f,
 //!     tokenizer:TokenizerType::AsciiAlphabetic,
+//!     stemmer: StemmerType::None,
 //!     access_type: AccessType::Mmap,
 //! };
 //! let serialize_schema=true;

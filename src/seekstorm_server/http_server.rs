@@ -5,7 +5,7 @@ use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::str;
+use std::str::{self, from_utf8};
 use std::sync::Arc;
 use std::{convert::Infallible, net::SocketAddr};
 
@@ -355,6 +355,7 @@ pub(crate) async fn http_request_handler(
                 create_index_request_object.schema,
                 create_index_request_object.similarity,
                 create_index_request_object.tokenizer,
+                create_index_request_object.stemmer,
                 create_index_request_object.synonyms,
                 apikey_object,
             );
@@ -673,7 +674,7 @@ pub(crate) async fn http_request_handler(
             };
 
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
-            let request_string = str::from_utf8(&request_bytes).unwrap();
+            let request_string = from_utf8(&request_bytes).unwrap();
 
             let apikey_list_ref = apikey_list.read().await;
             let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
@@ -723,7 +724,7 @@ pub(crate) async fn http_request_handler(
                     .into();
             };
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
-            let request_string = str::from_utf8(&request_bytes).unwrap();
+            let request_string = from_utf8(&request_bytes).unwrap();
             let apikey_list_ref = apikey_list.read().await;
             let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
                 return HttpServerError::Unauthorized.into();
@@ -911,7 +912,7 @@ pub(crate) async fn http_request_handler(
                                 ))))
                             }
                             Err(_) => {
-                                let request_string = str::from_utf8(&request_bytes).unwrap();
+                                let request_string = from_utf8(&request_bytes).unwrap();
                                 let is_doc_vector = request_string.trim().starts_with('[');
                                 let status_object = if !is_doc_vector {
                                     let document_id = match serde_json::from_str(request_string) {

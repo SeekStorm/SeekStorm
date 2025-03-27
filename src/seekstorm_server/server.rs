@@ -2,7 +2,7 @@ use base64::{Engine, engine::general_purpose};
 use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
-    index::{SimilarityType, TokenizerType},
+    index::{SimilarityType, StemmerType, TokenizerType},
     ingest::{IngestJson, IngestPdf},
 };
 use std::{
@@ -233,6 +233,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                     serde_json::from_str(indexname_schemajson.1).unwrap(),
                                                     SimilarityType::Bm25fProximity,
                                                     TokenizerType::UnicodeAlphanumeric,
+                                                    StemmerType::None,
                                                     Vec::new(),
                                                     apikey_object,
                                                 )

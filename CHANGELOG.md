@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.21] - 2025-03-27
+
+### Added
+
+- Stemming for 18 languages added: new property `IndexMetaObject.stemmer: StemmerType` 
+- Allow to specify the markup tags to insert **before** and **after** each highlighted term. Default is "<b>" "</b>" (by @DanLLC).
+
+### Changed
+
+- Updated [OpenAPI documents](https://github.com/SeekStorm/SeekStorm/tree/main/src/seekstorm_server) directory.
+
+### Fixed
+
+- Fixed read_f32() in utils.rs
+
 ## [0.12.20] - 2025-03-05
 
 ### Changed

@@ -42,6 +42,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting.
 * Tokenizer with Chinese word segmentation
+* Stemming for 18 languages
 * KWIC snippets, highlighting
 * One-way and multi-way synonyms
 * Billion-scale index
@@ -323,6 +324,7 @@ let meta = IndexMetaObject {
     name: "test_index".to_string(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
+    stemmer: StemmerType::None,
     access_type: AccessType::Mmap,
 };
 
@@ -569,6 +571,7 @@ let meta = IndexMetaObject {
     name: "test_index".to_string(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
+    stemmer: StemmerType::None,
     access_type: AccessType::Mmap,
 };
 
@@ -828,7 +831,6 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Sorting of results by any field
 * ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
 * ✅ Tokenizer with Chinese word segmentation
-* More tokenizer types (stemming)
 * Autosuggestion, spelling correction, instant search
 * Fuzzy search
 * Intra-query concurrency
@@ -840,6 +842,8 @@ The Rust port is not yet feature complete. The following features are currently 
 
 **New features**
 * ✅ Docker file and container image
+* ✅ Stemming for 18 languages
+* More tokenizer types (Japanese, Korean)
 * Native vector search (currently PoC)
 * Distributed search cluster (currently PoC)
 * S3 object storage compatible index: cloud-native split of storage and compute
