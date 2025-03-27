@@ -388,6 +388,7 @@ let highlights:Vec<Highlight>= vec![
         fragment_number: 2,
         fragment_size: 160,
         highlight_markup: true,
+        ..Default::default()
     },
 ];    
 
@@ -620,6 +621,7 @@ let highlights:Vec<Highlight>= vec![
             fragment_number: 2,
             fragment_size: 160,
             highlight_markup: true,
+            ..Default::default()
         },
     ];    
 

@@ -112,6 +112,7 @@
 //!     fragment_number: 2,
 //!     fragment_size: 160,
 //!     highlight_markup: true,
+//!     ..Default::default()
 //! },
 //! ];    
 //! let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_term_strings));
@@ -297,6 +298,7 @@
 //!             fragment_number: 2,
 //!             fragment_size: 160,
 //!             highlight_markup: true,
+//!             ..Default::default()
 //!         },
 //!     ];    
 //! let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_terms));
