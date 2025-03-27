@@ -9,10 +9,10 @@
   <a href="https://seekstorm.com">Website</a> | 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
   <a href="https://deephn.org/">Demo</a> | 
-  <a href="https://github.com/SeekStorm/SeekStorm?tab=readme-ov-file#documentation">Library Docs</a> | 
+  <a href="#documentation">Library Docs</a> | 
   <a href="https://seekstorm.apidocumentation.com">Server Docs</a> |
   <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Server Readme</a> |
-  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Roadmap</a> | 
+  <a href="#roadmap">Roadmap</a> | 
   <a href="https://seekstorm.com/blog/">Blog</a> | 
   <a href="https://x.com/seekstorm">Twitter</a>
 </p>
