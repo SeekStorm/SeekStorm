@@ -1562,7 +1562,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
             meta.id = index_path
                 .components()
-                .last()
+                .next_back()
                 .and_then(|c| c.as_os_str().to_str())
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or_default();
@@ -2265,11 +2265,11 @@ impl Index {
     /// get_index_string_facets: list of string facet fields, each with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
     /// values are sorted by their occurrence count within all indexed documents in descending order
     /// * `query_facets`: Must be set if facet fields should be returned in get_index_facets. If set to Vec::new() then no facet fields are returned.
-    ///    The prefix property of a QueryFacet allows to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-    ///    The length property of a QueryFacet allows limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
-    ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
-    ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///    Example: query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
+    ///   The prefix property of a QueryFacet allows to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///   The length property of a QueryFacet allows limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
+    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///   Example: query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
     pub fn get_index_string_facets(
         &self,
         query_facets: Vec<QueryFacet>,

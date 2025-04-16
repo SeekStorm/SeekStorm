@@ -68,7 +68,7 @@ async fn test_02_index_document() {
     let document = serde_json::from_str(document_json).unwrap();
     index_arc.index_document(document, FileType::None).await;
 
-    //index documents
+    // index documents
     let documents_json = r#"
     [{"title":"title1 test","body":"body1","url":"url1"},
     {"title":"title2","body":"body2 test","url":"url2"},
@@ -105,6 +105,13 @@ async fn test_03_query_index() {
             Vec::new(),
         )
         .await;
+
+    let result = result_list.results.len();
+    assert_eq!(result, 1);
+
+    let result = result_list.result_count;
+    assert_eq!(result, 1);
+
     let result = result_list.result_count_total;
     assert_eq!(result, 1);
 }
@@ -119,11 +126,12 @@ async fn test_04_clear_index() {
     let result = index_arc.read().await.indexed_doc_count;
     assert_eq!(result, 4);
 
-    //clear index
+    // clear index
     index_arc.write().await.clear_index();
 
     let result = index_arc.read().await.indexed_doc_count;
     assert_eq!(result, 0);
+
     // index document
     let document_json = r#"
     {"title":"title1 test","body":"body1","url":"url1"}"#;
@@ -138,7 +146,7 @@ async fn test_04_clear_index() {
 
     println!("indexed_doc_count: {}", result);
 
-    //query index
+    // query index
     let query = "body1".into();
     let result_list = index_arc
         .search(

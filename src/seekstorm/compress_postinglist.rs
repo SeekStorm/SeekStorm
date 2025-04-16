@@ -61,7 +61,7 @@ pub(crate) fn compress_postinglist(
     let delta_size_bits: u32 = 4;
     let range_bits: u32 = 32 - unsafe { _lzcnt_u32(plo.docid_delta_max.into()) };
     let result_bits: u32 = delta_size_bits + (range_bits * plo.posting_count as u32);
-    let delta_compression_size_byte: u32 = (result_bits + 7) / 8;
+    let delta_compression_size_byte: u32 = result_bits.div_ceil(8);
 
     if (plo.posting_count < 4096) || !enable_bitmap_compression {
         if enable_rle_compression {

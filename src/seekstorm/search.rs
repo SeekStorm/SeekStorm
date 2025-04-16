@@ -729,48 +729,48 @@ pub type Point = Vec<f64>;
 /// Arguments:
 /// * `query_string`: query string + - "" search operators are recognized.
 /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
-///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
-///    With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
+///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
 /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
 /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
-///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
-///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-///    The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
-///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
-///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-///    Examples:
-///    query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
-///    query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
-///    query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
+///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+///   Examples:
+///   query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
+///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
 /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
-///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
-///    The facet counts depend only from the query and not which facet filters are selected.
-///    Examples:
-///    facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
-///    facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
-///    facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
+///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
+///   The facet counts depend only from the query and not which facet filters are selected.
+///   Examples:
+///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
 /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
-///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
-///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
-///    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
-///    until the n-th field value is either not equal or the last field is reached.
-///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
-///    Sort is only enabled on facet fields that are defined in schema at create_index!
-///    Examples:
-///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
-///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
+///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+///   The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+///   until the n-th field value is either not equal or the last field is reached.
+///   A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+///   Sort is only enabled on facet fields that are defined in schema at create_index!
+///   Examples:
+///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
 ///  
-///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
-///    Facets are defined in 3 different places:
-///    the facet fields are defined in schema at create_index,
-///    the facet field values are set in index_document at index time,
-///    the query_facets/facet_filter search parameters are specified at query time.
-///    Facets are then returned in the search result object.
+///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+///   Facets are defined in 3 different places:
+///   the facet fields are defined in schema at create_index,
+///   the facet field values are set in index_document at index time,
+///   the query_facets/facet_filter search parameters are specified at query time.
+///   Facets are then returned in the search result object.
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait Search {
@@ -779,48 +779,48 @@ pub trait Search {
     /// Arguments:
     /// * `query_string`: query string + - "" search operators are recognized.
     /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
-    ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+    ///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
-    ///    With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
+    ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
     /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
-    ///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
-    ///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-    ///    The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
-    ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
-    ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///    Examples:
-    ///    query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
-    ///    query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
-    ///    query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
+    ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+    ///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///   Examples:
+    ///   query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
+    ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+    ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
     /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
-    ///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-    ///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
-    ///    The facet counts depend only from the query and not which facet filters are selected.
-    ///    Examples:
-    ///    facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
-    ///    facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
-    ///    facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
+    ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+    ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
+    ///   The facet counts depend only from the query and not which facet filters are selected.
+    ///   Examples:
+    ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+    ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+    ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
     /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
-    ///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
-    ///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
-    ///    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
-    ///    until the n-th field value is either not equal or the last field is reached.
-    ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
-    ///    Sort is only enabled on facet fields that are defined in schema at create_index!
-    ///    Examples:
-    ///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
-    ///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+    ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
+    ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+    ///   The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+    ///   until the n-th field value is either not equal or the last field is reached.
+    ///   A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+    ///   Sort is only enabled on facet fields that are defined in schema at create_index!
+    ///   Examples:
+    ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+    ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
     ///  
-    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
-    ///    Facets are defined in 3 different places:
-    ///    the facet fields are defined in schema at create_index,
-    ///    the facet field values are set in index_document at index time,
-    ///    the query_facets/facet_filter search parameters are specified at query time.
-    ///    Facets are then returned in the search result object.
+    ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///   Facets are defined in 3 different places:
+    ///   the facet fields are defined in schema at create_index,
+    ///   the facet field values are set in index_document at index time,
+    ///   the query_facets/facet_filter search parameters are specified at query time.
+    ///   Facets are then returned in the search result object.
     async fn search(
         &self,
         query_string: String,
@@ -950,47 +950,47 @@ impl Search for IndexArc {
     /// Arguments:
     /// * `query_string`: query string + - "" search operators are recognized.
     /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
-    ///    The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+    ///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
-    ///    With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
+    ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
     /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
-    ///    Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
-    ///    The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-    ///    The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The prefix and length properties can be used to improve the usability in an UI.
-    ///    If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
-    ///    The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///    Examples:
-    ///    query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
-    ///    query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
-    ///    query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
+    ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+    ///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The prefix and length properties can be used to improve the usability in an UI.
+    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///   Examples:
+    ///   query_facets = vec![QueryFacet::String {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String {field: "brand".into(),prefix: "a".into(),length: 5}];
+    ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+    ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
     /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
-    ///    The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-    ///    If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
-    ///    The facet counts depend only from the query and not which facet filters are selected.
-    ///    Examples:
-    ///    facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
-    ///    facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
-    ///    facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
+    ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+    ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
+    ///   The facet counts depend only from the query and not which facet filters are selected.
+    ///   Examples:
+    ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+    ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+    ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
     /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
-    ///    If no sort field is specified, then the search results are sorted by rank in descending order per default.
-    ///    Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
-    ///    The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
-    ///    until the n-th field value is either not equal or the last field is reached.
-    ///    A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
-    ///    Sort is only enabled on facet fields that are defined in schema at create_index!   
-    ///    Examples:
-    ///    result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
-    ///    result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
-    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
-    ///    Facets are defined in 3 different places:
-    ///    the facet fields are defined in schema at create_index,
-    ///    the facet field values are set in index_document at index time,
-    ///    the query_facets/facet_filter search parameters are specified at query time.
-    ///    Facets are then returned in the search result object.
+    ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
+    ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+    ///   The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+    ///   until the n-th field value is either not equal or the last field is reached.
+    ///   A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+    ///   Sort is only enabled on facet fields that are defined in schema at create_index!   
+    ///   Examples:
+    ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+    ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+    ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///   Facets are defined in 3 different places:
+    ///   the facet fields are defined in schema at create_index,
+    ///   the facet field values are set in index_document at index time,
+    ///   the query_facets/facet_filter search parameters are specified at query time.
+    ///   Facets are then returned in the search result object.
     async fn search(
         &self,
         query_string: String,

@@ -372,9 +372,20 @@ pub(crate) async fn single_blockid<'a>(
 
     if SORT_FLAG && SPEEDUP_FLAG {
         block_vec.sort_unstable_by(|x, y| y.block_score.partial_cmp(&x.block_score).unwrap());
-        let mut block_index = 0;
-        for block in block_vec {
-            block_index += 1;
+        for (block_index, block) in block_vec.iter().enumerate() {
+            if !filtered && block_index == top_k {
+                break;
+            }
+            if (search_result.topk_candidates.current_heap_size == top_k)
+                && (block.block_score <= search_result.topk_candidates._elements[0].score)
+            {
+                if !filtered {
+                    break;
+                } else if result_type == &ResultType::Topk {
+                    continue;
+                }
+            }
+
             let blo = &query_list[term_index].blocks[block.p_block_vec[0] as usize];
 
             single_docid(
@@ -391,14 +402,6 @@ pub(crate) async fn single_blockid<'a>(
                 facet_filter,
             )
             .await;
-
-            if (!filtered || result_type == &ResultType::Topk)
-                && (search_result.topk_candidates.current_heap_size == top_k)
-                && ((block.block_score <= search_result.topk_candidates._elements[0].score)
-                    || (block_index == top_k))
-            {
-                break;
-            }
         }
     }
 

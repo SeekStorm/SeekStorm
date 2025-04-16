@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.22] - 2025-04-03
+
+### Fixed
+
+- Problem fixed where an intersection in an very small index didn't return results (all_terms_frequent).
+- Early termination fixed in single_blockid: did not guarantee most relevant results for filtered single term queries with result type Topk.
+
 ## [0.12.21] - 2025-03-27
 
 ### Added

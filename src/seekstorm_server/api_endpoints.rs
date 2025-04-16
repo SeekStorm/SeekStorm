@@ -751,10 +751,7 @@ pub(crate) async fn index_file_api(
 )]
 pub(crate) async fn get_file_api(index_arc: &IndexArc, document_id: usize) -> Option<Vec<u8>> {
     if !index_arc.read().await.stored_field_names.is_empty() {
-        match index_arc.read().await.get_file(document_id) {
-            Ok(doc) => Some(doc),
-            Err(_e) => None,
-        }
+        index_arc.read().await.get_file(document_id).ok()
     } else {
         None
     }
@@ -820,16 +817,17 @@ pub(crate) async fn get_document_api(
             )
         };
 
-        match index_arc.read().await.get_document(
-            document_id,
-            true,
-            &highlighter_option,
-            &HashSet::from_iter(get_document_request.fields),
-            &get_document_request.distance_fields,
-        ) {
-            Ok(doc) => Some(doc),
-            Err(_e) => None,
-        }
+        index_arc
+            .read()
+            .await
+            .get_document(
+                document_id,
+                true,
+                &highlighter_option,
+                &HashSet::from_iter(get_document_request.fields),
+                &get_document_request.distance_fields,
+            )
+            .ok()
     } else {
         None
     }

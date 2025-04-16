@@ -558,7 +558,7 @@ impl<'a> MinHeap<'a> {
             return false;
         }
 
-        if self.docid_hashset.len() > 0 && self.docid_hashset.contains_key(&result.doc_id) {
+        if !self.docid_hashset.is_empty() && self.docid_hashset.contains_key(&result.doc_id) {
             if self._elements[0].doc_id == result.doc_id {
                 if self.result_ordering(result, self._elements[0]).is_gt() {
                     self._elements[0].score = result.score;

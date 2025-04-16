@@ -194,7 +194,7 @@ pub(crate) async fn intersection_docid(
         }
     }
 
-    let mut all_terms_frequent = true;
+    let mut all_terms_frequent = index.indexed_doc_count > (top_k << 8);
     for query_list_item_mut in query_list.iter_mut() {
         let blo = &query_list_item_mut.blocks[query_list_item_mut.p_block as usize];
 
