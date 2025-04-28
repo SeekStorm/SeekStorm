@@ -37,6 +37,8 @@
 //! similarity:SimilarityType::Bm25f,
 //! tokenizer:TokenizerType::AsciiAlphabetic,
 //! stemmer: StemmerType::None,
+//! stop_words: StopwordType::None,
+//! frequent_words:FrequentwordType::English,
 //! access_type: AccessType::Mmap,
 //! };
 //! let segment_number_bits1=11;
@@ -131,7 +133,7 @@
 //! ```
 //! ### index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
 //! ```rust
-//! let file_path=Path::new("wiki_articles.json");
+//! let file_path=Path::new("wiki-articles.json");
 //! let _ =index_arc.ingest_json(file_path).await;
 //! ```
 //! ### index all PDF files in directory and sub-directories
@@ -255,6 +257,8 @@
 //!     similarity:SimilarityType::Bm25f,
 //!     tokenizer:TokenizerType::AsciiAlphabetic,
 //!     stemmer: StemmerType::None,
+//!     stop_words: StopwordType::None,
+//!     frequent_words:FrequentwordType::English,
 //!     access_type: AccessType::Mmap,
 //! };
 //! let serialize_schema=true;
@@ -348,6 +352,7 @@ pub(crate) mod single;
 /// Tokenizes text into tokens (words), supports Chinese word segmentation, folds (converts) diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters into their basic representation.
 pub mod tokenizer;
 pub(crate) mod union;
-pub(crate) mod utils;
+/// Utils `truncate()` and `substring()`
+pub mod utils;
 #[cfg(feature = "zh")]
 pub(crate) mod word_segmentation;

@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.22] - 2025-04-03
+## [0.12.23] - 2025-04-28
+
+### Added
+
+- Ingestion of files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values), SSV, TSV, PSV format with `ingest_csv()` method and seekstorm_server command line `ingest`:  
+  configurable header, delimiter char, quoting, number of skipped document, number of indexed documents.
+- `stop_words` parameter (predefined languages and custom) added to create_index IndexMetaObject:  
+  Stop words are not indexed for compact index and faster queries.
+- `frequent_words` parameter (predefined languages and custom) added to create_index IndexMetaObject:  
+  consecutive frequent words are indexed as n-gram combinations for short posting lists and fast phrase queries.
+- TokenizerType `Whitespace` and `WhitespaceLowercase` added.
+- `truncate()` and `substring()` utils.
+
+## [0.12.22] - 2025-04-16
 
 ### Fixed
 

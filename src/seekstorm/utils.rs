@@ -150,9 +150,18 @@ pub(crate) fn block_copy(
         .copy_from_slice(&source[source_offset..(source_offset + len)]);
 }
 
-pub(crate) fn truncate(s: &str, max_chars: usize) -> &str {
-    match s.char_indices().nth(max_chars) {
-        None => s,
-        Some((idx, _)) => &s[..idx],
+/// Truncates a string to a maximum number of characters.
+pub fn truncate(source: &str, max_chars: usize) -> &str {
+    match source.char_indices().nth(max_chars) {
+        None => source,
+        Some((idx, _)) => &source[..idx],
     }
+}
+
+/// Returns a substring of the given string, starting at the specified index and with the specified length.
+pub fn substring(source: &str, start: usize, length: usize) -> String {
+    if source.len() <= start + length {
+        return source.to_string();
+    }
+    source.chars().skip(start).take(length).collect()
 }

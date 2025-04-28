@@ -356,6 +356,8 @@ pub(crate) async fn http_request_handler(
                 create_index_request_object.similarity,
                 create_index_request_object.tokenizer,
                 create_index_request_object.stemmer,
+                create_index_request_object.stop_words,
+                create_index_request_object.frequent_words,
                 create_index_request_object.synonyms,
                 apikey_object,
             );

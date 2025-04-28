@@ -21,7 +21,7 @@
 
 ## Console commands
 
-Index local files in [PDF](https://en.wikipedia.org/wiki/PDF), [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command. 
+Index local files in [PDF](https://en.wikipedia.org/wiki/PDF), [CSV](https://en.wikipedia.org/wiki/Comma-separated_values), [SSV](https://en.wikipedia.org/wiki/Comma-separated_values), [TSV](https://en.wikipedia.org/wiki/Comma-separated_values), [PSV](https://en.wikipedia.org/wiki/Comma-separated_values), [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command. 
 
 ```
 ingest
@@ -32,14 +32,23 @@ ingest [file_path]
 ```
 
 ```
-ingest [file_path] [api_key] [index_id]
+ingest [file_path] -t [type] -k [api_key] -i [index_id] -d [delimiter]  -h [header] -q [quoting] -s [skip] -n [num]
 ```
 
-The path to the PDF or JSON files is specified by the `[data_filename]` parameter, the API key is specified by the `[api_key]` parameter, the index ID by specified in the `[index_id]` parameter.  
+-t [type]:      file type, default=derived from file extension  
+-k [api_key]:   default=Demo API Key  
+-i [index_id]:  default=0  
+-h [header]:    CSV header, treat first line of file as header, default=false  
+-d [delimiter]: CSV delimiter, default=derived from file type or file extension  
+-q [quoting]:   CSV quoting, default=true  
+-s [skip]:      number of records to skip from start, default=None=0  
+-n [num]:       number of records to read, default=None=usize::MAX   
+
+The path to the PDF, CSV or JSON files is specified by the `[data_filename]` parameter, the API key is specified by the `[api_key]` parameter, the index ID by specified in the `[index_id]` parameter.  
 If no absolute path is specified then the path specified with the command line parameter `ingest_path` or the path of the current running seekstorm_server.exe is used.
 The document file ingestion is streamed without loading the whole document vector into memory to allow for bulk import with unlimited file size and document number while keeping RAM consumption low.
 
-If the file extension is `PDF` then [PDF](https://en.wikipedia.org/wiki/PDF) format is assumed, if the file extension is `JSON` then it is automatically detected whether it is in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) format.  
+If the file extension is `PDF` then [PDF](https://en.wikipedia.org/wiki/PDF) format is assumed, if the file extension is `CSV` then [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) format is assumed, if the file extension is `JSON` then it is automatically detected whether it is in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), or [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) format.  
 If the specified `[file_path]` is a `directory` instead of a file, then all `PDF` files within that directory are indexed, including all subdirectories.
 
 If no `[file_path]` parameter is specified then **wiki-articles.json** is indexed, if present in same directory like seekstorm_server.exe or the directory specified by the command line parameter `ingest_path`.  

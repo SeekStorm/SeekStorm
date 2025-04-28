@@ -10,6 +10,7 @@ use std::{
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use colored::Colorize;
+use csv::{ReaderBuilder, Terminator};
 use num_format::{Locale, ToFormattedString};
 #[cfg(feature = "pdf")]
 use pdfium_render::prelude::{PdfDocumentMetadataTagType, Pdfium};
@@ -530,18 +531,17 @@ impl IngestPdf for IndexArc {
     }
 }
 
-/// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+/// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats.  
 /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
-#[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait IngestJson {
-    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats.  
     /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
     async fn ingest_json(&mut self, data_path: &Path);
 }
 
 impl IngestJson for IndexArc {
-    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats.  
     /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
     async fn ingest_json(&mut self, data_path: &Path) {
         match data_path.exists() {
@@ -598,6 +598,105 @@ impl IngestJson for IndexArc {
                             _ => break,
                         }
                     }
+                }
+
+                self.commit().await;
+
+                let elapsed_time = start_time.elapsed().as_nanos();
+
+                println!(
+                    "{}: docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
+                    "Indexing finished".green(),
+                    docid.to_formatted_string(&Locale::en),
+                    (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
+                    ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)
+                        .to_formatted_string(&Locale::en),
+                    elapsed_time as f64 / 1_000_000_000.0 / 60.0,
+                    elapsed_time / 1_000_000_000
+                );
+            }
+            false => {
+                println!("data file not found: {}", data_path.display());
+            }
+        }
+    }
+}
+
+#[allow(async_fn_in_trait)]
+/// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
+/// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+pub trait IngestCsv {
+    /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
+    /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+    async fn ingest_csv(
+        &mut self,
+        data_path: &Path,
+        has_header: bool,
+        quoting: bool,
+        delimiter: u8,
+        skip_docs: Option<usize>,
+        num_docs: Option<usize>,
+    );
+}
+
+impl IngestCsv for IndexArc {
+    /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
+    /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+    async fn ingest_csv(
+        &mut self,
+        data_path: &Path,
+        has_header: bool,
+        quoting: bool,
+        delimiter: u8,
+        skip_docs: Option<usize>,
+        num_docs: Option<usize>,
+    ) {
+        match data_path.exists() {
+            true => {
+                println!("ingesting data from: {}", data_path.display());
+
+                let start_time = Instant::now();
+                let mut docid: usize = 0;
+
+                let index_arc_clone2 = self.clone();
+                let index_ref = index_arc_clone2.read().await;
+                drop(index_ref);
+
+                let index_arc_clone = self.clone();
+                let index_arc_clone_clone = index_arc_clone.clone();
+
+                let index_ref = index_arc_clone.read().await;
+                let mut schema_vec: Vec<String> = vec!["".to_string(); index_ref.schema_map.len()];
+                for (key, value) in index_ref.schema_map.iter() {
+                    schema_vec[value.field_id] = key.clone();
+                }
+                drop(index_ref);
+
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers(has_header)
+                    .quoting(quoting)
+                    .delimiter(delimiter)
+                    .terminator(Terminator::CRLF)
+                    .from_path(data_path)
+                    .unwrap();
+
+                let skip = skip_docs.unwrap_or(0);
+                let max = num_docs.unwrap_or(usize::MAX);
+                let mut i: usize = 0;
+                let mut record = csv::StringRecord::new();
+                while rdr.read_record(&mut record).unwrap() && docid < max {
+                    if i < skip {
+                        i += 1;
+                        continue;
+                    }
+                    let mut document: Document = HashMap::new();
+                    for (i, element) in record.iter().enumerate() {
+                        document.insert(schema_vec[i].clone(), json!(element));
+                    }
+                    index_arc_clone_clone
+                        .index_document(document, FileType::None)
+                        .await;
+                    docid += 1;
                 }
 
                 self.commit().await;

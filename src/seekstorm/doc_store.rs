@@ -66,7 +66,6 @@ impl Index {
 
             let committed_doc_count = (self.committed_doc_count - 1 % ROARING_BLOCK_SIZE) + 1;
             let indexed_doc_count = (indexed_doc_count - 1 % ROARING_BLOCK_SIZE) + 1;
-
             for i in committed_doc_count..indexed_doc_count {
                 let pointer = read_u32(&self.compressed_docstore_segment_block_buffer, i * 4);
 

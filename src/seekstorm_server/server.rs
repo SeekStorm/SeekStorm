@@ -2,8 +2,8 @@ use base64::{Engine, engine::general_purpose};
 use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
-    index::{SimilarityType, StemmerType, TokenizerType},
-    ingest::{IngestJson, IngestPdf},
+    index::{FrequentwordType, SimilarityType, StemmerType, StopwordType, TokenizerType},
+    ingest::{IngestCsv, IngestJson, IngestPdf},
 };
 use std::{
     collections::HashMap,
@@ -24,6 +24,7 @@ use crate::{
 };
 
 const WIKIPEDIA_FILENAME: &str = "wiki-articles.json";
+const MSMARCO_FILENAME: &str = "fulldocs.tsv";
 
 fn ctrl_channel() -> Result<Receiver<()>, ctrlc::Error> {
     let (sender, receiver) = bounded(20);
@@ -149,12 +150,19 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                 let parameter:Vec<&str>=m.split_whitespace().collect();
                 let command=if parameter.is_empty() {""} else {&parameter[0].to_lowercase()};
 
+                let mut dash:HashMap<String,String>=HashMap::new();
+                for (i,component) in parameter.iter().enumerate(){
+                    if let Some(key_stripped) = component.strip_prefix("-") {
+                        if i+1<parameter.len() {dash.insert(key_stripped.to_string(),parameter[i+1].to_string());}
+                    }
+                }
+
                 match command
                 {
 
                     "ingest" =>
                     {
-                        if parameter.len()==1 || parameter.len()==2 || parameter.len()==4 {
+                        if !parameter.is_empty() {
 
                             let data_path_str=if parameter.len()>1 {
                                 parameter[1]
@@ -171,19 +179,19 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             if data_path.exists() {
 
                                 let apikey_list_clone2=apikey_list_clone.clone();
-                                let apikey_option=if parameter.len()>2 {
-                                    get_apikey_hash(parameter[2].to_string(), &apikey_list_clone2).await
+                                let apikey_option=if dash.contains_key("k") {
+                                    get_apikey_hash(dash.get("k").unwrap_or(&"".to_owned()).to_string(), &apikey_list_clone2).await
                                 } else {
                                     None
                                 };
 
                                 let mut apikey_list_mut = apikey_list_clone.write().await;
-                                let apikey_object_option=if parameter.len()>2 {
+                                let apikey_object_option=if dash.contains_key("k") {
 
                                     if let Some(apikey_hash) = apikey_option
                                     {
                                         apikey_list_mut.get_mut(&apikey_hash)
-                                    } else if parameter[2]==demo_api_key_base64{
+                                    } else if dash.get("k").unwrap_or(&"".to_owned())==&demo_api_key_base64{
 
                                         let apikey_quota_object=ApikeyQuotaObject {..Default::default()};
                                         Some(create_apikey_api(
@@ -210,30 +218,38 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let md = metadata(data_path).unwrap();
 
 
-                                    if parameter.len() > 3 || !md.is_file() || data_path.display().to_string().to_lowercase().ends_with(".pdf") || data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME) ||
+                                    if dash.contains_key("i") || !md.is_file() || data_path.display().to_string().to_lowercase().ends_with(".pdf")
+                                    || data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME) || data_path.display().to_string().to_lowercase().ends_with(MSMARCO_FILENAME) ||
                                     (parameter.len()==1 && !apikey_object.index_list.is_empty() && apikey_object.index_list.contains_key(&0))  {
-
-                                        let index_id=if parameter.len()>3 {
-                                            parameter[3].parse().unwrap_or(0)
+                                        let index_id=if dash.contains_key("i") {
+                                            dash.get("i").and_then(|value| value.parse::<u64>().ok()).unwrap_or(0)
                                         } else if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
                                                 let indexname_schemajson = if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME)
                                                 {("wikipedia_demo",r#"
                                                 [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
                                                 {"field":"body","field_type":"Text","stored":true,"indexed":true},
-                                                {"field":"url","field_type":"Text","stored":true,"indexed":false}]"# )} 
+                                                {"field":"url","field_type":"Text","stored":true,"indexed":false}]"#,SimilarityType::Bm25fProximity,TokenizerType::UnicodeAlphanumeric  )} 
+                                                else if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(MSMARCO_FILENAME)
+                                                {("msmarco_demo", r#"
+                                                    [{"field":"url","field_type":"Text","stored":false,"indexed":false},
+                                                    {"field":"title","field_type":"Text","stored":false,"indexed":false},
+                                                    {"field":"body","field_type":"Text","stored":false,"indexed":true}]"# ,SimilarityType::Bm25f,TokenizerType::UnicodeAlphanumeric )
+                                                }
                                                 else {("pdf_demo", r#"
                                                 [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
                                                 {"field":"body","field_type":"Text","stored":true,"indexed":true},
                                                 {"field":"url","field_type":"Text","stored":true,"indexed":false},
-                                                {"field":"date","field_type":"Timestamp","stored":true,"indexed":false,"facet":true}]"# )};
+                                                {"field":"date","field_type":"Timestamp","stored":true,"indexed":false,"facet":true}]"#,SimilarityType::Bm25fProximity,TokenizerType::UnicodeAlphanumeric )};
 
                                                 create_index_api(
                                                     &index_path,
                                                     indexname_schemajson.0.into(),
                                                     serde_json::from_str(indexname_schemajson.1).unwrap(),
-                                                    SimilarityType::Bm25fProximity,
-                                                    TokenizerType::UnicodeAlphanumeric,
+                                                    indexname_schemajson.2,
+                                                    indexname_schemajson.3,
                                                     StemmerType::None,
+                                                    StopwordType::None,
+                                                    FrequentwordType::English,
                                                     Vec::new(),
                                                     apikey_object,
                                                 )
@@ -245,13 +261,57 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
 
                                             if md.is_file() {
-                                                if let Some(extension)=Path::new(&data_path.display().to_string()).extension().and_then(OsStr::to_str) {
+                                                let extension = dash
+                                                .get("t")
+                                                .map(|ext| ext.as_str())
+                                                .or_else(|| Path::new(&data_path).extension().and_then(OsStr::to_str));
+                                                if let Some(extension)=extension {
                                                     match extension.to_lowercase().as_str() {
                                                         "pdf" =>{
                                                             index_arc.ingest_pdf(data_path).await;
                                                         }
                                                         "json" =>{
                                                             index_arc.ingest_json(data_path).await;
+                                                        }
+                                                        "csv" =>{
+                                                            index_arc.ingest_csv(
+                                                                data_path,
+                                                                dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
+                                                                dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                dash.get("d").unwrap_or(&",".to_owned()).as_bytes()[0],
+                                                                dash.get("s").and_then(|value| value.parse::<usize>().ok()),
+                                                                dash.get("n").and_then(|value| value.parse::<usize>().ok())
+                                                            ).await;
+                                                        }
+                                                        "ssv" =>{
+                                                            index_arc.ingest_csv(
+                                                                data_path,
+                                                                dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
+                                                                dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                dash.get("d").unwrap_or(&";".to_owned()).as_bytes()[0],
+                                                                dash.get("s").and_then(|value| value.parse::<usize>().ok()),
+                                                                dash.get("n").and_then(|value| value.parse::<usize>().ok())
+                                                            ).await;
+                                                        }
+                                                        "tsv" =>{
+                                                            index_arc.ingest_csv(
+                                                                data_path,
+                                                                dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
+                                                                dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                dash.get("d").unwrap_or(&"\t".to_owned()).as_bytes()[0],
+                                                                dash.get("s").and_then(|value| value.parse::<usize>().ok()),
+                                                                dash.get("n").and_then(|value| value.parse::<usize>().ok())
+                                                            ).await;
+                                                        }
+                                                        "psv" =>{
+                                                            index_arc.ingest_csv(
+                                                                data_path,
+                                                                dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
+                                                                dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                dash.get("d").unwrap_or(&"|".to_owned()).as_bytes()[0],
+                                                                dash.get("s").and_then(|value| value.parse::<usize>().ok()),
+                                                                dash.get("n").and_then(|value| value.parse::<usize>().ok())
+                                                            ).await;
                                                         }
                                                         _ =>{
                                                             println!("{} {}","File extension not supported:".bright_red(),extension);
@@ -264,20 +324,20 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                 index_arc.ingest_pdf(data_path).await;
                                             }
 
-                                            println!("{} to '{}' and 'index_id' to {} when using the REST API endpoints in test_api.rest/cURL/master.js","Set the 'individual api_key'".yellow(),if parameter.len()>2 {parameter[2]}else{&demo_api_key_base64},index_id);
+                                            println!("{} to '{}' and 'index_id' to {} when using the REST API endpoints in test_api.rest/cURL/master.js","Set the 'individual api_key'".yellow(),dash.get("k").unwrap_or(&demo_api_key_base64),index_id);
                                         } else {
                                             println!("{} {}: Create schema/index first. Schema and index are automatically created only for {} and PDF files.","Index not found".bright_red(),index_id ,WIKIPEDIA_FILENAME);
-                                            println!("For other JSON files, you need to create an index first via REST API (e.g. via CURL) and then use the console command: ingest [file_path] [api_key] [index_id]");
+                                            println!("For other JSON files, you need to create an index first via REST API (e.g. via CURL) and then use the console command: ingest [file_path] -k [api_key] -i [index_id]");
                                             println!("See details: https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#console-commands");
                                         }
                                     } else{
-                                            println!("{}: Create schema/index first. Schema and index are automatically created only for {} and PDF files.","Index not specified or found".bright_red(),WIKIPEDIA_FILENAME);
-                                            println!("For other JSON files, you need to create an index first via REST API (e.g. via CURL) and then use the console command: ingest [file_path] [api_key] [index_id]");
+                                            println!("{}: Create schema/index first! Schema and index are automatically created only for {} and PDF files.","Index not specified or found".bright_red(),WIKIPEDIA_FILENAME);
+                                            println!("For other JSON files, you need to create an index first via REST API (e.g. via CURL) and then use the console command: ingest [file_path] -k [api_key] -i [index_id]");
                                             println!("See details: https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#console-commands");
                                     }
 
                                 } else {
-                                    println!("{} {}. Create a valid API key first via REST API or use the demo API key {}","API key not found".bright_red(),parameter[2],demo_api_key_base64);
+                                    println!("{} {}. Create a valid API key first via REST API or use the demo API key {}","API key not found".bright_red(),dash.get("k").unwrap_or(&String::new()),demo_api_key_base64);
                                 }
                             } else {
                                 println!("{} {}","Path not found".bright_red(),data_path.display());
@@ -345,8 +405,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         println!("{}","Server console commands:".yellow());
                         println!();
                         println!("{:40} Index {} if present in the seekstorm_server.exe directory or the directory specified by the command line parameter `ingest_path`.","ingest".green(),WIKIPEDIA_FILENAME);
-                        println!("{:40} Index a local file in PDF, JSON, Newline-delimited JSON, or Concatenated JSON format, from the seekstorm_server.exe directory or the directory specified by the command line parameter.","ingest [data_path]".green());
-                        println!("{:40} Index a local file in PDF, JSON, Newline-delimited JSON, or Concatenated JSON format.","ingest [data_path] [apikey] [index_id]".green());
+                        println!("{:40} Index a local file in PDF, CSV, JSON, Newline-delimited JSON, or Concatenated JSON format, from the seekstorm_server.exe directory or the directory specified by the command line parameter.","ingest [data_path]".green());
+                        println!("{:40} Index a local file in PDF, CSV, JSON, Newline-delimited JSON, or Concatenated JSON format.","ingest [file_path] -t [type] -k [api_key] -i [index_id] -d [delimiter] -h [header] -q [quoting] -s [skip] -n [num]".green());
                         println!("{:40} Create the demo API key manually to allow a subsequent custom create index via REST API.","create".green());
                         println!("{:40} Delete the demo API key and all its indices.","delete".green());
                         println!("{:40} Create OpenAPI JSON file.","openapi".green());

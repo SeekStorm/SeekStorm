@@ -5,6 +5,7 @@ use std::{
 
 use ahash::AHashMap;
 
+#[cfg(feature = "zh")]
 static DICTIONARY_TXT: &str =
     include_str!("../../assets/dictionaries/frequency_dictionary_zh_cn_349_045.txt");
 
@@ -18,6 +19,7 @@ static DICTIONARY_TXT: &str =
 /// input_str: The string being word segmented.
 /// maximum_dictionary_word_length=max_segmentation_word_length: The maximum word length that should be considered.
 /// result: A tuple representing the suggested word segmented text and the sum of logarithmic word occurence probabilities.</returns>
+#[cfg(feature = "zh")]
 pub struct WordSegmentationTM {
     pub n: f64,
     pub dictionary: AHashMap<Vec<char>, f64>,
@@ -25,6 +27,7 @@ pub struct WordSegmentationTM {
     pub probability_log_estimation: Vec<f64>,
 }
 
+#[cfg(feature = "zh")]
 impl WordSegmentationTM {
     /// Create a new instanc of WordSegmentationTM
     pub(crate) fn new() -> Self {

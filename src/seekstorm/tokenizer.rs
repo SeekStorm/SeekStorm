@@ -5,8 +5,8 @@ use finl_unicode::categories::{CharacterCategories, MinorCategory};
 
 use crate::{
     index::{
-        HASHER_32, HASHER_64, Index, MAX_TERM_NUMBER, NonUniqueTermObject, STOPWORD_HASHSET,
-        TermObject, TokenizerType,
+        HASHER_32, HASHER_64, Index, MAX_TERM_NUMBER, NonUniqueTermObject, TermObject,
+        TokenizerType,
     },
     search::QueryType,
 };
@@ -132,7 +132,6 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-                        //end of term
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -147,14 +146,12 @@ pub(crate) fn tokenizer(
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
                     start = match char.1 {
-                        //start of term
                         token if regex_syntax::is_word_character(token) => {
                             if !start {
                                 start_pos = char.0;
                             }
-                            true //start
+                            true
                         }
-                        //wol126 es wird nicht unterschieden ob am anfang oder inmitten des terms
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -186,14 +183,7 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-                        //end of term
                         _ => {
-                            /*
-                            if start {
-                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
-                            }
-                            */
-                            //wol100
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
                                 if apostroph {
@@ -218,20 +208,58 @@ pub(crate) fn tokenizer(
                 }
             }
 
-            //wol310 query
+            TokenizerType::Whitespace => {
+                text_normalized = text.to_owned();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if !token.is_whitespace() => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
+                }
+            }
+
+            TokenizerType::WhitespaceLowercase => {
+                text_normalized = text.to_ascii_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        //start of term
+                        token if !token.is_whitespace() => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
+                }
+            }
+
             #[cfg(feature = "zh")]
             TokenizerType::UnicodeAlphanumericZH => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
                     start = match char.1 {
-                        //start of term
                         token if regex_syntax::is_word_character(token) => {
                             if !start {
                                 start_pos = char.0;
                             }
-                            true //start
+                            true
                         }
-                        //wol126 es wird nicht unterschieden ob am anfang oder inmitten des terms
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -336,6 +364,46 @@ pub(crate) fn tokenizer(
                 }
             }
 
+            TokenizerType::Whitespace => {
+                text_normalized = text.to_owned();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if !token.is_whitespace() => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
+                }
+            }
+
+            TokenizerType::WhitespaceLowercase => {
+                text_normalized = text.to_ascii_lowercase();
+                for char in text_normalized.char_indices() {
+                    start = match char.1 {
+                        token if !token.is_whitespace() => {
+                            if !start {
+                                start_pos = char.0;
+                            }
+                            true
+                        }
+                        _ => {
+                            if start {
+                                non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
+                            }
+                            false
+                        }
+                    };
+                }
+            }
+
             #[cfg(feature = "zh")]
             TokenizerType::UnicodeAlphanumericZH => {
                 text_normalized = text.to_lowercase();
@@ -403,6 +471,8 @@ pub(crate) fn tokenizer(
     if tokenizer == TokenizerType::AsciiAlphabetic
         || tokenizer == TokenizerType::UnicodeAlphanumeric
         || tokenizer == TokenizerType::UnicodeAlphanumericFolded
+        || tokenizer == TokenizerType::Whitespace
+        || tokenizer == TokenizerType::WhitespaceLowercase
     {
         if start {
             if first_part.len() >= 2 {
@@ -411,7 +481,7 @@ pub(crate) fn tokenizer(
                 non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
             }
         } else if !first_part.is_empty() {
-            non_unique_terms_line.push(first_part);
+            non_unique_terms_line.push(first_part)
         }
     }
 
@@ -458,6 +528,10 @@ pub(crate) fn tokenizer(
                 continue;
             }
 
+            if !index.stop_words.is_empty() && index.stop_words.contains(*term_string) {
+                continue;
+            }
+
             let term_string = if let Some(stemmer) = index.stemmer.as_ref() {
                 stemmer.stem(term_string).to_string()
             } else {
@@ -473,10 +547,16 @@ pub(crate) fn tokenizer(
             });
 
             term_string
-        } else if let Some(stemmer) = index.stemmer.as_ref() {
-            stemmer.stem(term_string).to_string()
         } else {
-            term_string.to_string()
+            if !index.stop_words.is_empty() && index.stop_words.contains(*term_string) {
+                continue;
+            }
+
+            if let Some(stemmer) = index.stemmer.as_ref() {
+                stemmer.stem(term_string).to_string()
+            } else {
+                term_string.to_string()
+            }
         };
 
         let term_hash;
@@ -504,8 +584,8 @@ pub(crate) fn tokenizer(
 
         if enable_bigram
             && position > 0
-            && STOPWORD_HASHSET.contains(&term_hash)
-            && STOPWORD_HASHSET.contains(&previous_term_hash)
+            && index.frequent_hashset.contains(&term_hash)
+            && index.frequent_hashset.contains(&previous_term_hash)
             && (!is_query
                 || (non_unique_terms[non_unique_terms.len() - 1].op == QueryType::Phrase
                     && non_unique_terms[non_unique_terms.len() - 2].op == QueryType::Phrase))

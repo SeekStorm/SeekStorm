@@ -130,6 +130,8 @@ let meta = IndexMetaObject {
     name: "test_index".into(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
+    stop_words: StopwordType::None,
+    frequent_words:FrequentwordType::English,
     access_type: AccessType::Mmap,
 };
 let serialize_schema=true;

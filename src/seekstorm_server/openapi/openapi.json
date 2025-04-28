@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "0.12.21"
+    "version": "0.12.23"
   },
   "servers": [
     {
@@ -266,6 +266,12 @@
                   },
                   "stemmer": {
                     "$ref": "#/components/schemas/StemmerType"
+                  },
+                  "stop_words": {
+                    "$ref": "#/components/schemas/StopwordType"
+                  },
+                  "frequent_words": {
+                    "$ref": "#/components/schemas/FrequentwordType"
                   },
                   "synonyms": {
                     "type": "array",
@@ -2006,6 +2012,71 @@
           "Text"
         ]
       },
+      "FrequentwordType": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "No frequent words",
+            "enum": [
+              "None"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "English frequent words",
+            "enum": [
+              "English"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "German frequent words",
+            "enum": [
+              "German"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "French frequent words",
+            "enum": [
+              "French"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Spanish frequent words",
+            "enum": [
+              "Spanish"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "Custom frequent words",
+            "required": [
+              "Custom"
+            ],
+            "properties": {
+              "Custom": {
+                "type": "object",
+                "description": "Custom frequent words",
+                "required": [
+                  "terms"
+                ],
+                "properties": {
+                  "terms": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of frequent terms."
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.\nAdjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms).\nThe lists of stop_words and frequent_words should not overlap."
+      },
       "GetDocumentRequest": {
         "type": "object",
         "description": "Specifies which document and which field to return",
@@ -3346,6 +3417,71 @@
           "Turkish"
         ]
       },
+      "StopwordType": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "No stopwords",
+            "enum": [
+              "None"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "English stopwords",
+            "enum": [
+              "English"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "German stopwords",
+            "enum": [
+              "German"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "French stopwords",
+            "enum": [
+              "French"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Spanish stopwords",
+            "enum": [
+              "Spanish"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "Custom stopwords",
+            "required": [
+              "Custom"
+            ],
+            "properties": {
+              "Custom": {
+                "type": "object",
+                "description": "Custom stopwords",
+                "required": [
+                  "terms"
+                ],
+                "properties": {
+                  "terms": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of stopwords."
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "StopwordType defines the stopword behavior: None, English, German, French, Spanish, Custom.\nStopwords are removed, both from index and query: for compact index size and faster queries.\nStopword removal has drawbacks: “The Who”, “Take That”, “Let it be”, “To be or not to be”, \"The The\", \"End of days\", \"What might have been\" are all valid queries for bands, songs, movies, literature,\nbut become impossible when stopwords are removed.\nThe lists of stop_words and frequent_words should not overlap."
+      },
       "Synonym": {
         "type": "object",
         "description": "Defines synonyms for terms per index.",
@@ -3373,6 +3509,8 @@
           "AsciiAlphabetic",
           "UnicodeAlphanumeric",
           "UnicodeAlphanumericFolded",
+          "Whitespace",
+          "WhitespaceLowercase",
           "UnicodeAlphanumericZH"
         ]
       },

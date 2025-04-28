@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use crate::{
     add_result::{B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA, decode_positions_commit},
     compatible::_lzcnt_u32,
-    index::{CompressionType, Index, STOP_BIT, STOPWORDS, SimilarityType},
+    index::{CompressionType, Index, STOP_BIT, SimilarityType},
     utils::{
         block_copy, read_u16_ref, read_u32_ref, write_u8_ref, write_u16, write_u16_ref,
         write_u32_ref, write_u64_ref,
@@ -27,10 +27,16 @@ pub(crate) fn compress_postinglist(
         let plo = index.segments_level0[*key0].segment.get(key_hash).unwrap();
 
         if plo.is_bigram {
-            let bigram_term_index1 = STOPWORDS.binary_search(&plo.term_bigram1.as_str()).unwrap();
-            let bigram_term_index2 = STOPWORDS.binary_search(&plo.term_bigram2.as_str()).unwrap();
-            posting_count_bigram1 = index.stopword_posting_counts[bigram_term_index1] as usize;
-            posting_count_bigram2 = index.stopword_posting_counts[bigram_term_index2] as usize;
+            let bigram_term_index1 = index
+                .frequent_words
+                .binary_search(&plo.term_bigram1)
+                .unwrap();
+            let bigram_term_index2 = index
+                .frequent_words
+                .binary_search(&plo.term_bigram2)
+                .unwrap();
+            posting_count_bigram1 = index.frequentword_posting_counts[bigram_term_index1] as usize;
+            posting_count_bigram2 = index.frequentword_posting_counts[bigram_term_index2] as usize;
         }
     }
 
@@ -111,7 +117,7 @@ pub(crate) fn compress_postinglist(
                 } else {
                     u16::MAX
                 },
-            );
+            ); // !!
             compress_postinglist_rle(
                 index,
                 roaring_offset,
@@ -171,7 +177,10 @@ pub(crate) fn compress_postinglist(
     );
 
     let bigram_term_index1 = if plo.is_bigram {
-        STOPWORDS.binary_search(&plo.term_bigram1.as_str()).unwrap() as u8
+        index
+            .frequent_words
+            .binary_search(&plo.term_bigram1)
+            .unwrap() as u8
     } else {
         255
     };
@@ -182,7 +191,10 @@ pub(crate) fn compress_postinglist(
     );
 
     let bigram_term_index2 = if plo.is_bigram {
-        STOPWORDS.binary_search(&plo.term_bigram2.as_str()).unwrap() as u8
+        index
+            .frequent_words
+            .binary_search(&plo.term_bigram2)
+            .unwrap() as u8
     } else {
         255
     };

@@ -17,9 +17,9 @@ use seekstorm::{
     highlighter::{Highlight, highlighter},
     index::{
         AccessType, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
-        Document, Facet, FileType, IndexArc, IndexDocument, IndexDocuments, IndexMetaObject,
-        MinMaxFieldJson, SchemaField, SimilarityType, StemmerType, Synonym, TokenizerType,
-        UpdateDocument, UpdateDocuments, create_index, open_index,
+        Document, Facet, FileType, FrequentwordType, IndexArc, IndexDocument, IndexDocuments,
+        IndexMetaObject, MinMaxFieldJson, SchemaField, SimilarityType, StemmerType, StopwordType,
+        Synonym, TokenizerType, UpdateDocument, UpdateDocuments, create_index, open_index,
     },
     ingest::IndexPdfBytes,
     search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
@@ -127,8 +127,12 @@ pub struct CreateIndexRequest {
     pub similarity: SimilarityType,
     #[serde(default = "tokenizer_type_api")]
     pub tokenizer: TokenizerType,
-    #[serde(default = "stemmer_type_api")]
+    #[serde(default)]
     pub stemmer: StemmerType,
+    #[serde(default)]
+    pub stop_words: StopwordType,
+    #[serde(default)]
+    pub frequent_words: FrequentwordType,
     #[schema(required = true, example = json!([{"terms":["berry","lingonberry","blueberry","gooseberry"],"multiway":false}]))]
     #[serde(default)]
     pub synonyms: Vec<Synonym>,
@@ -140,10 +144,6 @@ fn similarity_type_api() -> SimilarityType {
 
 fn tokenizer_type_api() -> TokenizerType {
     TokenizerType::UnicodeAlphanumeric
-}
-
-fn stemmer_type_api() -> StemmerType {
-    StemmerType::None
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -421,6 +421,8 @@ pub(crate) fn create_index_api<'a>(
     similarity: SimilarityType,
     tokenizer: TokenizerType,
     stemmer: StemmerType,
+    stop_words: StopwordType,
+    frequent_words: FrequentwordType,
     synonyms: Vec<Synonym>,
     apikey_object: &'a mut ApikeyObject,
 ) -> u64 {
@@ -444,6 +446,8 @@ pub(crate) fn create_index_api<'a>(
         similarity,
         tokenizer,
         stemmer,
+        stop_words,
+        frequent_words,
         access_type: AccessType::Mmap,
     };
 

@@ -20,7 +20,7 @@ use crate::{
     index::{
         AccessType, BlockObjectIndex, CompressionType, FACET_VALUES_FILENAME, Index, IndexArc,
         LevelIndex, MAX_POSITIONS_PER_TERM, NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE,
-        PostingListObjectIndex, PostingListObjectQuery, ROARING_BLOCK_SIZE, STOPWORDS, TermObject,
+        PostingListObjectIndex, PostingListObjectQuery, ROARING_BLOCK_SIZE, TermObject,
         update_list_max_impact_score, update_stopwords_posting_counts, warmup,
     },
     utils::{
@@ -523,12 +523,16 @@ impl Index {
                     value.posting_count = plo.posting_count as u32;
                     value.max_list_score = 0.0;
                     value.bigram_term_index1 = if plo.is_bigram {
-                        STOPWORDS.binary_search(&plo.term_bigram1.as_str()).unwrap() as u8
+                        self.frequent_words
+                            .binary_search(&plo.term_bigram1)
+                            .unwrap() as u8
                     } else {
                         255
                     };
                     value.bigram_term_index2 = if plo.is_bigram {
-                        STOPWORDS.binary_search(&plo.term_bigram2.as_str()).unwrap() as u8
+                        self.frequent_words
+                            .binary_search(&plo.term_bigram2)
+                            .unwrap() as u8
                     } else {
                         255
                     };
@@ -635,12 +639,12 @@ impl Index {
             term_bigram1: if bigram_term_index1 == 255 {
                 String::new()
             } else {
-                STOPWORDS[bigram_term_index1 as usize].to_string()
+                self.frequent_words[bigram_term_index1 as usize].to_owned()
             },
             term_bigram2: if bigram_term_index2 == 255 {
                 String::new()
             } else {
-                STOPWORDS[bigram_term_index2 as usize].to_string()
+                self.frequent_words[bigram_term_index2 as usize].to_owned()
             },
             field_positions_vec,
             field_vec_bigram1: if is_bigram {

@@ -1,5 +1,5 @@
 use add_result::decode_positions_commit;
-use ahash::{AHashMap, AHashSet, HashSet, RandomState};
+use ahash::{AHashMap, AHashSet, RandomState};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -143,24 +143,28 @@ pub enum SimilarityType {
 /// - Requires feature #[cfg(feature = "zh")]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default, ToSchema)]
 pub enum TokenizerType {
-    /// Only ASCII alphabetic chars are recognized as token. Mainly for benchmark compatibility.
+    /// Only ASCII alphabetic chars are recognized as token. Token are converted to lowercase. Mainly for benchmark compatibility.
     #[default]
     AsciiAlphabetic = 0,
-    /// All Unicode alphanumeric chars are recognized as token.
+    /// All Unicode alphanumeric chars are recognized as token. Token are converted to lowercase.
     /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     UnicodeAlphanumeric = 1,
-    /// All Unicode alphanumeric chars are recognized as token.
+    /// All Unicode alphanumeric chars are recognized as token. Token are converted to lowercase.
     /// Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     /// Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
     /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
     /// Tokenizing might be slower due to folding and apostroph processing.
     UnicodeAlphanumericFolded = 2,
+    /// Tokens are separated by whitespace. Mainly for benchmark compatibility.
+    Whitespace = 3,
+    /// Tokens are separated by whitespace. Token are converted to lowercase. Mainly for benchmark compatibility.
+    WhitespaceLowercase = 4,
     /// Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
     /// Supports mixed Latin and Chinese texts
     /// Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.
     /// Requires feature #[cfg(feature = "zh")]
     #[cfg(feature = "zh")]
-    UnicodeAlphanumericZH = 3,
+    UnicodeAlphanumericZH = 5,
 }
 
 /// Defines stemming behavior, reducing inflected words to their word stem, base or root form.
@@ -587,6 +591,53 @@ pub(crate) struct IndexedField {
 
     pub is_longest_field: bool,
 }
+/// StopwordType defines the stopword behavior: None, English, German, French, Spanish, Custom.
+/// Stopwords are removed, both from index and query: for compact index size and faster queries.
+/// Stopword removal has drawbacks: “The Who”, “Take That”, “Let it be”, “To be or not to be”, "The The", "End of days", "What might have been" are all valid queries for bands, songs, movies, literature,
+/// but become impossible when stopwords are removed.
+/// The lists of stop_words and frequent_words should not overlap.
+#[derive(Debug, Clone, Deserialize, Serialize, Default, ToSchema)]
+pub enum StopwordType {
+    /// No stopwords
+    #[default]
+    None,
+    /// English stopwords
+    English,
+    /// German stopwords
+    German,
+    /// French stopwords
+    French,
+    /// Spanish stopwords
+    Spanish,
+    /// Custom stopwords
+    Custom {
+        ///List of stopwords.
+        terms: Vec<String>,
+    },
+}
+
+/// FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.
+/// Adjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms).
+/// The lists of stop_words and frequent_words should not overlap.
+#[derive(Debug, Clone, Deserialize, Serialize, Default, ToSchema)]
+pub enum FrequentwordType {
+    /// No frequent words
+    None,
+    /// English frequent words
+    #[default]
+    English,
+    /// German frequent words
+    German,
+    /// French frequent words
+    French,
+    /// Spanish frequent words
+    Spanish,
+    /// Custom frequent words
+    Custom {
+        ///List of frequent terms.
+        terms: Vec<String>,
+    },
+}
 
 /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -601,15 +652,24 @@ pub struct IndexMetaObject {
     /// TokenizerType defines the tokenizer behavior: AsciiAlphabetic, UnicodeAlphanumeric, UnicodeAlphanumericFolded, UnicodeAlphanumericZH
     pub tokenizer: TokenizerType,
     /// StemmerType defines the stemming behavior: None, Arabic, Armenian, Danish, Dutch, English, French, German, Greek, Hungarian, Italian, Norwegian, Portuguese, Romanian, Russian, Spanish, Swedish, Tamil, Turkish
-    #[serde(default = "stemmer_type_api")]
+    #[serde(default)]
     pub stemmer: StemmerType,
+
+    /// StopwordType defines the stopword behavior: None, English, German, French, Spanish, Custom.
+    /// Stopwords are removed, both from index and query: for compact index size and faster queries.
+    /// Stopword removal has drawbacks: “The Who”, “Take That”, “Let it be”, “To be or not to be”, "The The", "End of days", "What might have been" are all valid queries for bands, songs, movies, literature,
+    /// but become impossible when stopwords are removed.
+    /// The lists of stop_words and frequent_words should not overlap.
+    #[serde(default)]
+    pub stop_words: StopwordType,
+    /// FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.
+    /// Adjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms).
+    /// The lists of stop_words and frequent_words should not overlap.
+    #[serde(default)]
+    pub frequent_words: FrequentwordType,
 
     /// AccessType defines where the index resides during search: Ram or Mmap
     pub access_type: AccessType,
-}
-
-fn stemmer_type_api() -> StemmerType {
-    StemmerType::None
 }
 
 #[derive(Debug, Clone, Default)]
@@ -757,7 +817,7 @@ pub struct Index {
     pub(crate) hasher_32: RandomState,
     pub(crate) hasher_64: RandomState,
 
-    pub(crate) stopword_posting_counts: [u32; STOPWORDS.len()],
+    pub(crate) frequentword_posting_counts: Vec<u32>,
 
     pub(crate) docstore_file: File,
     pub(crate) docstore_file_mmap: Mmap,
@@ -831,6 +891,10 @@ pub struct Index {
     #[cfg(feature = "zh")]
     pub(crate) word_segmentation_option: Option<WordSegmentationTM>,
     pub(crate) stemmer: Option<Stemmer>,
+
+    pub(crate) stop_words: AHashSet<String>,
+    pub(crate) frequent_words: Vec<String>,
+    pub(crate) frequent_hashset: AHashSet<u64>,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -1115,12 +1179,59 @@ pub fn create_index(
                 _ => None,
             };
 
+            let stop_words: AHashSet<String> = match &meta.stop_words {
+                StopwordType::None => AHashSet::new(),
+                StopwordType::English => FREQUENT_EN.lines().map(|x| x.to_string()).collect(),
+                StopwordType::German => FREQUENT_DE.lines().map(|x| x.to_string()).collect(),
+                StopwordType::French => FREQUENT_FR.lines().map(|x| x.to_string()).collect(),
+                StopwordType::Spanish => FREQUENT_ES.lines().map(|x| x.to_string()).collect(),
+                StopwordType::Custom { terms } => terms.iter().map(|x| x.to_string()).collect(),
+            };
+
+            let frequent_words: Vec<String> = match &meta.frequent_words {
+                FrequentwordType::None => Vec::new(),
+                FrequentwordType::English => {
+                    let mut words: Vec<String> =
+                        FREQUENT_EN.lines().map(|x| x.to_string()).collect();
+                    words.sort_unstable();
+                    words
+                }
+                FrequentwordType::German => {
+                    let mut words: Vec<String> =
+                        FREQUENT_DE.lines().map(|x| x.to_string()).collect();
+                    words.sort_unstable();
+                    words
+                }
+                FrequentwordType::French => {
+                    let mut words: Vec<String> =
+                        FREQUENT_FR.lines().map(|x| x.to_string()).collect();
+                    words.sort_unstable();
+                    words
+                }
+                FrequentwordType::Spanish => {
+                    let mut words: Vec<String> =
+                        FREQUENT_ES.lines().map(|x| x.to_string()).collect();
+                    words.sort_unstable();
+                    words
+                }
+                FrequentwordType::Custom { terms } => {
+                    let mut words: Vec<String> = terms.iter().map(|x| x.to_string()).collect();
+                    words.sort_unstable();
+                    words
+                }
+            };
+
+            let frequent_hashset: AHashSet<u64> = frequent_words
+                .iter()
+                .map(|x| HASHER_64.hash_one(x.as_bytes()))
+                .collect();
+
             let mut index = Index {
                 index_format_version_major: INDEX_FORMAT_VERSION_MAJOR,
                 index_format_version_minor: INDEX_FORMAT_VERSION_MINOR,
                 hasher_32,
                 hasher_64,
-                stopword_posting_counts: [0; STOPWORDS.len()],
+                frequentword_posting_counts: vec![0; frequent_words.len()],
                 docstore_file,
                 delete_file,
                 delete_hashset: AHashSet::new(),
@@ -1189,6 +1300,9 @@ pub fn create_index(
                 #[cfg(feature = "zh")]
                 word_segmentation_option,
                 stemmer,
+                stop_words,
+                frequent_words,
+                frequent_hashset,
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -1392,8 +1506,8 @@ pub(crate) fn get_max_score(
                     + SIGMA);
         }
     } else {
-        let posting_count1 = index.stopword_posting_counts[bigram_term_index1 as usize];
-        let posting_count2 = index.stopword_posting_counts[bigram_term_index2 as usize];
+        let posting_count1 = index.frequentword_posting_counts[bigram_term_index1 as usize];
+        let posting_count2 = index.frequentword_posting_counts[bigram_term_index2 as usize];
 
         let idf_bigram1 = (((index.indexed_doc_count as f32 - posting_count1 as f32 + 0.5)
             / (posting_count1 as f32 + 0.5))
@@ -1460,14 +1574,14 @@ pub(crate) fn update_stopwords_posting_counts(
     index: &mut Index,
     update_last_block_with_level0: bool,
 ) {
-    for (i, stopword) in STOPWORDS.iter().enumerate() {
+    for (i, frequentword) in index.frequent_words.iter().enumerate() {
         let index_ref = &*index;
 
-        let term_bytes = stopword.as_bytes();
+        let term_bytes = frequentword.as_bytes();
         let key0 = HASHER_32.hash_one(term_bytes) as u32 & index_ref.segment_number_mask1;
         let key_hash = HASHER_64.hash_one(term_bytes);
 
-        index.stopword_posting_counts[i] = if index.meta.access_type == AccessType::Mmap {
+        index.frequentword_posting_counts[i] = if index.meta.access_type == AccessType::Mmap {
             let plo_option = decode_posting_list_object(
                 &index_ref.segments_index[key0 as usize],
                 index_ref,
@@ -1490,7 +1604,7 @@ pub(crate) fn update_stopwords_posting_counts(
 
         if update_last_block_with_level0 {
             if let Some(x) = index.segments_level0[key0 as usize].segment.get(&key_hash) {
-                index.stopword_posting_counts[i] += x.posting_count as u32;
+                index.frequentword_posting_counts[i] += x.posting_count as u32;
             }
         }
     }
@@ -2069,10 +2183,11 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
         }
     }
 
-    for stopword in STOPWORDS {
+    let frequent_words = index_object_arc.read().await.frequent_words.clone();
+    for frequentword in frequent_words.iter() {
         let results_list = index_object_arc
             .search(
-                stopword.to_owned(),
+                frequentword.to_owned(),
                 QueryType::Union,
                 0,
                 1000,
@@ -2088,7 +2203,7 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
         let mut index_mut = index_object_arc.write().await;
         index_mut
             .stopword_results
-            .insert(stopword.to_string(), results_list);
+            .insert(frequentword.to_string(), results_list);
     }
 }
 
@@ -2121,17 +2236,12 @@ lazy_static! {
         RandomState::with_seeds(805272099, 242851902, 646123436, 591410655);
     pub(crate) static ref HASHER_64: RandomState =
         RandomState::with_seeds(808259318, 750368348, 84901999, 789810389);
-    pub(crate) static ref STOPWORD_HASHSET: HashSet<u64> = STOPWORDS
-        .iter()
-        .map(|&x| HASHER_64.hash_one(x.as_bytes()))
-        .collect();
 }
 
-pub(crate) const STOPWORDS: [&str; 40] = [
-    "a", "all", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is",
-    "it", "most", "new", "no", "not", "of", "on", "only", "or", "r", "such", "that", "the",
-    "their", "then", "there", "these", "they", "this", "to", "up", "was", "who", "will", "with",
-];
+static FREQUENT_EN: &str = include_str!("../../assets/dictionaries/frequent_en.txt");
+static FREQUENT_DE: &str = include_str!("../../assets/dictionaries/frequent_de.txt");
+static FREQUENT_FR: &str = include_str!("../../assets/dictionaries/frequent_fr.txt");
+static FREQUENT_ES: &str = include_str!("../../assets/dictionaries/frequent_es.txt");
 
 /// Compress termFrequency : 90 -> 88, 96 = index of previous smaller number
 pub(crate) fn norm_frequency(term_frequency: u32) -> u8 {

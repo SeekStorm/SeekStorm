@@ -1677,9 +1677,11 @@ impl Search for IndexArc {
                                                 + 1.0)
                                                 .ln();
                                         } else {
-                                            let posting_count1 = index_ref.stopword_posting_counts
+                                            let posting_count1 = index_ref
+                                                .frequentword_posting_counts
                                                 [bigram_term_index1 as usize];
-                                            let posting_count2 = index_ref.stopword_posting_counts
+                                            let posting_count2 = index_ref
+                                                .frequentword_posting_counts
                                                 [bigram_term_index2 as usize];
 
                                             idf_bigram1 = (((index_ref.indexed_doc_count as f32

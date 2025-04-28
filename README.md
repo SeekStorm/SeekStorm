@@ -69,7 +69,7 @@ Result types
 ### SeekStorm multi-tenancy search server 
 
   * Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints).
-  * Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
+  * Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values), [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
   * Ingest local PDF files via console command (single file or all files in a directory).
   * Multi-tenancy index management.
   * API-key management.
@@ -325,6 +325,8 @@ let meta = IndexMetaObject {
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
     stemmer: StemmerType::None,
+    stop_words: StopwordType::None,
+    frequent_words:FrequentwordType::English,
     access_type: AccessType::Mmap,
 };
 
@@ -443,7 +445,7 @@ for query in query_vec {
 
 index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
 ```rust
-let file_path=Path::new("wiki_articles.json");
+let file_path=Path::new("wiki-articles.json");
 let _ =index_arc.ingest_json(file_path).await;
 ```
 
@@ -573,6 +575,8 @@ let meta = IndexMetaObject {
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
     stemmer: StemmerType::None,
+    stop_words: StopwordType::None,
+    frequent_words:FrequentwordType::English,
     access_type: AccessType::Mmap,
 };
 

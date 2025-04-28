@@ -4,8 +4,9 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, DeleteDocument, FileType, IndexDocument, IndexDocuments, IndexMetaObject,
-    SimilarityType, StemmerType, TokenizerType, create_index, open_index,
+    AccessType, DeleteDocument, FileType, FrequentwordType, IndexDocument, IndexDocuments,
+    IndexMetaObject, SimilarityType, StemmerType, StopwordType, TokenizerType, create_index,
+    open_index,
 };
 use seekstorm::search::{QueryType, ResultType, Search};
 use std::collections::HashSet;
@@ -30,6 +31,8 @@ fn test_01_create_index() {
         similarity: SimilarityType::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
         stemmer: StemmerType::None,
+        stop_words: StopwordType::None,
+        frequent_words: FrequentwordType::English,
         access_type: AccessType::Mmap,
     };
 
