@@ -41,8 +41,10 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets (with Histogram/Bucket & Min/Max aggregation)
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting.
-* Tokenizer with Chinese word segmentation
+* 6 tokenizers, including Chinese word segmentation.
 * Stemming for 18 languages
+* Stopword lists, custom and predefined, for smaller indices and faster search.
+* Frequent word lists, custom and predefined, for faster phrase search by n-gram indexing.
 * KWIC snippets, highlighting
 * One-way and multi-way synonyms
 * Billion-scale index
