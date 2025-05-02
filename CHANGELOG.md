@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.24] - 2025-05-02
+
+### Fixed
+
+- Fixes a 85% performance drop (Windows 11 24H2/Intel hybrid CPUs only) caused by a faulty Windows 11 24H2 update,  
+  that changed the task scheduler behavior into under-utilizing the P-Cores over E-cores of Intel hybrid CPUs.
+  This is a workaround until Microsoft fixes the issue in a future update.
+  The fix solves the issue for the SeekStorm server, if you embedd the SeekStorm library into your own code you have to apply the fix as well.
+  See blog post for details: https://seekstorm.com/blog/80-percent-performance-drop/
+
 ## [0.12.23] - 2025-04-28
 
 ### Added

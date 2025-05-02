@@ -634,7 +634,7 @@ pub enum FrequentwordType {
     Spanish,
     /// Custom frequent words
     Custom {
-        ///List of frequent terms.
+        ///List of frequent terms, max. 256 terms.
         terms: Vec<String>,
     },
 }
@@ -1215,7 +1215,8 @@ pub fn create_index(
                     words
                 }
                 FrequentwordType::Custom { terms } => {
-                    let mut words: Vec<String> = terms.iter().map(|x| x.to_string()).collect();
+                    let mut words: Vec<String> =
+                        terms.iter().take(256).map(|x| x.to_string()).collect();
                     words.sort_unstable();
                     words
                 }
