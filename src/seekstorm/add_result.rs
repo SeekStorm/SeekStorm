@@ -1885,7 +1885,7 @@ pub(crate) fn read_multifield_vec(
                 positions_count |= positions_count2 & 0b01111111
             } else {
                 positions_count = (positions_count << 7)
-                    | ((positions_count2 & 0b01111111) << 7)
+                    | (positions_count2 & 0b01111111) << 7
                     | (byte_array[*positions_pointer] & 0b01111111) as u32;
                 *positions_pointer += 1;
             }
@@ -1904,7 +1904,7 @@ pub(crate) fn read_multifield_vec(
                 positions_count |= positions_count2 & 0b01111111
             } else {
                 positions_count = (positions_count << 7)
-                    | ((positions_count2 & 0b01111111) << 7)
+                    | (positions_count2 & 0b01111111) << 7
                     | (byte_array[*positions_pointer] & 0b01111111) as u32;
                 *positions_pointer += 1;
             }
@@ -1932,14 +1932,14 @@ pub(crate) fn read_multifield_vec(
                 *positions_pointer += 1;
 
                 field_id_position_count =
-                    (field_id_position_count << 7) | (byte as usize & 0b01111111);
+                    field_id_position_count << 7 | (byte as usize & 0b01111111);
 
                 if (byte & STOP_BIT) == 0 {
                     byte = byte_array[*positions_pointer];
                     *positions_pointer += 1;
 
                     field_id_position_count =
-                        (field_id_position_count << 7) | (byte as usize & 0b01111111);
+                        field_id_position_count << 7 | (byte as usize & 0b01111111);
                 }
             }
 
@@ -2229,7 +2229,7 @@ pub(crate) fn read_singlefield_value(
             positions_count_internal |= positions_count2 & 0b01111111
         } else {
             positions_count_internal = (positions_count_internal << 7)
-                | ((positions_count2 & 0b01111111) << 7)
+                | (positions_count2 & 0b01111111) << 7
                 | (byte_array[*positions_pointer as usize] & 0b01111111) as u32;
         }
     };

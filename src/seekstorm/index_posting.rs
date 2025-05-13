@@ -584,14 +584,15 @@ impl Index {
 
         if !embed_flag && positions_stack != compressed_position_size {
             println!(
-                "size conflict: term {} bigram {} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {}",
+                "size conflict: term {} bigram {} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {} posting_pointer_size {}",
                 term.term,
                 term.is_bigram,
                 only_longest_field,
                 positions_count_sum,
                 positions_stack,
                 compressed_position_size,
-                positions_compressed_pointer
+                positions_compressed_pointer,
+                posting_pointer_size
             );
         }
 

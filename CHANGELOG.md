@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.25] - 2025-05-12
+
+### Improved
+
+- Faster index_document, commit, clear_index: 
+  Increased SEGMENT_KEY_CAPACITY prevents HashMap resizing during indexing.
+  vector/hashmap reuse instead of reinitialization.
+
+### Fixed
+
+- Intersection between RLE-RLE and RLE-Bitmap compressed posting lists fixed.
+
 ## [0.12.24] - 2025-05-02
 
 ### Fixed

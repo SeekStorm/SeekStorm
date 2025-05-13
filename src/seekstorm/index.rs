@@ -73,6 +73,8 @@ pub(crate) const BIGRAM_FLAG: bool = true;
 pub(crate) const POSTING_BUFFER_SIZE: usize = 400_000_000;
 pub(crate) const MAX_TERM_NUMBER: usize = 10;
 
+pub(crate) const SEGMENT_KEY_CAPACITY: usize = 1000;
+
 /// A document is a flattened, single level of key-value pairs, where key is an arbitrary string, and value represents any valid JSON value.
 pub type Document = HashMap<String, serde_json::Value>;
 
@@ -1342,6 +1344,7 @@ pub fn create_index(
             index.segment_number_mask1 = segment_number_mask1;
             index.segments_level0 = vec![
                 SegmentLevel0 {
+                    segment: AHashMap::with_capacity(SEGMENT_KEY_CAPACITY),
                     ..Default::default()
                 };
                 index.segment_number1
@@ -2582,21 +2585,15 @@ impl Index {
 
         self.level_index = Vec::new();
 
-        self.segments_index = Vec::new();
-        for _i in 0..self.segment_number1 {
-            self.segments_index.push(SegmentIndex {
-                byte_array_blocks: Vec::new(),
-                byte_array_blocks_pointer: Vec::new(),
-                segment: AHashMap::new(),
-            });
+        for segment in self.segments_index.iter_mut() {
+            segment.byte_array_blocks.clear();
+            segment.byte_array_blocks_pointer.clear();
+            segment.segment.clear();
         }
 
-        self.segments_level0 = vec![
-            SegmentLevel0 {
-                ..Default::default()
-            };
-            self.segment_number1
-        ];
+        for segment in self.segments_level0.iter_mut() {
+            segment.segment.clear();
+        }
 
         self.key_count_sum = 0;
         self.block_id = 0;

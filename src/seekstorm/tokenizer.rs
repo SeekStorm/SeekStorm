@@ -141,7 +141,6 @@ pub(crate) fn tokenizer(
                     };
                 }
             }
-            //else {
             TokenizerType::UnicodeAlphanumeric => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
@@ -232,7 +231,6 @@ pub(crate) fn tokenizer(
                 text_normalized = text.to_ascii_lowercase();
                 for char in text_normalized.char_indices() {
                     start = match char.1 {
-                        //start of term
                         token if !token.is_whitespace() => {
                             if !start {
                                 start_pos = char.0;

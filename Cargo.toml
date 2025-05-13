@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.12.24"
+version = "0.12.25"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -30,13 +30,13 @@ path = "src/seekstorm_server/main.rs"
 
 [dependencies]
 crossbeam-channel = "0.5.15"
-ctrlc = "3.4.6"
+ctrlc = "3.4.7"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-tokio = { version = "1.44.2", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 base64 = "0.22.1"
 num-format = "0.4.4"
-ahash ={ version = "0.8.11", features = ["serde"]}
+ahash ={ version = "0.8.12", features = ["serde"]}
 rand = "0.9.1"
 futures = "0.3.31"
 num = "0.4.3"

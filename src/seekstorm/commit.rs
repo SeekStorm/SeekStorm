@@ -1,4 +1,3 @@
-use ahash::AHashMap;
 use memmap2::{Mmap, MmapMut};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
@@ -338,8 +337,7 @@ impl Index {
         self.strip_compressed_sum = 0;
 
         for segment in self.segments_level0.iter_mut() {
-            segment.positions_compressed = Vec::new();
-            segment.segment = AHashMap::new();
+            segment.segment.clear();
         }
 
         self.uncommitted = false;
