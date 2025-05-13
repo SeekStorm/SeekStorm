@@ -120,6 +120,7 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::str;
+#[cfg(target_os = "windows")]
 use winapi::um::{
     processthreadsapi::{GetCurrentProcess, SetPriorityClass},
     winbase::ABOVE_NORMAL_PRIORITY_CLASS,
