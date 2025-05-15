@@ -173,11 +173,23 @@ impl Index {
         if term.is_bigram {
             for (i, field) in term.field_vec_bigram1.iter().enumerate() {
                 if field_positions_vec.len() == 1 {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 128 { 1 } else { 2 };
+                    positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                        1
+                    } else if field.1 < 16_384 {
+                        2
+                    } else {
+                        3
+                    };
                 } else if term.field_vec_bigram1.len() == 1
                     && term.field_vec_bigram1[0].0 == self.longest_field_id
                 {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 64 { 1 } else { 2 };
+                    positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                        1
+                    } else if field.1 < 8_192 {
+                        2
+                    } else {
+                        3
+                    };
                 } else {
                     let required_position_count_bits = u32::BITS - field.1.leading_zeros();
                     let only_longest_field_bit = if i == 0 { 1 } else { 0 };
@@ -196,11 +208,23 @@ impl Index {
             }
             for (i, field) in term.field_vec_bigram2.iter().enumerate() {
                 if field_positions_vec.len() == 1 {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 128 { 1 } else { 2 };
+                    positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                        1
+                    } else if field.1 < 16_384 {
+                        2
+                    } else {
+                        3
+                    };
                 } else if term.field_vec_bigram2.len() == 1
                     && term.field_vec_bigram2[0].0 == self.longest_field_id
                 {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 64 { 1 } else { 2 };
+                    positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                        1
+                    } else if field.1 < 8_192 {
+                        2
+                    } else {
+                        3
+                    };
                 } else {
                     let required_position_count_bits = u32::BITS - field.1.leading_zeros();
                     let only_longest_field_bit = if i == 0 { 1 } else { 0 };
