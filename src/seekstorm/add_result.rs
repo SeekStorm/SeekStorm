@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use crate::{
     geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
-        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index, NgramType,
         NonUniquePostingListObjectQuery, PostingListObjectQuery, SPEEDUP_FLAG, STOP_BIT,
         SimilarityType, get_document_length_compressed_mmap,
     },
@@ -21,33 +21,6 @@ pub(crate) const K: f32 = 1.2;
 pub(crate) const B: f32 = 0.75;
 pub(crate) const SIGMA: f32 = 0.0;
 
-pub(crate) const DOCUMENT_LENGTH_COMPRESSION: [u32; 256] = [
-    0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11,
-    0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21,
-    0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2a, 0x2c, 0x2e, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3c,
-    0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x60, 0x68, 0x70, 0x78, 0x80, 0x88, 0x90, 0x98, 0xa8,
-    0xb8, 0xc8, 0xd8, 0xe8, 0xf8, 0x108, 0x118, 0x138, 0x158, 0x178, 0x198, 0x1b8, 0x1d8, 0x1f8,
-    0x218, 0x258, 0x298, 0x2d8, 0x318, 0x358, 0x398, 0x3d8, 0x418, 0x498, 0x518, 0x598, 0x618,
-    0x698, 0x718, 0x798, 0x818, 0x918, 0xa18, 0xb18, 0xc18, 0xd18, 0xe18, 0xf18, 0x1018, 0x1218,
-    0x1418, 0x1618, 0x1818, 0x1a18, 0x1c18, 0x1e18, 0x2018, 0x2418, 0x2818, 0x2c18, 0x3018, 0x3418,
-    0x3818, 0x3c18, 0x4018, 0x4818, 0x5018, 0x5818, 0x6018, 0x6818, 0x7018, 0x7818, 0x8018, 0x9018,
-    0xa018, 0xb018, 0xc018, 0xd018, 0xe018, 0xf018, 0x10018, 0x12018, 0x14018, 0x16018, 0x18018,
-    0x1a018, 0x1c018, 0x1e018, 0x20018, 0x24018, 0x28018, 0x2c018, 0x30018, 0x34018, 0x38018,
-    0x3c018, 0x40018, 0x48018, 0x50018, 0x58018, 0x60018, 0x68018, 0x70018, 0x78018, 0x80018,
-    0x90018, 0xa0018, 0xb0018, 0xc0018, 0xd0018, 0xe0018, 0xf0018, 0x100018, 0x120018, 0x140018,
-    0x160018, 0x180018, 0x1a0018, 0x1c0018, 0x1e0018, 0x200018, 0x240018, 0x280018, 0x2c0018,
-    0x300018, 0x340018, 0x380018, 0x3c0018, 0x400018, 0x480018, 0x500018, 0x580018, 0x600018,
-    0x680018, 0x700018, 0x780018, 0x800018, 0x900018, 0xa00018, 0xb00018, 0xc00018, 0xd00018,
-    0xe00018, 0xf00018, 0x1000018, 0x1200018, 0x1400018, 0x1600018, 0x1800018, 0x1a00018,
-    0x1c00018, 0x1e00018, 0x2000018, 0x2400018, 0x2800018, 0x2c00018, 0x3000018, 0x3400018,
-    0x3800018, 0x3c00018, 0x4000018, 0x4800018, 0x5000018, 0x5800018, 0x6000018, 0x6800018,
-    0x7000018, 0x7800018, 0x8000018, 0x9000018, 0xa000018, 0xb000018, 0xc000018, 0xd000018,
-    0xe000018, 0xf000018, 0x10000018, 0x12000018, 0x14000018, 0x16000018, 0x18000018, 0x1a000018,
-    0x1c000018, 0x1e000018, 0x20000018, 0x24000018, 0x28000018, 0x2c000018, 0x30000018, 0x34000018,
-    0x38000018, 0x3c000018, 0x40000018, 0x48000018, 0x50000018, 0x58000018, 0x60000018, 0x68000018,
-    0x70000018, 0x78000018,
-];
-
 pub(crate) struct PostingListObjectSingle<'a> {
     pub rank_position_pointer_range: u32,
     pub pointer_pivot_p_docid: u16,
@@ -55,9 +28,10 @@ pub(crate) struct PostingListObjectSingle<'a> {
     pub p_docid: i32,
     pub idf: f32,
 
-    pub idf_bigram1: f32,
-    pub idf_bigram2: f32,
-    pub is_bigram: bool,
+    pub idf_ngram1: f32,
+    pub idf_ngram2: f32,
+    pub idf_ngram3: f32,
+    pub ngram_type: NgramType,
 }
 
 #[inline(always)]
@@ -221,8 +195,9 @@ pub(crate) fn add_result_singleterm_multifield(
     };
 
     let mut field_vec: SmallVec<[(u16, usize); 2]> = SmallVec::new();
-    let mut field_vec_bigram1: SmallVec<[(u16, usize); 2]> = SmallVec::new();
-    let mut field_vec_bigram2: SmallVec<[(u16, usize); 2]> = SmallVec::new();
+    let mut field_vec_ngram1: SmallVec<[(u16, usize); 2]> = SmallVec::new();
+    let mut field_vec_ngram2: SmallVec<[(u16, usize); 2]> = SmallVec::new();
+    let mut field_vec_ngram3: SmallVec<[(u16, usize); 2]> = SmallVec::new();
 
     match *result_type {
         ResultType::Count => {
@@ -231,8 +206,9 @@ pub(crate) fn add_result_singleterm_multifield(
                     index,
                     plo_single,
                     &mut field_vec,
-                    &mut field_vec_bigram1,
-                    &mut field_vec_bigram2,
+                    &mut field_vec_ngram1,
+                    &mut field_vec_ngram2,
+                    &mut field_vec_ngram3,
                 );
 
                 if field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
@@ -268,8 +244,9 @@ pub(crate) fn add_result_singleterm_multifield(
                     index,
                     plo_single,
                     &mut field_vec,
-                    &mut field_vec_bigram1,
-                    &mut field_vec_bigram2,
+                    &mut field_vec_ngram1,
+                    &mut field_vec_ngram2,
+                    &mut field_vec_ngram3,
                 );
 
                 if field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
@@ -291,8 +268,9 @@ pub(crate) fn add_result_singleterm_multifield(
                     index,
                     plo_single,
                     &mut field_vec,
-                    &mut field_vec_bigram1,
-                    &mut field_vec_bigram2,
+                    &mut field_vec_ngram1,
+                    &mut field_vec_ngram2,
+                    &mut field_vec_ngram3,
                 );
 
                 if field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
@@ -327,8 +305,9 @@ pub(crate) fn add_result_singleterm_multifield(
             index,
             plo_single,
             &mut field_vec,
-            &mut field_vec_bigram1,
-            &mut field_vec_bigram2,
+            &mut field_vec_ngram1,
+            &mut field_vec_ngram2,
+            &mut field_vec_ngram3,
         );
     }
 
@@ -337,8 +316,9 @@ pub(crate) fn add_result_singleterm_multifield(
         docid,
         plo_single,
         field_vec,
-        field_vec_bigram1,
-        field_vec_bigram2,
+        field_vec_ngram1,
+        field_vec_ngram2,
+        field_vec_ngram3,
     );
 
     search_result.topk_candidates.add_topk(
@@ -709,8 +689,9 @@ pub(crate) fn add_result_singleterm_singlefield(
         return;
     };
 
-    let mut tf_bigram1 = 0;
-    let mut tf_bigram2 = 0;
+    let mut tf_ngram1 = 0;
+    let mut tf_ngram2 = 0;
+    let mut tf_ngram3 = 0;
     let mut positions_count = 0;
     let field_id = 0u16;
 
@@ -719,8 +700,9 @@ pub(crate) fn add_result_singleterm_singlefield(
             if !field_filter_set.is_empty() {
                 decode_positions_singleterm_singlefield(
                     plo_single,
-                    &mut tf_bigram1,
-                    &mut tf_bigram2,
+                    &mut tf_ngram1,
+                    &mut tf_ngram2,
+                    &mut tf_ngram3,
                     &mut positions_count,
                 );
 
@@ -754,8 +736,9 @@ pub(crate) fn add_result_singleterm_singlefield(
             if !field_filter_set.is_empty() {
                 decode_positions_singleterm_singlefield(
                     plo_single,
-                    &mut tf_bigram1,
-                    &mut tf_bigram2,
+                    &mut tf_ngram1,
+                    &mut tf_ngram2,
+                    &mut tf_ngram3,
                     &mut positions_count,
                 );
 
@@ -775,8 +758,9 @@ pub(crate) fn add_result_singleterm_singlefield(
             if !field_filter_set.is_empty() {
                 decode_positions_singleterm_singlefield(
                     plo_single,
-                    &mut tf_bigram1,
-                    &mut tf_bigram2,
+                    &mut tf_ngram1,
+                    &mut tf_ngram2,
+                    &mut tf_ngram3,
                     &mut positions_count,
                 );
 
@@ -808,8 +792,9 @@ pub(crate) fn add_result_singleterm_singlefield(
     if field_filter_set.is_empty() {
         decode_positions_singleterm_singlefield(
             plo_single,
-            &mut tf_bigram1,
-            &mut tf_bigram2,
+            &mut tf_ngram1,
+            &mut tf_ngram2,
+            &mut tf_ngram3,
             &mut positions_count,
         );
     }
@@ -818,8 +803,9 @@ pub(crate) fn add_result_singleterm_singlefield(
         index,
         docid,
         plo_single,
-        tf_bigram1,
-        tf_bigram2,
+        tf_ngram1,
+        tf_ngram2,
+        tf_ngram3,
         positions_count,
     );
 
@@ -838,8 +824,9 @@ pub(crate) fn get_bm25f_singleterm_multifield(
     docid: usize,
     plo_single: &PostingListObjectSingle,
     field_vec: SmallVec<[(u16, usize); 2]>,
-    field_vec_bigram1: SmallVec<[(u16, usize); 2]>,
-    field_vec_bigram2: SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram1: SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram2: SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram3: SmallVec<[(u16, usize); 2]>,
 ) -> f32 {
     let mut bm25f = 0.0;
     let block_id = docid >> 16;
@@ -853,20 +840,37 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                     [docid & 0b11111111_11111111]
             } as usize];
 
-        if !plo_single.is_bigram {
-            let tf = field_vec[0].1 as f32;
+        match plo_single.ngram_type {
+            NgramType::SingleTerm => {
+                let tf = field_vec[0].1 as f32;
 
-            bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
-        } else {
-            let tf_bigram1 = field_vec_bigram1[0].1 as f32;
-            let tf_bigram2 = field_vec_bigram2[0].1 as f32;
+                bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
+            }
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                let tf_ngram1 = field_vec_ngram1[0].1 as f32;
+                let tf_ngram2 = field_vec_ngram2[0].1 as f32;
 
-            bm25f = plo_single.idf_bigram1
-                * ((tf_bigram1 * (K + 1.0) / (tf_bigram1 + bm25_component)) + SIGMA)
-                + plo_single.idf_bigram2
-                    * ((tf_bigram2 * (K + 1.0) / (tf_bigram2 + bm25_component)) + SIGMA);
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 * (K + 1.0) / (tf_ngram1 + bm25_component)) + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 * (K + 1.0) / (tf_ngram2 + bm25_component)) + SIGMA);
+            }
+            _ => {
+                let tf_ngram1 = field_vec_ngram1[0].1 as f32;
+                let tf_ngram2 = field_vec_ngram2[0].1 as f32;
+                let tf_ngram3 = field_vec_ngram3[0].1 as f32;
+
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 * (K + 1.0) / (tf_ngram1 + bm25_component)) + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 * (K + 1.0) / (tf_ngram2 + bm25_component)) + SIGMA)
+                    + plo_single.idf_ngram3
+                        * ((tf_ngram3 * (K + 1.0) / (tf_ngram3 + bm25_component)) + SIGMA);
+            }
         }
-    } else if !plo_single.is_bigram || index.meta.similarity == SimilarityType::Bm25fProximity {
+    } else if plo_single.ngram_type == NgramType::SingleTerm
+        || index.meta.similarity == SimilarityType::Bm25fProximity
+    {
         for field in field_vec.iter() {
             let field_id = field.0 as usize;
 
@@ -889,8 +893,11 @@ pub(crate) fn get_bm25f_singleterm_multifield(
 
             bm25f += weight * plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         }
-    } else {
-        for field in field_vec_bigram1.iter() {
+    } else if plo_single.ngram_type == NgramType::NgramFF
+        || plo_single.ngram_type == NgramType::NgramRF
+        || plo_single.ngram_type == NgramType::NgramFR
+    {
+        for field in field_vec_ngram1.iter() {
             let field_id = field.0 as usize;
 
             let bm25_component =
@@ -906,16 +913,16 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                         [docid & 0b11111111_11111111]
                 } as usize];
 
-            let tf_bigram1 = field.1 as f32;
+            let tf_ngram1 = field.1 as f32;
 
             let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
-                * plo_single.idf_bigram1
-                * ((tf_bigram1 * (K + 1.0) / (tf_bigram1 + bm25_component)) + SIGMA);
+                * plo_single.idf_ngram1
+                * ((tf_ngram1 * (K + 1.0) / (tf_ngram1 + bm25_component)) + SIGMA);
         }
 
-        for field in field_vec_bigram2.iter() {
+        for field in field_vec_ngram2.iter() {
             let field_id = field.0 as usize;
 
             let bm25_component =
@@ -931,13 +938,88 @@ pub(crate) fn get_bm25f_singleterm_multifield(
                         [docid & 0b11111111_11111111]
                 } as usize];
 
-            let tf_bigram2 = field.1 as f32;
+            let tf_ngram2 = field.1 as f32;
 
             let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
-                * plo_single.idf_bigram2
-                * ((tf_bigram2 * (K + 1.0) / (tf_bigram2 + bm25_component)) + SIGMA);
+                * plo_single.idf_ngram2
+                * ((tf_ngram2 * (K + 1.0) / (tf_ngram2 + bm25_component)) + SIGMA);
+        }
+    } else {
+        for field in field_vec_ngram1.iter() {
+            let field_id = field.0 as usize;
+
+            let bm25_component =
+                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                    get_document_length_compressed_mmap(
+                        index,
+                        field_id,
+                        block_id,
+                        docid & 0b11111111_11111111,
+                    )
+                } else {
+                    index.level_index[block_id].document_length_compressed_array[field_id]
+                        [docid & 0b11111111_11111111]
+                } as usize];
+
+            let tf_ngram1 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            bm25f += weight
+                * plo_single.idf_ngram1
+                * ((tf_ngram1 * (K + 1.0) / (tf_ngram1 + bm25_component)) + SIGMA);
+        }
+
+        for field in field_vec_ngram2.iter() {
+            let field_id = field.0 as usize;
+
+            let bm25_component =
+                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                    get_document_length_compressed_mmap(
+                        index,
+                        field_id,
+                        block_id,
+                        docid & 0b11111111_11111111,
+                    )
+                } else {
+                    index.level_index[block_id].document_length_compressed_array[field_id]
+                        [docid & 0b11111111_11111111]
+                } as usize];
+
+            let tf_ngram2 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            bm25f += weight
+                * plo_single.idf_ngram2
+                * ((tf_ngram2 * (K + 1.0) / (tf_ngram2 + bm25_component)) + SIGMA);
+        }
+
+        for field in field_vec_ngram3.iter() {
+            let field_id = field.0 as usize;
+
+            let bm25_component =
+                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                    get_document_length_compressed_mmap(
+                        index,
+                        field_id,
+                        block_id,
+                        docid & 0b11111111_11111111,
+                    )
+                } else {
+                    index.level_index[block_id].document_length_compressed_array[field_id]
+                        [docid & 0b11111111_11111111]
+                } as usize];
+
+            let tf_ngram3 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            bm25f += weight
+                * plo_single.idf_ngram3
+                * ((tf_ngram3 * (K + 1.0) / (tf_ngram3 + bm25_component)) + SIGMA);
         }
     }
 
@@ -949,8 +1031,9 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
     index: &Index,
     docid: usize,
     plo_single: &PostingListObjectSingle,
-    tf_bigram1: u32,
-    tf_bigram2: u32,
+    tf_ngram1: u32,
+    tf_ngram2: u32,
+    tf_ngram3: u32,
     positions_count: u32,
 ) -> f32 {
     let bm25f;
@@ -965,16 +1048,31 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
                     [docid & 0b11111111_11111111]
             } as usize];
 
-        if !plo_single.is_bigram {
-            let tf = positions_count as f32;
+        match plo_single.ngram_type {
+            NgramType::SingleTerm => {
+                let tf = positions_count as f32;
 
-            bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
-        } else {
-            bm25f = plo_single.idf_bigram1
-                * ((tf_bigram1 as f32 * (K + 1.0) / (tf_bigram1 as f32 + bm25_component)) + SIGMA)
-                + plo_single.idf_bigram2
-                    * ((tf_bigram2 as f32 * (K + 1.0) / (tf_bigram2 as f32 + bm25_component))
-                        + SIGMA);
+                bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
+            }
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 as f32 * (K + 1.0) / (tf_ngram1 as f32 + bm25_component))
+                        + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 as f32 * (K + 1.0) / (tf_ngram2 as f32 + bm25_component))
+                            + SIGMA);
+            }
+            _ => {
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 as f32 * (K + 1.0) / (tf_ngram1 as f32 + bm25_component))
+                        + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 as f32 * (K + 1.0) / (tf_ngram2 as f32 + bm25_component))
+                            + SIGMA)
+                    + plo_single.idf_ngram3
+                        * ((tf_ngram3 as f32 * (K + 1.0) / (tf_ngram3 as f32 + bm25_component))
+                            + SIGMA);
+            }
         }
     } else {
         let field_id = 0;
@@ -992,16 +1090,31 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
                     [docid & 0b11111111_11111111]
             } as usize];
 
-        if !plo_single.is_bigram {
-            let tf = positions_count as f32;
+        match plo_single.ngram_type {
+            NgramType::SingleTerm => {
+                let tf = positions_count as f32;
 
-            bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
-        } else {
-            bm25f = plo_single.idf_bigram1
-                * ((tf_bigram1 as f32 * (K + 1.0) / (tf_bigram1 as f32 + bm25_component)) + SIGMA)
-                + plo_single.idf_bigram2
-                    * ((tf_bigram2 as f32 * (K + 1.0) / (tf_bigram2 as f32 + bm25_component))
-                        + SIGMA);
+                bm25f = plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
+            }
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 as f32 * (K + 1.0) / (tf_ngram1 as f32 + bm25_component))
+                        + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 as f32 * (K + 1.0) / (tf_ngram2 as f32 + bm25_component))
+                            + SIGMA);
+            }
+            _ => {
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 as f32 * (K + 1.0) / (tf_ngram1 as f32 + bm25_component))
+                        + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 as f32 * (K + 1.0) / (tf_ngram2 as f32 + bm25_component))
+                            + SIGMA)
+                    + plo_single.idf_ngram3
+                        * ((tf_ngram3 as f32 * (K + 1.0) / (tf_ngram3 as f32 + bm25_component))
+                            + SIGMA);
+            }
         }
     }
 
@@ -1031,19 +1144,36 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                 continue;
             }
 
-            if !plo.is_bigram {
-                let tf = plo.field_vec[0].1 as f32;
+            match plo.ngram_type {
+                NgramType::SingleTerm => {
+                    let tf = plo.field_vec[0].1 as f32;
 
-                bm25f += plo.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
-            } else {
-                bm25f += plo.idf_bigram1
-                    * ((plo.tf_bigram1 as f32 * (K + 1.0)
-                        / (plo.tf_bigram1 as f32 + bm25_component))
-                        + SIGMA)
-                    + plo.idf_bigram2
-                        * ((plo.tf_bigram2 as f32 * (K + 1.0)
-                            / (plo.tf_bigram2 as f32 + bm25_component))
-                            + SIGMA);
+                    bm25f += plo.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
+                }
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    bm25f += plo.idf_ngram1
+                        * ((plo.tf_ngram1 as f32 * (K + 1.0)
+                            / (plo.tf_ngram1 as f32 + bm25_component))
+                            + SIGMA)
+                        + plo.idf_ngram2
+                            * ((plo.tf_ngram2 as f32 * (K + 1.0)
+                                / (plo.tf_ngram2 as f32 + bm25_component))
+                                + SIGMA);
+                }
+                _ => {
+                    bm25f += plo.idf_ngram1
+                        * ((plo.tf_ngram1 as f32 * (K + 1.0)
+                            / (plo.tf_ngram1 as f32 + bm25_component))
+                            + SIGMA)
+                        + plo.idf_ngram2
+                            * ((plo.tf_ngram2 as f32 * (K + 1.0)
+                                / (plo.tf_ngram2 as f32 + bm25_component))
+                                + SIGMA)
+                        + plo.idf_ngram3
+                            * ((plo.tf_ngram3 as f32 * (K + 1.0)
+                                / (plo.tf_ngram3 as f32 + bm25_component))
+                                + SIGMA);
+                }
             }
         }
     } else {
@@ -1054,97 +1184,193 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                 continue;
             }
 
-            if !plo.is_bigram {
-                for field in plo.field_vec.iter() {
-                    let field_id = field.0 as usize;
-                    if bm25_component_vec[field_id] == 0.0 {
-                        bm25_component_vec[field_id] = index.bm25_component_cache[if index
-                            .meta
-                            .access_type
-                            == AccessType::Mmap
-                        {
-                            get_document_length_compressed_mmap(
-                                index,
-                                field_id,
-                                block_id,
-                                docid & 0b11111111_11111111,
-                            )
-                        } else {
-                            index.level_index[block_id].document_length_compressed_array[field_id]
-                                [docid & 0b11111111_11111111]
+            match plo.ngram_type {
+                NgramType::SingleTerm => {
+                    for field in plo.field_vec.iter() {
+                        let field_id = field.0 as usize;
+                        if bm25_component_vec[field_id] == 0.0 {
+                            bm25_component_vec[field_id] =
+                                index.bm25_component_cache[if index.meta.access_type
+                                    == AccessType::Mmap
+                                {
+                                    get_document_length_compressed_mmap(
+                                        index,
+                                        field_id,
+                                        block_id,
+                                        docid & 0b11111111_11111111,
+                                    )
+                                } else {
+                                    index.level_index[block_id].document_length_compressed_array
+                                        [field_id][docid & 0b11111111_11111111]
+                                }
+                                    as usize];
                         }
-                            as usize];
+
+                        let tf = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf
+                            * ((tf * (K + 1.0) / (tf + bm25_component_vec[field_id])) + SIGMA);
                     }
-
-                    let tf = field.1 as f32;
-
-                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
-
-                    bm25f += weight
-                        * plo.idf
-                        * ((tf * (K + 1.0) / (tf + bm25_component_vec[field_id])) + SIGMA);
                 }
-            } else {
-                for field in plo.field_vec_bigram1.iter() {
-                    let field_id = field.0 as usize;
-                    if bm25_component_vec[field_id] == 0.0 {
-                        bm25_component_vec[field_id] = index.bm25_component_cache[if index
-                            .meta
-                            .access_type
-                            == AccessType::Mmap
-                        {
-                            get_document_length_compressed_mmap(
-                                index,
-                                field_id,
-                                block_id,
-                                docid & 0b11111111_11111111,
-                            )
-                        } else {
-                            index.level_index[block_id].document_length_compressed_array[field_id]
-                                [docid & 0b11111111_11111111]
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    for field in plo.field_vec_ngram1.iter() {
+                        let field_id = field.0 as usize;
+                        if bm25_component_vec[field_id] == 0.0 {
+                            bm25_component_vec[field_id] =
+                                index.bm25_component_cache[if index.meta.access_type
+                                    == AccessType::Mmap
+                                {
+                                    get_document_length_compressed_mmap(
+                                        index,
+                                        field_id,
+                                        block_id,
+                                        docid & 0b11111111_11111111,
+                                    )
+                                } else {
+                                    index.level_index[block_id].document_length_compressed_array
+                                        [field_id][docid & 0b11111111_11111111]
+                                }
+                                    as usize];
                         }
-                            as usize];
+
+                        let tf_ngram1 = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram1
+                            * ((tf_ngram1 * (K + 1.0)
+                                / (tf_ngram1 + bm25_component_vec[field_id]))
+                                + SIGMA);
                     }
 
-                    let tf_bigram1 = field.1 as f32;
+                    for field in plo.field_vec_ngram2.iter() {
+                        let field_id = field.0 as usize;
+                        if bm25_component_vec[field_id] == 0.0 {
+                            bm25_component_vec[field_id] =
+                                index.bm25_component_cache[if index.meta.access_type
+                                    == AccessType::Mmap
+                                {
+                                    get_document_length_compressed_mmap(
+                                        index,
+                                        field_id,
+                                        block_id,
+                                        docid & 0b11111111_11111111,
+                                    )
+                                } else {
+                                    index.level_index[block_id].document_length_compressed_array
+                                        [field_id][docid & 0b11111111_11111111]
+                                }
+                                    as usize];
+                        }
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let tf_ngram2 = field.1 as f32;
 
-                    bm25f += weight
-                        * plo.idf_bigram1
-                        * ((tf_bigram1 * (K + 1.0) / (tf_bigram1 + bm25_component_vec[field_id]))
-                            + SIGMA);
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram2
+                            * ((tf_ngram2 * (K + 1.0)
+                                / (tf_ngram2 + bm25_component_vec[field_id]))
+                                + SIGMA);
+                    }
                 }
-
-                for field in plo.field_vec_bigram2.iter() {
-                    let field_id = field.0 as usize;
-                    if bm25_component_vec[field_id] == 0.0 {
-                        bm25_component_vec[field_id] = index.bm25_component_cache[if index
-                            .meta
-                            .access_type
-                            == AccessType::Mmap
-                        {
-                            get_document_length_compressed_mmap(
-                                index,
-                                field_id,
-                                block_id,
-                                docid & 0b11111111_11111111,
-                            )
-                        } else {
-                            index.level_index[block_id].document_length_compressed_array[field_id]
-                                [docid & 0b11111111_11111111]
+                _ => {
+                    for field in plo.field_vec_ngram1.iter() {
+                        let field_id = field.0 as usize;
+                        if bm25_component_vec[field_id] == 0.0 {
+                            bm25_component_vec[field_id] =
+                                index.bm25_component_cache[if index.meta.access_type
+                                    == AccessType::Mmap
+                                {
+                                    get_document_length_compressed_mmap(
+                                        index,
+                                        field_id,
+                                        block_id,
+                                        docid & 0b11111111_11111111,
+                                    )
+                                } else {
+                                    index.level_index[block_id].document_length_compressed_array
+                                        [field_id][docid & 0b11111111_11111111]
+                                }
+                                    as usize];
                         }
-                            as usize];
+
+                        let tf_ngram1 = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram1
+                            * ((tf_ngram1 * (K + 1.0)
+                                / (tf_ngram1 + bm25_component_vec[field_id]))
+                                + SIGMA);
                     }
 
-                    let tf_bigram2 = field.1 as f32;
+                    for field in plo.field_vec_ngram2.iter() {
+                        let field_id = field.0 as usize;
+                        if bm25_component_vec[field_id] == 0.0 {
+                            bm25_component_vec[field_id] =
+                                index.bm25_component_cache[if index.meta.access_type
+                                    == AccessType::Mmap
+                                {
+                                    get_document_length_compressed_mmap(
+                                        index,
+                                        field_id,
+                                        block_id,
+                                        docid & 0b11111111_11111111,
+                                    )
+                                } else {
+                                    index.level_index[block_id].document_length_compressed_array
+                                        [field_id][docid & 0b11111111_11111111]
+                                }
+                                    as usize];
+                        }
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let tf_ngram2 = field.1 as f32;
 
-                    bm25f += weight
-                        * plo.idf_bigram2
-                        * ((tf_bigram2 * (K + 1.0) / (tf_bigram2 + bm25_component_vec[field_id]))
-                            + SIGMA);
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram2
+                            * ((tf_ngram2 * (K + 1.0)
+                                / (tf_ngram2 + bm25_component_vec[field_id]))
+                                + SIGMA);
+                    }
+
+                    for field in plo.field_vec_ngram3.iter() {
+                        let field_id = field.0 as usize;
+                        if bm25_component_vec[field_id] == 0.0 {
+                            bm25_component_vec[field_id] =
+                                index.bm25_component_cache[if index.meta.access_type
+                                    == AccessType::Mmap
+                                {
+                                    get_document_length_compressed_mmap(
+                                        index,
+                                        field_id,
+                                        block_id,
+                                        docid & 0b11111111_11111111,
+                                    )
+                                } else {
+                                    index.level_index[block_id].document_length_compressed_array
+                                        [field_id][docid & 0b11111111_11111111]
+                                }
+                                    as usize];
+                        }
+
+                        let tf_ngram3 = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram3
+                            * ((tf_ngram3 * (K + 1.0)
+                                / (tf_ngram3 + bm25_component_vec[field_id]))
+                                + SIGMA);
+                    }
                 }
             }
         }
@@ -1173,18 +1399,36 @@ pub(crate) fn get_bm25f_multiterm_singlefield(
             continue;
         }
 
-        if !plo.is_bigram {
-            let tf = plo.positions_count as f32;
+        match plo.ngram_type {
+            NgramType::SingleTerm => {
+                let tf = plo.positions_count as f32;
 
-            bm25f += plo.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
-        } else {
-            bm25f += plo.idf_bigram1
-                * ((plo.tf_bigram1 as f32 * (K + 1.0) / (plo.tf_bigram1 as f32 + bm25_component))
-                    + SIGMA)
-                + plo.idf_bigram2
-                    * ((plo.tf_bigram2 as f32 * (K + 1.0)
-                        / (plo.tf_bigram2 as f32 + bm25_component))
-                        + SIGMA);
+                bm25f += plo.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
+            }
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                bm25f += plo.idf_ngram1
+                    * ((plo.tf_ngram1 as f32 * (K + 1.0)
+                        / (plo.tf_ngram1 as f32 + bm25_component))
+                        + SIGMA)
+                    + plo.idf_ngram2
+                        * ((plo.tf_ngram2 as f32 * (K + 1.0)
+                            / (plo.tf_ngram2 as f32 + bm25_component))
+                            + SIGMA);
+            }
+            _ => {
+                bm25f += plo.idf_ngram1
+                    * ((plo.tf_ngram1 as f32 * (K + 1.0)
+                        / (plo.tf_ngram1 as f32 + bm25_component))
+                        + SIGMA)
+                    + plo.idf_ngram2
+                        * ((plo.tf_ngram2 as f32 * (K + 1.0)
+                            / (plo.tf_ngram2 as f32 + bm25_component))
+                            + SIGMA)
+                    + plo.idf_ngram3
+                        * ((plo.tf_ngram3 as f32 * (K + 1.0)
+                            / (plo.tf_ngram3 as f32 + bm25_component))
+                            + SIGMA);
+            }
         }
     }
 
@@ -1234,28 +1478,64 @@ pub(crate) fn decode_positions_multiterm_multifield(
 
         positions_pointer = plo.rank_position_pointer_range as usize - pointer_value;
 
-        if plo.is_bigram {
-            plo.field_vec_bigram1.clear();
-            plo.field_vec_bigram2.clear();
-            read_multifield_vec(
-                index.indexed_field_vec.len(),
-                index.indexed_field_id_bits,
-                index.indexed_field_id_mask,
-                index.longest_field_id,
-                &mut plo.field_vec_bigram1,
-                plo.byte_array,
-                &mut positions_pointer,
-            );
-            read_multifield_vec(
-                index.indexed_field_vec.len(),
-                index.indexed_field_id_bits,
-                index.indexed_field_id_mask,
-                index.longest_field_id,
-                &mut plo.field_vec_bigram2,
-                plo.byte_array,
-                &mut positions_pointer,
-            );
+        match plo.ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                plo.field_vec_ngram1.clear();
+                plo.field_vec_ngram2.clear();
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    &mut plo.field_vec_ngram1,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    &mut plo.field_vec_ngram2,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+            }
+            _ => {
+                plo.field_vec_ngram1.clear();
+                plo.field_vec_ngram2.clear();
+                plo.field_vec_ngram3.clear();
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    &mut plo.field_vec_ngram1,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    &mut plo.field_vec_ngram2,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    &mut plo.field_vec_ngram3,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+            }
         }
+
         read_multifield_vec(
             index.indexed_field_vec.len(),
             index.indexed_field_id_bits,
@@ -1747,10 +2027,19 @@ pub(crate) fn decode_positions_multiterm_singlefield(
 
         positions_pointer = plo.rank_position_pointer_range - pointer_value as u32;
 
-        if plo.is_bigram {
-            read_singlefield_value(&mut plo.tf_bigram1, plo.byte_array, &mut positions_pointer);
-            read_singlefield_value(&mut plo.tf_bigram2, plo.byte_array, &mut positions_pointer);
+        match plo.ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                read_singlefield_value(&mut plo.tf_ngram1, plo.byte_array, &mut positions_pointer);
+                read_singlefield_value(&mut plo.tf_ngram2, plo.byte_array, &mut positions_pointer);
+            }
+            _ => {
+                read_singlefield_value(&mut plo.tf_ngram1, plo.byte_array, &mut positions_pointer);
+                read_singlefield_value(&mut plo.tf_ngram2, plo.byte_array, &mut positions_pointer);
+                read_singlefield_value(&mut plo.tf_ngram3, plo.byte_array, &mut positions_pointer);
+            }
         }
+
         read_singlefield_value(&mut positions_count, plo.byte_array, &mut positions_pointer);
 
         if SPEEDUP_FLAG
@@ -1962,8 +2251,9 @@ pub(crate) fn decode_positions_singleterm_multifield(
     index: &Index,
     plo: &PostingListObjectSingle,
     field_vec: &mut SmallVec<[(u16, usize); 2]>,
-    field_vec_bigram1: &mut SmallVec<[(u16, usize); 2]>,
-    field_vec_bigram2: &mut SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram1: &mut SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram2: &mut SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram3: &mut SmallVec<[(u16, usize); 2]>,
 ) {
     let posting_pointer_size_sum = if (plo.p_docid as usize) < plo.pointer_pivot_p_docid as usize {
         plo.p_docid as u32 * 2
@@ -1996,26 +2286,59 @@ pub(crate) fn decode_positions_singleterm_multifield(
 
         positions_pointer = plo.rank_position_pointer_range as usize - pointer_value;
 
-        if plo.is_bigram {
-            read_multifield_vec(
-                index.indexed_field_vec.len(),
-                index.indexed_field_id_bits,
-                index.indexed_field_id_mask,
-                index.longest_field_id,
-                field_vec_bigram1,
-                plo.byte_array,
-                &mut positions_pointer,
-            );
-            read_multifield_vec(
-                index.indexed_field_vec.len(),
-                index.indexed_field_id_bits,
-                index.indexed_field_id_mask,
-                index.longest_field_id,
-                field_vec_bigram2,
-                plo.byte_array,
-                &mut positions_pointer,
-            );
+        match plo.ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    field_vec_ngram1,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    field_vec_ngram2,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+            }
+            _ => {
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    field_vec_ngram1,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    field_vec_ngram2,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    index.indexed_field_vec.len(),
+                    index.indexed_field_id_bits,
+                    index.indexed_field_id_mask,
+                    index.longest_field_id,
+                    field_vec_ngram3,
+                    plo.byte_array,
+                    &mut positions_pointer,
+                );
+            }
         }
+
         read_multifield_vec(
             index.indexed_field_vec.len(),
             index.indexed_field_id_bits,
@@ -2239,8 +2562,9 @@ pub(crate) fn read_singlefield_value(
 #[inline(always)]
 pub(crate) fn decode_positions_singleterm_singlefield(
     plo: &PostingListObjectSingle,
-    tf_bigram1: &mut u32,
-    tf_bigram2: &mut u32,
+    tf_ngram1: &mut u32,
+    tf_ngram2: &mut u32,
+    tf_ngram3: &mut u32,
     positions_count: &mut u32,
 ) {
     let posting_pointer_size_sum = if (plo.p_docid as usize) < plo.pointer_pivot_p_docid as usize {
@@ -2273,10 +2597,19 @@ pub(crate) fn decode_positions_singleterm_singlefield(
 
         positions_pointer = plo.rank_position_pointer_range - pointer_value as u32;
 
-        if plo.is_bigram {
-            read_singlefield_value(tf_bigram1, plo.byte_array, &mut positions_pointer);
-            read_singlefield_value(tf_bigram2, plo.byte_array, &mut positions_pointer);
+        match plo.ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                read_singlefield_value(tf_ngram1, plo.byte_array, &mut positions_pointer);
+                read_singlefield_value(tf_ngram2, plo.byte_array, &mut positions_pointer);
+            }
+            _ => {
+                read_singlefield_value(tf_ngram1, plo.byte_array, &mut positions_pointer);
+                read_singlefield_value(tf_ngram2, plo.byte_array, &mut positions_pointer);
+                read_singlefield_value(tf_ngram3, plo.byte_array, &mut positions_pointer);
+            }
         }
+
         read_singlefield_value(positions_count, plo.byte_array, &mut positions_pointer);
     } else if plo.p_docid < plo.pointer_pivot_p_docid as i32 {
         match rank_position_pointer >> 14 {
@@ -2326,40 +2659,73 @@ pub(crate) fn decode_positions_commit(
     embed_flag: bool,
     byte_array: &[u8],
     pointer: usize,
-
-    is_bigram: bool,
+    ngram_type: &NgramType,
     indexed_field_vec_len: usize,
     indexed_field_id_bits: usize,
     indexed_field_id_mask: usize,
     longest_field_id: u16,
 
     field_vec: &mut SmallVec<[(u16, usize); 2]>,
-    field_vec_bigram1: &mut SmallVec<[(u16, usize); 2]>,
-    field_vec_bigram2: &mut SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram1: &mut SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram2: &mut SmallVec<[(u16, usize); 2]>,
+    field_vec_ngram3: &mut SmallVec<[(u16, usize); 2]>,
 ) {
     let mut positions_pointer = pointer;
 
     if !embed_flag {
-        if is_bigram {
-            read_multifield_vec(
-                indexed_field_vec_len,
-                indexed_field_id_bits,
-                indexed_field_id_mask,
-                longest_field_id as usize,
-                field_vec_bigram1,
-                byte_array,
-                &mut positions_pointer,
-            );
-            read_multifield_vec(
-                indexed_field_vec_len,
-                indexed_field_id_bits,
-                indexed_field_id_mask,
-                longest_field_id as usize,
-                field_vec_bigram2,
-                byte_array,
-                &mut positions_pointer,
-            );
+        match ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                read_multifield_vec(
+                    indexed_field_vec_len,
+                    indexed_field_id_bits,
+                    indexed_field_id_mask,
+                    longest_field_id as usize,
+                    field_vec_ngram1,
+                    byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    indexed_field_vec_len,
+                    indexed_field_id_bits,
+                    indexed_field_id_mask,
+                    longest_field_id as usize,
+                    field_vec_ngram2,
+                    byte_array,
+                    &mut positions_pointer,
+                );
+            }
+            _ => {
+                read_multifield_vec(
+                    indexed_field_vec_len,
+                    indexed_field_id_bits,
+                    indexed_field_id_mask,
+                    longest_field_id as usize,
+                    field_vec_ngram1,
+                    byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    indexed_field_vec_len,
+                    indexed_field_id_bits,
+                    indexed_field_id_mask,
+                    longest_field_id as usize,
+                    field_vec_ngram2,
+                    byte_array,
+                    &mut positions_pointer,
+                );
+                read_multifield_vec(
+                    indexed_field_vec_len,
+                    indexed_field_id_bits,
+                    indexed_field_id_mask,
+                    longest_field_id as usize,
+                    field_vec_ngram3,
+                    byte_array,
+                    &mut positions_pointer,
+                );
+            }
         }
+
         read_multifield_vec(
             indexed_field_vec_len,
             indexed_field_id_bits,
@@ -3175,6 +3541,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         for plo in non_unique_query_list.iter_mut() {
             plo.p_pos = 0;
             let item = &query_list[index_transpose[plo.term_index_unique]];
+
             plo.positions_pointer = item.positions_pointer as usize;
             plo.positions_count = item.positions_count;
 

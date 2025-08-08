@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2025-08-08
+
+### Added
+
+- N-gram indexing: N-grams are indexed in addition to single terms, for faster phrase search, at the cost of higher index size.
+  - N-grams not as parts of terms, but as combination of consecutive terms. See [NGRAM_SEARCH.md](https://github.com/SeekStorm/SeekStorm/blob/main/NGRAM_SEARCH.md).  
+  - N-Gram indexing improves **phrase** query latency on average by factor **2.14 (114%)**, maximum tail latency by factor **7.51 (651%)**, and some phrase queries up to **3 orders of magnitude**.
+  - Allows to enable a combination of different types of N-gram indexing: see NgramSet  
+    - SingleTerm 
+    - NgramFF  : frequent frequent
+    - NgramFR  : frequent rare
+    - NgramRF  : rare frequent
+    - NgramFFF : frequent frequent frequent
+    - NgramRFF : rare frequent frequent
+    - NgramFFR : frequent frequent rare
+    - NgramFRF : frequent rare frequent
+  - Previously N-gram indexing was not configurable, but always set to the equivalent of NgramFF.
+  - IndexMetaObject.ngram_indexing property added, used in create_index library method. 
+  - CreateIndexRequest ngram_indexing property added, used in create_index REST API endpoint.
+  - Ngram indexing only effects phrase search.
+  - BM25 scores (SimilarityType::Bm25f) are almost identical for both ngram and single term indexing. There are only small differences for phrase search resulting from  
+    normalization (32bit->8bit->32bit lossy logarithmic compression/decompression) that is used for posting_count_ngram1/2/3, but not for single term posting_counts.
+  - Default ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
+
+### Improved
+
+- MAX_QUERY_TERM_NUMBER increased from 10 to 100.
+- 2-term union count latency improved.
+- DOCUMENT_LENGTH_COMPRESSION array now pre-calculated algorithmically with byte4_to_int instead of pre-defined values.
+- faster document length compression with int_to_byte4 instead of norm_frequency (binary search in DOCUMENT_LENGTH_COMPRESSION table).
+- int_to_byte4 is used also for compression of n-gram frequent_term positions_count (previously only for doc/field length compression) 
+- 256 limit for the maximum number of frequentwords (FrequentwordType::Custom) removed (because frequentword_index is not stored anymore).
+
+### Changed
+
+- Index format changed (INDEX_FORMAT_VERSION_MAJOR changed).
+  - Instead of u8 index to frequentword_posting_counts we now store the u8 compressed posting_count both for frequent and rare Ngram terms.
+  - AHash replaced with GxHash, which is faster and provides stable hashes across different dependency versions, platforms and hardware. This improves index persistence and portability.
+  - NgramType encoded into hash.
+  - Ngrams with 3 terms allowed.
+
+- in compress_postinglist posting_count_ngram1/2 are taken from decode_posting_list_counts instead from precalculated frequentword_posting_counts. 
+  - update_frequentword_posting_counts removed.
+  - precondition for ngrams with rare terms.
+
+### Fixed
+
+- Error in manual commit during intermittent indexing fixed: "Unable to index_file.set_len in commit".
+- Realtime search BM25 scoring fixed: posting_counts are now based on the sum of committed and uncommitted documents (previously only uncommitted).
+- Realtime search BM25 scoring fixed: now both terms of the ngram are taken into account.
+
 ## [0.12.27] - 2025-05-14
 
 ### Fixed

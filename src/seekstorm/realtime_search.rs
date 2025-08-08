@@ -7,15 +7,14 @@ use ahash::{AHashMap, AHashSet};
 use smallvec::SmallVec;
 
 use crate::{
-    add_result::{
-        B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA, facet_count, is_facet_filter, read_multifield_vec,
-    },
+    add_result::{B, K, SIGMA, facet_count, is_facet_filter, read_multifield_vec},
     index::{
-        DUMMY_VEC_8, Index, NonUniquePostingListObjectQuery, NonUniqueTermObject,
-        PostingListObjectQuery, STOP_BIT, SimilarityType, TermObject,
+        AccessType, DOCUMENT_LENGTH_COMPRESSION, DUMMY_VEC_8, Index, NgramType,
+        NonUniquePostingListObjectQuery, NonUniqueTermObject, PostingListObjectQuery, STOP_BIT,
+        SimilarityType, TermObject, hash32, hash64,
     },
     min_heap,
-    search::{FilterSparse, QueryType, ResultType, SearchResult},
+    search::{FilterSparse, QueryType, ResultType, SearchResult, decode_posting_list_counts},
     utils::{read_u16, read_u16_ref, read_u32, read_u32_ref},
 };
 
@@ -522,76 +521,157 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
         let document_length_quotient =
             document_length_normalized / document_length_normalized_average;
 
-        if !plo_single.is_bigram {
-            let tf = plo_single.field_vec[0].1 as f32;
+        match plo_single.ngram_type {
+            NgramType::SingleTerm => {
+                let tf = plo_single.field_vec[0].1 as f32;
 
-            bm25f = plo_single.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
-        } else {
-            let tf_bigram1 = plo_single.field_vec_bigram1[0].1 as f32;
-            let tf_bigram2 = plo_single.field_vec_bigram2[0].1 as f32;
-            bm25f = plo_single.idf_bigram1
-                * ((tf_bigram1 * (K + 1.0)
-                    / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA)
-                + plo_single.idf_bigram2
-                    * ((tf_bigram2 * (K + 1.0)
-                        / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                bm25f = plo_single.idf
+                    * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
                         + SIGMA);
-        }
-    } else if !plo_single.is_bigram {
-        for field in plo_single.field_vec.iter() {
-            let field_id = field.0 as usize;
-
-            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
-                .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
-                as usize] as f32;
-
-            let document_length_quotient =
-                document_length_normalized / document_length_normalized_average;
-
-            let tf = field.1 as f32;
-
-            bm25f += plo_single.idf
-                * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+            }
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                let tf_ngram1 = plo_single.field_vec_ngram1[0].1 as f32;
+                let tf_ngram2 = plo_single.field_vec_ngram2[0].1 as f32;
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 * (K + 1.0)
+                        / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                        + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 * (K + 1.0)
+                            / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+            }
+            _ => {
+                let tf_ngram1 = plo_single.field_vec_ngram1[0].1 as f32;
+                let tf_ngram2 = plo_single.field_vec_ngram2[0].1 as f32;
+                let tf_ngram3 = plo_single.field_vec_ngram3[0].1 as f32;
+                bm25f = plo_single.idf_ngram1
+                    * ((tf_ngram1 * (K + 1.0)
+                        / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                        + SIGMA)
+                    + plo_single.idf_ngram2
+                        * ((tf_ngram2 * (K + 1.0)
+                            / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA)
+                    + plo_single.idf_ngram3
+                        * ((tf_ngram3 * (K + 1.0)
+                            / (tf_ngram3 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+            }
         }
     } else {
-        for field in plo_single.field_vec_bigram1.iter() {
-            let field_id = field.0 as usize;
+        match plo_single.ngram_type {
+            NgramType::SingleTerm => {
+                for field in plo_single.field_vec.iter() {
+                    let field_id = field.0 as usize;
 
-            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
-                .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
-                as usize] as f32;
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                        as usize] as f32;
 
-            let document_length_quotient =
-                document_length_normalized / document_length_normalized_average;
+                    let document_length_quotient =
+                        document_length_normalized / document_length_normalized_average;
 
-            let tf_bigram1 = field.1 as f32;
+                    let tf = field.1 as f32;
 
-            bm25f += plo_single.idf_bigram1
-                * ((tf_bigram1 * (K + 1.0)
-                    / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
-        }
+                    bm25f += plo_single.idf
+                        * ((tf * (K + 1.0)
+                            / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+                }
+            }
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                for field in plo_single.field_vec_ngram1.iter() {
+                    let field_id = field.0 as usize;
 
-        for field in plo_single.field_vec_bigram2.iter() {
-            let field_id = field.0 as usize;
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                        as usize] as f32;
 
-            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
-                .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
-                as usize] as f32;
+                    let document_length_quotient =
+                        document_length_normalized / document_length_normalized_average;
 
-            let document_length_quotient =
-                document_length_normalized / document_length_normalized_average;
+                    let tf_ngram1 = field.1 as f32;
 
-            let tf_bigram2 = field.1 as f32;
+                    bm25f += plo_single.idf_ngram1
+                        * ((tf_ngram1 * (K + 1.0)
+                            / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+                }
 
-            bm25f += plo_single.idf_bigram2
-                * ((tf_bigram2 * (K + 1.0)
-                    / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
-                    + SIGMA);
+                for field in plo_single.field_vec_ngram2.iter() {
+                    let field_id = field.0 as usize;
+
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                        as usize] as f32;
+
+                    let document_length_quotient =
+                        document_length_normalized / document_length_normalized_average;
+
+                    let tf_ngram2 = field.1 as f32;
+
+                    bm25f += plo_single.idf_ngram2
+                        * ((tf_ngram2 * (K + 1.0)
+                            / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+                }
+            }
+            _ => {
+                for field in plo_single.field_vec_ngram1.iter() {
+                    let field_id = field.0 as usize;
+
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                        as usize] as f32;
+
+                    let document_length_quotient =
+                        document_length_normalized / document_length_normalized_average;
+
+                    let tf_ngram1 = field.1 as f32;
+
+                    bm25f += plo_single.idf_ngram1
+                        * ((tf_ngram1 * (K + 1.0)
+                            / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+                }
+
+                for field in plo_single.field_vec_ngram2.iter() {
+                    let field_id = field.0 as usize;
+
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                        as usize] as f32;
+
+                    let document_length_quotient =
+                        document_length_normalized / document_length_normalized_average;
+
+                    let tf_ngram2 = field.1 as f32;
+
+                    bm25f += plo_single.idf_ngram2
+                        * ((tf_ngram2 * (K + 1.0)
+                            / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+                }
+
+                for field in plo_single.field_vec_ngram3.iter() {
+                    let field_id = field.0 as usize;
+
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                        as usize] as f32;
+
+                    let document_length_quotient =
+                        document_length_normalized / document_length_normalized_average;
+
+                    let tf_ngram3 = field.1 as f32;
+
+                    bm25f += plo_single.idf_ngram3
+                        * ((tf_ngram3 * (K + 1.0)
+                            / (tf_ngram3 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA);
+                }
+            }
         }
     }
 
@@ -629,24 +709,46 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     document_length_normalized / document_length_normalized_average;
             }
 
-            if !plo.is_bigram {
-                let tf = plo.field_vec[0].1 as f32;
+            match plo.ngram_type {
+                NgramType::SingleTerm => {
+                    let tf = plo.field_vec[0].1 as f32;
 
-                bm25f += plo.idf
-                    * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                        + SIGMA);
-            } else {
-                let tf_bigram1 = plo.field_vec_bigram1[0].1 as f32;
-                let tf_bigram2 = plo.field_vec_bigram2[0].1 as f32;
-
-                bm25f += plo.idf_bigram1
-                    * ((tf_bigram1 * (K + 1.0)
-                        / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
-                        + SIGMA)
-                    + plo.idf_bigram2
-                        * ((tf_bigram2 * (K + 1.0)
-                            / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                    bm25f += plo.idf
+                        * ((tf * (K + 1.0)
+                            / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
                             + SIGMA);
+                }
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    let tf_ngram1 = plo.field_vec_ngram1[0].1 as f32;
+                    let tf_ngram2 = plo.field_vec_ngram2[0].1 as f32;
+
+                    bm25f += plo.idf_ngram1
+                        * ((tf_ngram1 * (K + 1.0)
+                            / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA)
+                        + plo.idf_ngram2
+                            * ((tf_ngram2 * (K + 1.0)
+                                / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                }
+                _ => {
+                    let tf_ngram1 = plo.field_vec_ngram1[0].1 as f32;
+                    let tf_ngram2 = plo.field_vec_ngram2[0].1 as f32;
+                    let tf_ngram3 = plo.field_vec_ngram3[0].1 as f32;
+
+                    bm25f += plo.idf_ngram1
+                        * ((tf_ngram1 * (K + 1.0)
+                            / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                            + SIGMA)
+                        + plo.idf_ngram2
+                            * ((tf_ngram2 * (K + 1.0)
+                                / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA)
+                        + plo.idf_ngram3
+                            * ((tf_ngram3 * (K + 1.0)
+                                / (tf_ngram3 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                }
             }
         }
     } else {
@@ -655,68 +757,141 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                 continue;
             }
 
-            if !plo.is_bigram {
-                for field in plo.field_vec.iter() {
-                    let field_id = field.0 as usize;
+            match plo.ngram_type {
+                NgramType::SingleTerm => {
+                    for field in plo.field_vec.iter() {
+                        let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
-                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
-                        as usize] as f32;
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                            .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                            as usize]
+                            as f32;
 
-                    let document_length_quotient =
-                        document_length_normalized / document_length_normalized_average;
+                        let document_length_quotient =
+                            document_length_normalized / document_length_normalized_average;
 
-                    let tf = field.1 as f32;
+                        let tf = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
-                    bm25f += weight
-                        * plo.idf
-                        * ((tf * (K + 1.0)
-                            / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
-                            + SIGMA);
+                        bm25f += weight
+                            * plo.idf
+                            * ((tf * (K + 1.0)
+                                / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                    }
                 }
-            } else {
-                for field in plo.field_vec_bigram1.iter() {
-                    let field_id = field.0 as usize;
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    for field in plo.field_vec_ngram1.iter() {
+                        let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
-                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
-                        as usize] as f32;
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                            .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                            as usize]
+                            as f32;
 
-                    let document_length_quotient =
-                        document_length_normalized / document_length_normalized_average;
+                        let document_length_quotient =
+                            document_length_normalized / document_length_normalized_average;
 
-                    let tf_bigram1 = field.1 as f32;
+                        let tf_ngram1 = field.1 as f32;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
-                    bm25f += weight
-                        * plo.idf_bigram1
-                        * ((tf_bigram1 * (K + 1.0)
-                            / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
-                            + SIGMA);
+                        bm25f += weight
+                            * plo.idf_ngram1
+                            * ((tf_ngram1 * (K + 1.0)
+                                / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                    }
+
+                    for field in plo.field_vec_ngram2.iter() {
+                        let field_id = field.0 as usize;
+
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                            .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                            as usize]
+                            as f32;
+
+                        let document_length_quotient =
+                            document_length_normalized / document_length_normalized_average;
+
+                        let tf_ngram2 = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram2
+                            * ((tf_ngram2 * (K + 1.0)
+                                / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                    }
                 }
+                _ => {
+                    for field in plo.field_vec_ngram1.iter() {
+                        let field_id = field.0 as usize;
 
-                for field in plo.field_vec_bigram1.iter() {
-                    let field_id = field.0 as usize;
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                            .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                            as usize]
+                            as f32;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
-                        .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
-                        as usize] as f32;
+                        let document_length_quotient =
+                            document_length_normalized / document_length_normalized_average;
 
-                    let document_length_quotient =
-                        document_length_normalized / document_length_normalized_average;
+                        let tf_ngram1 = field.1 as f32;
 
-                    let tf_bigram2 = field.1 as f32;
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
-                    let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        bm25f += weight
+                            * plo.idf_ngram1
+                            * ((tf_ngram1 * (K + 1.0)
+                                / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                    }
 
-                    bm25f += weight
-                        * plo.idf_bigram2
-                        * ((tf_bigram2 * (K + 1.0)
-                            / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
-                            + SIGMA);
+                    for field in plo.field_vec_ngram2.iter() {
+                        let field_id = field.0 as usize;
+
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                            .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                            as usize]
+                            as f32;
+
+                        let document_length_quotient =
+                            document_length_normalized / document_length_normalized_average;
+
+                        let tf_ngram2 = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram2
+                            * ((tf_ngram2 * (K + 1.0)
+                                / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                    }
+
+                    for field in plo.field_vec_ngram3.iter() {
+                        let field_id = field.0 as usize;
+
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                            .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
+                            as usize]
+                            as f32;
+
+                        let document_length_quotient =
+                            document_length_normalized / document_length_normalized_average;
+
+                        let tf_ngram3 = field.1 as f32;
+
+                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+                        bm25f += weight
+                            * plo.idf_ngram3
+                            * ((tf_ngram3 * (K + 1.0)
+                                / (tf_ngram3 + (K * (1.0 - B + (B * document_length_quotient)))))
+                                + SIGMA);
+                    }
                 }
             }
         }
@@ -728,8 +903,9 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 impl Index {
     pub(crate) fn get_posting_count_uncommited(&self, term_string: &str) -> usize {
         let term_bytes = term_string.as_bytes();
-        let key0 = self.hasher_32.hash_one(term_bytes) as u32 & self.segment_number_mask1;
-        let key_hash = self.hasher_64.hash_one(term_bytes);
+
+        let key0 = hash32(term_bytes) & self.segment_number_mask1;
+        let key_hash = hash64(term_bytes);
 
         match self.segments_level0[key0 as usize].segment.get(&key_hash) {
             Some(value1) => value1.posting_count,
@@ -765,7 +941,7 @@ impl Index {
         } else {
             self.level_index.len()
         };
-        let mut preceding_bigram_count = 0;
+        let mut preceding_ngram_count = 0;
 
         for non_unique_term in non_unique_terms.iter() {
             let term = unique_terms.get(&non_unique_term.term).unwrap();
@@ -775,34 +951,120 @@ impl Index {
             match self.segments_level0[key0 as usize].segment.get(&key_hash) {
                 Some(value1) => {
                     let mut idf = 0.0;
-                    let mut idf_bigram1 = 0.0;
-                    let mut idf_bigram2 = 0.0;
+                    let mut idf_ngram1 = 0.0;
+                    let mut idf_ngram2 = 0.0;
+                    let mut idf_ngram3 = 0.0;
                     if result_type != &ResultType::Count {
-                        if !non_unique_term.is_bigram
+                        let posting_counts_option = if self.meta.access_type == AccessType::Mmap {
+                            decode_posting_list_counts(
+                                &self.segments_index[key0 as usize],
+                                self,
+                                key_hash,
+                            )
+                        } else {
+                            let posting_list_object_index_option =
+                                self.segments_index[key0 as usize].segment.get(&key_hash);
+                            posting_list_object_index_option.map(|plo| {
+                                (
+                                    plo.posting_count,
+                                    plo.posting_count_ngram_1,
+                                    plo.posting_count_ngram_2,
+                                    plo.posting_count_ngram_3,
+                                )
+                            })
+                        };
+
+                        if non_unique_term.ngram_type == NgramType::SingleTerm
                             || self.meta.similarity == SimilarityType::Bm25fProximity
                         {
-                            idf = (((self.indexed_doc_count as f32 - value1.posting_count as f32
+                            let posting_count = if let Some(posting_count) = posting_counts_option {
+                                posting_count.0 as usize + value1.posting_count
+                            } else {
+                                value1.posting_count
+                            };
+
+                            idf = (((self.indexed_doc_count as f32 - posting_count as f32 + 0.5)
+                                / (posting_count as f32 + 0.5))
+                                + 1.0)
+                                .ln();
+                        } else if term.ngram_type == NgramType::NgramFF
+                            || term.ngram_type == NgramType::NgramRF
+                            || term.ngram_type == NgramType::NgramFR
+                        {
+                            let posting_count_ngram_1 =
+                                if let Some(posting_count) = posting_counts_option {
+                                    posting_count.1
+                                } else {
+                                    0
+                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_1)
+                                    as u32;
+
+                            let posting_count_ngram_2 =
+                                if let Some(posting_count) = posting_counts_option {
+                                    posting_count.2
+                                } else {
+                                    0
+                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_0)
+                                    as u32;
+
+                            idf_ngram1 = (((self.indexed_doc_count as f32
+                                - posting_count_ngram_1 as f32
                                 + 0.5)
-                                / (value1.posting_count as f32 + 0.5))
+                                / (posting_count_ngram_1 as f32 + 0.5))
+                                + 1.0)
+                                .ln();
+
+                            idf_ngram2 = (((self.indexed_doc_count as f32
+                                - posting_count_ngram_2 as f32
+                                + 0.5)
+                                / (posting_count_ngram_2 as f32 + 0.5))
                                 + 1.0)
                                 .ln();
                         } else {
-                            let posting_count1 =
-                                self.get_posting_count_uncommited(&non_unique_term.term_bigram1);
-                            let posting_count2 =
-                                self.get_posting_count_uncommited(&non_unique_term.term_bigram2);
+                            let posting_count_ngram_1 =
+                                if let Some(posting_count) = posting_counts_option {
+                                    posting_count.1
+                                } else {
+                                    0
+                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_1)
+                                    as u32;
 
-                            idf_bigram1 =
-                                (((self.indexed_doc_count as f32 - posting_count1 as f32 + 0.5)
-                                    / (posting_count1 as f32 + 0.5))
-                                    + 1.0)
-                                    .ln();
+                            let posting_count_ngram_2 =
+                                if let Some(posting_count) = posting_counts_option {
+                                    posting_count.2
+                                } else {
+                                    0
+                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_0)
+                                    as u32;
 
-                            idf_bigram2 =
-                                (((self.indexed_doc_count as f32 - posting_count2 as f32 + 0.5)
-                                    / (posting_count2 as f32 + 0.5))
-                                    + 1.0)
-                                    .ln();
+                            let posting_count_ngram_3 =
+                                if let Some(posting_count) = posting_counts_option {
+                                    posting_count.3
+                                } else {
+                                    0
+                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_0)
+                                    as u32;
+
+                            idf_ngram1 = (((self.indexed_doc_count as f32
+                                - posting_count_ngram_1 as f32
+                                + 0.5)
+                                / (posting_count_ngram_1 as f32 + 0.5))
+                                + 1.0)
+                                .ln();
+
+                            idf_ngram2 = (((self.indexed_doc_count as f32
+                                - posting_count_ngram_2 as f32
+                                + 0.5)
+                                / (posting_count_ngram_2 as f32 + 0.5))
+                                + 1.0)
+                                .ln();
+
+                            idf_ngram3 = (((self.indexed_doc_count as f32
+                                - posting_count_ngram_3 as f32
+                                + 0.5)
+                                / (posting_count_ngram_3 as f32 + 0.5))
+                                + 1.0)
+                                .ln();
                         }
                     }
 
@@ -823,9 +1085,10 @@ impl Index {
                                     docid: 0,
 
                                     idf,
-                                    idf_bigram1,
-                                    idf_bigram2,
-                                    is_bigram: non_unique_term.is_bigram,
+                                    idf_ngram1,
+                                    idf_ngram2,
+                                    idf_ngram3,
+                                    ngram_type: non_unique_term.ngram_type.clone(),
                                     ..Default::default()
                                 });
                         value.term_index_unique
@@ -847,9 +1110,10 @@ impl Index {
                                     docid: 0,
 
                                     idf,
-                                    idf_bigram1,
-                                    idf_bigram2,
-                                    is_bigram: non_unique_term.is_bigram,
+                                    idf_ngram1,
+                                    idf_ngram2,
+                                    idf_ngram3,
+                                    ngram_type: non_unique_term.ngram_type.clone(),
                                     ..Default::default()
                                 });
                         value.term_index_unique
@@ -859,7 +1123,7 @@ impl Index {
                         let nu_plo = NonUniquePostingListObjectQuery {
                             term_index_unique,
                             term_index_nonunique: non_unique_query_list.len()
-                                + preceding_bigram_count,
+                                + preceding_ngram_count,
                             pos: 0,
                             p_pos: 0,
                             positions_pointer: 0,
@@ -875,9 +1139,13 @@ impl Index {
                         non_unique_query_list.push(nu_plo);
                     }
 
-                    if non_unique_term.is_bigram {
-                        preceding_bigram_count += 1;
-                    }
+                    match non_unique_term.ngram_type {
+                        NgramType::SingleTerm => {}
+                        NgramType::NgramFF | NgramType::NgramRF | NgramType::NgramFR => {
+                            preceding_ngram_count += 1
+                        }
+                        _ => preceding_ngram_count += 2,
+                    };
                 }
                 None => {
                     if non_unique_term.op == QueryType::Intersection
@@ -1031,27 +1299,62 @@ impl Index {
         plo.is_embedded = position_size_byte_temp & 0b10000000_00000000 > 0;
 
         if !plo.is_embedded {
-            if plo.is_bigram {
-                plo.field_vec_bigram1 = SmallVec::new();
-                plo.field_vec_bigram2 = SmallVec::new();
-                read_multifield_vec(
-                    self.indexed_field_vec.len(),
-                    self.indexed_field_id_bits,
-                    self.indexed_field_id_mask,
-                    self.longest_field_id,
-                    &mut plo.field_vec_bigram1,
-                    &self.postings_buffer,
-                    &mut read_pointer,
-                );
-                read_multifield_vec(
-                    self.indexed_field_vec.len(),
-                    self.indexed_field_id_bits,
-                    self.indexed_field_id_mask,
-                    self.longest_field_id,
-                    &mut plo.field_vec_bigram2,
-                    &self.postings_buffer,
-                    &mut read_pointer,
-                );
+            match plo.ngram_type {
+                NgramType::SingleTerm => {}
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    plo.field_vec_ngram1 = SmallVec::new();
+                    plo.field_vec_ngram2 = SmallVec::new();
+                    read_multifield_vec(
+                        self.indexed_field_vec.len(),
+                        self.indexed_field_id_bits,
+                        self.indexed_field_id_mask,
+                        self.longest_field_id,
+                        &mut plo.field_vec_ngram1,
+                        &self.postings_buffer,
+                        &mut read_pointer,
+                    );
+                    read_multifield_vec(
+                        self.indexed_field_vec.len(),
+                        self.indexed_field_id_bits,
+                        self.indexed_field_id_mask,
+                        self.longest_field_id,
+                        &mut plo.field_vec_ngram2,
+                        &self.postings_buffer,
+                        &mut read_pointer,
+                    );
+                }
+                _ => {
+                    plo.field_vec_ngram1 = SmallVec::new();
+                    plo.field_vec_ngram2 = SmallVec::new();
+                    plo.field_vec_ngram3 = SmallVec::new();
+                    read_multifield_vec(
+                        self.indexed_field_vec.len(),
+                        self.indexed_field_id_bits,
+                        self.indexed_field_id_mask,
+                        self.longest_field_id,
+                        &mut plo.field_vec_ngram1,
+                        &self.postings_buffer,
+                        &mut read_pointer,
+                    );
+                    read_multifield_vec(
+                        self.indexed_field_vec.len(),
+                        self.indexed_field_id_bits,
+                        self.indexed_field_id_mask,
+                        self.longest_field_id,
+                        &mut plo.field_vec_ngram2,
+                        &self.postings_buffer,
+                        &mut read_pointer,
+                    );
+                    read_multifield_vec(
+                        self.indexed_field_vec.len(),
+                        self.indexed_field_id_bits,
+                        self.indexed_field_id_mask,
+                        self.longest_field_id,
+                        &mut plo.field_vec_ngram3,
+                        &self.postings_buffer,
+                        &mut read_pointer,
+                    );
+                }
             }
 
             read_multifield_vec(

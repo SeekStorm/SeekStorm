@@ -1,4 +1,4 @@
-use crate::index::{Document, FieldType, Index, IndexArc};
+use crate::index::{Document, FieldType, Index, IndexArc, hash64};
 use crate::min_heap::{self, MinHeap};
 use aho_corasick::{AhoCorasick, MatchKind};
 use serde::{Deserialize, Serialize};
@@ -74,9 +74,7 @@ pub async fn highlighter(
     let query_terms = if !index_ref.synonyms_map.is_empty() {
         let mut query_terms_vec_mut = query_terms_vec.clone();
         for query_term in query_terms_vec.iter() {
-            let term_hash = index_ref
-                .hasher_64
-                .hash_one(query_term.to_lowercase().as_bytes());
+            let term_hash = hash64(query_term.to_lowercase().as_bytes());
             if let Some(synonyms) = index_ref.synonyms_map.get(&term_hash) {
                 for synonym in synonyms.iter() {
                     query_terms_vec_mut.push(synonym.0.clone());

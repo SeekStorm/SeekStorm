@@ -5,8 +5,8 @@ use finl_unicode::categories::{CharacterCategories, MinorCategory};
 
 use crate::{
     index::{
-        HASHER_32, HASHER_64, Index, MAX_TERM_NUMBER, NonUniqueTermObject, TermObject,
-        TokenizerType,
+        Index, MAX_QUERY_TERM_NUMBER, NgramSet, NgramType, NonUniqueTermObject, TermObject,
+        TokenizerType, hash32, hash64,
     },
     search::QueryType,
 };
@@ -94,7 +94,7 @@ pub fn fold_diacritics_accents_zalgo_umlaut(string: &str) -> String {
 /// Tokenizer splits text to terms
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::assigning_clones)]
-pub(crate) fn tokenizer(
+pub fn tokenizer(
     index: &Index,
     text: &str,
     unique_terms: &mut AHashMap<String, TermObject>,
@@ -106,7 +106,7 @@ pub(crate) fn tokenizer(
     position_per_term_max: usize,
     is_query: bool,
     query_type: &mut QueryType,
-    enable_bigram: bool,
+    ngram_indexing: u8,
     indexed_field_id: usize,
     indexed_field_number: usize,
 ) {
@@ -217,6 +217,7 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
+
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -483,18 +484,21 @@ pub(crate) fn tokenizer(
         }
     }
 
-    if is_query && non_unique_terms_line.len() > MAX_TERM_NUMBER {
-        non_unique_terms_line.truncate(MAX_TERM_NUMBER);
+    if is_query && non_unique_terms_line.len() > MAX_QUERY_TERM_NUMBER {
+        non_unique_terms_line.truncate(MAX_QUERY_TERM_NUMBER);
     }
 
     let mut position: u32 = 0;
     let mut is_phrase = query_type == &QueryType::Phrase;
-    let mut previous_term_string = "".to_string();
-    let mut previous_term_hash = 0;
+    let mut term_string_1 = "".to_string();
+    let mut term_frequent_1 = false;
+    let mut term_string_2 = "".to_string();
+    let mut term_frequent_2 = false;
 
-    let mut bigrams: Vec<TermObject> = Vec::new();
+    let mut non_unique_terms_raw = Vec::new();
+
     for term_string in non_unique_terms_line.iter_mut() {
-        let term_string = if is_query {
+        if is_query {
             let mut query_type_term = if is_phrase {
                 QueryType::Phrase
             } else {
@@ -536,136 +540,830 @@ pub(crate) fn tokenizer(
                 term_string.to_string()
             };
 
-            non_unique_terms.push(NonUniqueTermObject {
-                term: term_string.to_string(),
-                term_bigram1: "".into(),
-                term_bigram2: "".into(),
-                is_bigram: false,
-                op: query_type_term,
-            });
-
-            term_string
+            non_unique_terms_raw.push((term_string, query_type_term));
         } else {
             if !index.stop_words.is_empty() && index.stop_words.contains(*term_string) {
                 continue;
             }
 
-            if let Some(stemmer) = index.stemmer.as_ref() {
+            let term_string_0 = if let Some(stemmer) = index.stemmer.as_ref() {
                 stemmer.stem(term_string).to_string()
             } else {
                 term_string.to_string()
-            }
-        };
+            };
 
-        let term_hash;
-        let term_positions_len;
-        {
+            let mut term_positions_len;
+            let term_hash_0 = hash64(term_string_0.as_bytes());
+            let term_frequent_0 = index.frequent_hashset.contains(&term_hash_0);
+
             let term_object = unique_terms
-                .entry(term_string.to_string())
+                .entry(term_string_0.clone())
                 .or_insert_with(|| {
-                    let term_bytes = term_string.as_bytes();
+                    let term_bytes = term_string_0.as_bytes();
                     TermObject {
-                        term: term_string.to_string(),
-                        key0: HASHER_32.hash_one(term_bytes) as u32 & segment_number_mask1,
-                        key_hash: HASHER_64.hash_one(term_bytes),
+                        term: term_string_0.clone(),
+
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes),
 
                         field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::SingleTerm,
 
                         ..Default::default()
                     }
                 });
 
             term_object.field_positions_vec[indexed_field_id].push(position as u16);
-            term_hash = term_object.key_hash;
             term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-        }
 
-        if enable_bigram
-            && position > 0
-            && index.frequent_hashset.contains(&term_hash)
-            && index.frequent_hashset.contains(&previous_term_hash)
-            && (!is_query
-                || (non_unique_terms[non_unique_terms.len() - 1].op == QueryType::Phrase
-                    && non_unique_terms[non_unique_terms.len() - 2].op == QueryType::Phrase))
-        {
-            let bigram_term_string = previous_term_string.to_string() + " " + &term_string;
-            let bigram_term_hash = HASHER_64.hash_one(bigram_term_string.as_bytes());
+            non_unique_terms.push(NonUniqueTermObject {
+                term: term_string_0.clone(),
+                ngram_type: NgramType::SingleTerm,
+                ..Default::default()
+            });
 
-            if is_query {
-                if unique_terms[&term_string.to_string()].field_positions_vec[indexed_field_id]
-                    .len()
-                    == 1
-                {
-                    unique_terms.remove(&term_string.to_string());
-                } else {
-                    unique_terms
-                        .get_mut(&term_string.to_string())
-                        .unwrap()
-                        .field_positions_vec[indexed_field_id]
-                        .pop();
-                }
-                if unique_terms[&previous_term_string.to_string()].field_positions_vec
-                    [indexed_field_id]
-                    .len()
-                    == 1
-                {
-                    unique_terms.remove(&previous_term_string.to_string());
-                } else {
-                    unique_terms
-                        .get_mut(&previous_term_string.to_string())
-                        .unwrap()
-                        .field_positions_vec[indexed_field_id]
-                        .pop();
-                }
-                non_unique_terms.pop();
+            if !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramFF as u8 != 0
+                    && term_frequent_1
+                    && term_frequent_0)
+            {
+                let term_string = [term_string_1.as_str(), term_string_0.as_str()].join(" ");
 
-                let non_unique_term = non_unique_terms.last_mut().unwrap();
-                non_unique_term.term.clone_from(&bigram_term_string);
-                non_unique_term.term_bigram1 = previous_term_string;
-                non_unique_term.term_bigram2 = term_string.to_string();
-                non_unique_term.is_bigram = true;
-                previous_term_string = bigram_term_string.clone();
-                previous_term_hash = bigram_term_hash;
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFF,
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFF,
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
             }
 
-            let bigram_term_object = unique_terms
-                .entry(bigram_term_string.clone())
-                .or_insert_with(|| TermObject {
-                    term: bigram_term_string.clone(),
-                    key0: HASHER_32.hash_one(bigram_term_string.as_bytes()) as u32
-                        & segment_number_mask1,
-                    key_hash: bigram_term_hash,
-                    is_bigram: true,
-                    term_bigram1: previous_term_string.clone(),
-                    term_bigram2: term_string.to_string(),
+            if !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramRF as u8 != 0
+                    && !term_frequent_1
+                    && term_frequent_0)
+            {
+                let term_string = [term_string_1.as_str(), term_string_0.as_str()].join(" ");
 
-                    field_positions_vec: vec![Vec::new(); indexed_field_number],
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramRF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramRF,
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramRF,
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
+            }
+
+            if !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramFR as u8 != 0
+                    && term_frequent_1
+                    && !term_frequent_0)
+            {
+                let term_string = [term_string_1.as_str(), term_string_0.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFR as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFR,
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFR,
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
+            }
+
+            if !term_string_2.is_empty()
+                && !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramFFF as u8 != 0
+                    && term_frequent_2
+                    && term_frequent_1
+                    && term_frequent_0)
+            {
+                let term_string = [
+                    term_string_2.as_str(),
+                    term_string_1.as_str(),
+                    term_string_0.as_str(),
+                ]
+                .join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFFF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFFF,
+                        term_ngram_2: term_string_2.clone(),
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFFF,
+                    term_ngram_2: term_string_2.clone(),
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
+            }
+
+            if !term_string_2.is_empty()
+                && !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramRFF as u8 != 0
+                    && !term_frequent_2
+                    && term_frequent_1
+                    && term_frequent_0)
+            {
+                let term_string = [
+                    term_string_2.as_str(),
+                    term_string_1.as_str(),
+                    term_string_0.as_str(),
+                ]
+                .join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramRFF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramRFF,
+                        term_ngram_2: term_string_2.clone(),
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramRFF,
+                    term_ngram_2: term_string_2.clone(),
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
+            }
+
+            if !term_string_2.is_empty()
+                && !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramRFF as u8 != 0
+                    && term_frequent_2
+                    && term_frequent_1
+                    && !term_frequent_0)
+            {
+                let term_string = [
+                    term_string_2.as_str(),
+                    term_string_1.as_str(),
+                    term_string_0.as_str(),
+                ]
+                .join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFFR as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFFR,
+                        term_ngram_2: term_string_2.clone(),
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFFR,
+                    term_ngram_2: term_string_2.clone(),
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
+            }
+
+            if !term_string_2.is_empty()
+                && !term_string_1.is_empty()
+                && (ngram_indexing & NgramSet::NgramRFF as u8 != 0
+                    && term_frequent_2
+                    && !term_frequent_1
+                    && term_frequent_0)
+            {
+                let term_string = [
+                    term_string_2.as_str(),
+                    term_string_1.as_str(),
+                    term_string_0.as_str(),
+                ]
+                .join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFRF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFRF,
+                        term_ngram_2: term_string_2.clone(),
+                        term_ngram_1: term_string_1.clone(),
+                        term_ngram_0: term_string_0.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
+                term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFRF,
+                    term_ngram_2: term_string_2.clone(),
+                    term_ngram_1: term_string_1.clone(),
+                    term_ngram_0: term_string_0.clone(),
+
+                    ..Default::default()
+                });
+            }
+
+            term_string_2 = term_string_1;
+            term_string_1 = term_string_0;
+
+            term_frequent_2 = term_frequent_1;
+            term_frequent_1 = term_frequent_0;
+
+            position += 1;
+
+            if position >= token_per_field_max_capped {
+                break;
+            }
+            if term_positions_len >= position_per_term_max {
+                continue;
+            }
+        };
+    }
+
+    if is_query {
+        let len = non_unique_terms_raw.len();
+
+        let mut term_0;
+        let mut term_frequent_0;
+        let mut term_phrase_0;
+
+        if len > 0 {
+            let item = &non_unique_terms_raw[0];
+            term_0 = item.0.clone();
+            let term_hash_0 = hash64(term_0.as_bytes());
+            term_frequent_0 = index.frequent_hashset.contains(&term_hash_0);
+            term_phrase_0 = item.1 == QueryType::Phrase;
+        } else {
+            term_0 = "".to_string();
+            term_frequent_0 = false;
+            term_phrase_0 = false;
+        }
+
+        let mut term_1;
+        let mut term_frequent_1;
+        let mut term_phrase_1;
+        if len > 1 {
+            let item = &non_unique_terms_raw[1];
+            term_1 = item.0.clone();
+            let term_hash_1 = hash64(term_1.as_bytes());
+            term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+            term_phrase_1 = item.1 == QueryType::Phrase;
+        } else {
+            term_1 = "".to_string();
+            term_frequent_1 = false;
+            term_phrase_1 = false;
+        }
+
+        let len = non_unique_terms_raw.len();
+        let mut i = 0;
+        while i < len {
+            let term_2;
+            let term_frequent_2;
+            let term_phrase_2;
+            if len > i + 2 {
+                let item = &non_unique_terms_raw[i + 2];
+                term_2 = item.0.clone();
+                let term_hash_2 = hash64(term_2.as_bytes());
+                term_frequent_2 = index.frequent_hashset.contains(&term_hash_2);
+                term_phrase_2 = item.1 == QueryType::Phrase;
+            } else {
+                term_2 = "".to_string();
+                term_frequent_2 = false;
+                term_phrase_2 = false;
+            }
+            if i + 2 < len
+                && (ngram_indexing & NgramSet::NgramFFF as u8 != 0
+                    && term_frequent_0
+                    && term_frequent_1
+                    && term_frequent_2
+                    && term_phrase_0
+                    && term_phrase_1
+                    && term_phrase_2)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str(), term_2.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFFF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFFF,
+                        term_ngram_2: term_0.clone(),
+                        term_ngram_1: term_1.clone(),
+                        term_ngram_0: term_2.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFFF,
+                    op: QueryType::Phrase,
+                    term_ngram_2: term_0.clone(),
+                    term_ngram_1: term_1.clone(),
+                    term_ngram_0: term_2.clone(),
+                });
+
+                i += 3;
+
+                if len > i {
+                    let item = &non_unique_terms_raw[i];
+                    term_0 = item.0.clone();
+                    let term_hash_0 = hash64(term_0.as_bytes());
+                    term_frequent_0 = index.frequent_hashset.contains(&term_hash_0);
+                    term_phrase_0 = item.1 == QueryType::Phrase;
+                } else {
+                    term_0 = "".to_string();
+                    term_frequent_0 = false;
+                    term_phrase_0 = false;
+                }
+
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else if i + 2 < len
+                && (ngram_indexing & NgramSet::NgramRFF as u8 != 0
+                    && !term_frequent_0
+                    && term_frequent_1
+                    && term_frequent_2
+                    && term_phrase_0
+                    && term_phrase_1
+                    && term_phrase_2)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str(), term_2.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramRFF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramRFF,
+                        term_ngram_2: term_0.clone(),
+                        term_ngram_1: term_1.clone(),
+                        term_ngram_0: term_2.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramRFF,
+                    op: QueryType::Phrase,
+                    term_ngram_2: term_0.clone(),
+                    term_ngram_1: term_1.clone(),
+                    term_ngram_0: term_2.clone(),
+                });
+
+                i += 3;
+
+                if len > i {
+                    let item = &non_unique_terms_raw[i];
+                    term_0 = item.0.clone();
+                    let term_hash_0 = hash64(term_0.as_bytes());
+                    term_frequent_0 = index.frequent_hashset.contains(&term_hash_0);
+                    term_phrase_0 = item.1 == QueryType::Phrase;
+                } else {
+                    term_0 = "".to_string();
+                    term_frequent_0 = false;
+                    term_phrase_0 = false;
+                }
+
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else if i + 2 < len
+                && (ngram_indexing & NgramSet::NgramFFR as u8 != 0
+                    && term_frequent_0
+                    && term_frequent_1
+                    && !term_frequent_2
+                    && term_phrase_0
+                    && term_phrase_1
+                    && term_phrase_2)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str(), term_2.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFFR as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFFR,
+                        term_ngram_2: term_0.clone(),
+                        term_ngram_1: term_1.clone(),
+                        term_ngram_0: term_2.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFFR,
+                    op: QueryType::Phrase,
+                    term_ngram_2: term_0.clone(),
+                    term_ngram_1: term_1.clone(),
+                    term_ngram_0: term_2.clone(),
+                });
+
+                i += 3;
+
+                if len > i {
+                    let item = &non_unique_terms_raw[i];
+                    term_0 = item.0.clone();
+                    let term_hash_0 = hash64(term_0.as_bytes());
+                    term_frequent_0 = index.frequent_hashset.contains(&term_hash_0);
+                    term_phrase_0 = item.1 == QueryType::Phrase;
+                } else {
+                    term_0 = "".to_string();
+                    term_frequent_0 = false;
+                    term_phrase_0 = false;
+                }
+
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else if i + 2 < len
+                && (ngram_indexing & NgramSet::NgramFRF as u8 != 0
+                    && term_frequent_0
+                    && !term_frequent_1
+                    && term_frequent_2
+                    && term_phrase_0
+                    && term_phrase_1
+                    && term_phrase_2)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str(), term_2.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFRF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFRF,
+                        term_ngram_2: term_0.clone(),
+                        term_ngram_1: term_1.clone(),
+                        term_ngram_0: term_2.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFRF,
+                    op: QueryType::Phrase,
+                    term_ngram_2: term_0.clone(),
+                    term_ngram_1: term_1.clone(),
+                    term_ngram_0: term_2.clone(),
+                });
+
+                i += 3;
+
+                if len > i {
+                    let item = &non_unique_terms_raw[i];
+                    term_0 = item.0.clone();
+                    let term_hash_0 = hash64(term_0.as_bytes());
+                    term_frequent_0 = index.frequent_hashset.contains(&term_hash_0);
+                    term_phrase_0 = item.1 == QueryType::Phrase;
+                } else {
+                    term_0 = "".to_string();
+                    term_frequent_0 = false;
+                    term_phrase_0 = false;
+                }
+
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else if i + 1 < len
+                && (ngram_indexing & NgramSet::NgramFF as u8 != 0
+                    && term_frequent_0
+                    && term_frequent_1
+                    && term_phrase_0
+                    && term_phrase_1)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFF,
+                        term_ngram_1: term_0.clone(),
+                        term_ngram_0: term_1.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFF,
+                    op: QueryType::Phrase,
+                    term_ngram_1: term_0.clone(),
+                    term_ngram_0: term_1.clone(),
 
                     ..Default::default()
                 });
 
-            if !is_query {
-                previous_term_string = term_string.to_string();
-                previous_term_hash = term_hash;
-            }
-            if bigram_term_object.field_positions_vec[indexed_field_id].is_empty() {
-                bigrams.push(bigram_term_object.clone());
-            }
+                i += 2;
 
-            bigram_term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
-        } else {
-            previous_term_string = term_string.to_string();
-            previous_term_hash = term_hash;
-        }
+                term_0 = term_2.clone();
+                term_frequent_0 = term_frequent_2;
 
-        position += 1;
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else if i + 1 < len
+                && (ngram_indexing & NgramSet::NgramRF as u8 != 0
+                    && !term_frequent_0
+                    && term_frequent_1
+                    && term_phrase_0
+                    && term_phrase_1)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str()].join(" ");
 
-        if position >= token_per_field_max_capped {
-            break;
-        }
-        if term_positions_len >= position_per_term_max {
-            continue;
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramRF as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramRF,
+                        term_ngram_1: term_0.clone(),
+                        term_ngram_0: term_1.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramRF,
+                    op: QueryType::Phrase,
+                    term_ngram_1: term_0.clone(),
+                    term_ngram_0: term_1.clone(),
+
+                    ..Default::default()
+                });
+
+                i += 2;
+
+                term_0 = term_2.clone();
+                term_frequent_0 = term_frequent_2;
+
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else if i + 1 < len
+                && (ngram_indexing & NgramSet::NgramFR as u8 != 0
+                    && term_frequent_0
+                    && !term_frequent_1
+                    && term_phrase_0
+                    && term_phrase_1)
+            {
+                let term_string = [term_0.as_str(), term_1.as_str()].join(" ");
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.clone(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes) | NgramType::NgramFR as u64,
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::NgramFR,
+                        term_ngram_1: term_0.clone(),
+                        term_ngram_0: term_1.clone(),
+
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::NgramFR,
+                    op: QueryType::Phrase,
+                    term_ngram_1: term_0.clone(),
+                    term_ngram_0: term_1.clone(),
+
+                    ..Default::default()
+                });
+
+                i += 2;
+
+                term_0 = term_2.clone();
+                term_frequent_0 = term_frequent_2;
+
+                if len > i + 1 {
+                    let item = &non_unique_terms_raw[i + 1];
+                    term_1 = item.0.clone();
+                    let term_hash_1 = hash64(term_1.as_bytes());
+                    term_frequent_1 = index.frequent_hashset.contains(&term_hash_1);
+                    term_phrase_1 = item.1 == QueryType::Phrase;
+                } else {
+                    term_1 = "".to_string();
+                    term_frequent_1 = false;
+                    term_phrase_1 = false;
+                }
+            } else {
+                let term_string = term_0.clone();
+
+                let term_object = unique_terms.entry(term_string.clone()).or_insert_with(|| {
+                    let term_bytes = term_string.as_bytes();
+                    TermObject {
+                        term: term_string.to_string(),
+                        key0: hash32(term_bytes) & segment_number_mask1,
+                        key_hash: hash64(term_bytes),
+                        field_positions_vec: vec![Vec::new(); indexed_field_number],
+                        ngram_type: NgramType::SingleTerm,
+                        ..Default::default()
+                    }
+                });
+                term_object.field_positions_vec[indexed_field_id].push(position as u16);
+
+                non_unique_terms.push(NonUniqueTermObject {
+                    term: term_string,
+                    ngram_type: NgramType::SingleTerm,
+                    op: non_unique_terms_raw[i].1.clone(),
+                    ..Default::default()
+                });
+
+                i += 1;
+
+                term_0.clone_from(&term_1);
+                term_1.clone_from(&term_2);
+
+                term_frequent_0 = term_frequent_1;
+                term_frequent_1 = term_frequent_2;
+
+                term_phrase_0 = term_phrase_1;
+                term_phrase_1 = term_phrase_2;
+            };
+
+            position += 1;
         }
     }
+
     *nonunique_terms_count = position;
 }

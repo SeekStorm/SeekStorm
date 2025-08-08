@@ -18,8 +18,9 @@ use seekstorm::{
     index::{
         AccessType, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
         Document, Facet, FileType, FrequentwordType, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, MinMaxFieldJson, SchemaField, SimilarityType, StemmerType, StopwordType,
-        Synonym, TokenizerType, UpdateDocument, UpdateDocuments, create_index, open_index,
+        IndexMetaObject, MinMaxFieldJson, NgramSet, SchemaField, SimilarityType, StemmerType,
+        StopwordType, Synonym, TokenizerType, UpdateDocument, UpdateDocuments, create_index,
+        open_index,
     },
     ingest::IndexPdfBytes,
     search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
@@ -133,6 +134,8 @@ pub struct CreateIndexRequest {
     pub stop_words: StopwordType,
     #[serde(default)]
     pub frequent_words: FrequentwordType,
+    #[serde(default = "ngram_indexing_api")]
+    pub ngram_indexing: u8,
     #[schema(required = true, example = json!([{"terms":["berry","lingonberry","blueberry","gooseberry"],"multiway":false}]))]
     #[serde(default)]
     pub synonyms: Vec<Synonym>,
@@ -144,6 +147,10 @@ fn similarity_type_api() -> SimilarityType {
 
 fn tokenizer_type_api() -> TokenizerType {
     TokenizerType::UnicodeAlphanumeric
+}
+
+fn ngram_indexing_api() -> u8 {
+    NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -423,6 +430,7 @@ pub(crate) fn create_index_api<'a>(
     stemmer: StemmerType,
     stop_words: StopwordType,
     frequent_words: FrequentwordType,
+    ngram_indexing: u8,
     synonyms: Vec<Synonym>,
     apikey_object: &'a mut ApikeyObject,
 ) -> u64 {
@@ -448,6 +456,7 @@ pub(crate) fn create_index_api<'a>(
         stemmer,
         stop_words,
         frequent_words,
+        ngram_indexing,
         access_type: AccessType::Mmap,
     };
 

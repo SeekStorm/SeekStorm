@@ -350,7 +350,7 @@ pub(crate) mod realtime_search;
 pub mod search;
 pub(crate) mod single;
 /// Tokenizes text into tokens (words), supports Chinese word segmentation, folds (converts) diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters into their basic representation.
-pub mod tokenizer;
+pub(crate) mod tokenizer;
 pub(crate) mod union;
 /// Utils `truncate()` and `substring()`
 pub mod utils;

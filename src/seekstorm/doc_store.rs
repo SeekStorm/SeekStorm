@@ -298,17 +298,15 @@ impl Index {
         }
 
         for distance_field in distance_fields.iter() {
-            if let Some(idx) = self.facets_map.get(&distance_field.field) {
-                if self.facets[*idx].field_type == FieldType::Point {
-                    if let FacetValue::Point(point) =
-                        self.get_facet_value(&distance_field.field, doc_id)
-                    {
-                        let distance =
-                            euclidian_distance(&point, &distance_field.base, &distance_field.unit);
+            if let Some(idx) = self.facets_map.get(&distance_field.field)
+                && self.facets[*idx].field_type == FieldType::Point
+                && let FacetValue::Point(point) =
+                    self.get_facet_value(&distance_field.field, doc_id)
+            {
+                let distance =
+                    euclidian_distance(&point, &distance_field.base, &distance_field.unit);
 
-                        doc.insert(distance_field.distance.clone(), json!(distance));
-                    }
-                }
+                doc.insert(distance_field.distance.clone(), json!(distance));
             }
         }
 

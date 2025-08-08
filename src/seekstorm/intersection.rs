@@ -2,7 +2,7 @@ use crate::{
     add_result::add_result_multiterm_multifield,
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
-        AccessType, CompressionType, Index, MAX_TERM_NUMBER, NonUniquePostingListObjectQuery,
+        AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
     },
     intersection_simd::intersection_vector16,
@@ -2031,6 +2031,7 @@ pub(crate) async fn intersection_blockid<'a>(
     facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
     phrase_query: bool,
+    query_term_count: usize,
 ) {
     let item_0 = &query_list[0];
     let enable_inter_query_threading_multi =
@@ -2094,7 +2095,7 @@ pub(crate) async fn intersection_blockid<'a>(
                     }
 
                     if SPEEDUP_FLAG && SORT_FLAG && result_type != &ResultType::Count {
-                        let mut p_block_vec: Vec<i32> = vec![0; MAX_TERM_NUMBER];
+                        let mut p_block_vec: Vec<i32> = vec![0; query_term_count];
                         for i in 0..query_list.len() {
                             p_block_vec[query_list[i].term_index_unique] = query_list[i].p_block
                         }

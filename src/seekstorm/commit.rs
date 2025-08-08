@@ -1,4 +1,4 @@
-use memmap2::{Mmap, MmapMut};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
 use std::{
@@ -10,25 +10,23 @@ use std::{
 
 use crate::{
     add_result::{
-        B, DOCUMENT_LENGTH_COMPRESSION, K, decode_positions_multiterm_multifield,
-        decode_positions_multiterm_singlefield, get_next_position_multifield,
-        get_next_position_singlefield,
+        B, K, decode_positions_multiterm_multifield, decode_positions_multiterm_singlefield,
+        get_next_position_multifield, get_next_position_singlefield,
     },
     compatible::{_blsr_u64, _mm_tzcnt_64},
     compress_postinglist::compress_postinglist,
     index::{
-        AccessType, BlockObjectIndex, CompressionType, FACET_VALUES_FILENAME, Index, IndexArc,
-        LevelIndex, MAX_POSITIONS_PER_TERM, NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE,
-        PostingListObjectIndex, PostingListObjectQuery, ROARING_BLOCK_SIZE, TermObject,
-        update_list_max_impact_score, update_stopwords_posting_counts, warmup,
+        AccessType, BlockObjectIndex, CompressionType, DOCUMENT_LENGTH_COMPRESSION,
+        FACET_VALUES_FILENAME, Index, IndexArc, LevelIndex, MAX_POSITIONS_PER_TERM, NgramType,
+        NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE, PostingListObjectIndex,
+        PostingListObjectQuery, ROARING_BLOCK_SIZE, TermObject, update_list_max_impact_score,
+        warmup,
     },
     utils::{
         block_copy, block_copy_mut, read_u8, read_u16, read_u32, read_u64, write_u16, write_u32,
         write_u64,
     },
 };
-
-pub(crate) const KEY_HEAD_SIZE: usize = 22;
 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
@@ -137,6 +135,13 @@ impl Index {
         if self.is_last_level_incomplete {
             self.merge_incomplete_index_level_to_level0();
 
+            self.index_file_mmap = unsafe {
+                MmapOptions::new()
+                    .len(0)
+                    .map(&self.index_file)
+                    .expect("Unable to create Mmap")
+            };
+
             if let Err(e) = self
                 .index_file
                 .set_len(self.last_level_index_file_start_pos)
@@ -166,11 +171,11 @@ impl Index {
 
                 for key0 in 0..self.segment_number1 {
                     for item in self.segments_index[key0].segment.iter_mut() {
-                        if let Some(block) = item.1.blocks.last() {
-                            if block.block_id as usize == idx {
-                                item.1.posting_count -= block.posting_count as u32 + 1;
-                                item.1.blocks.remove(idx);
-                            }
+                        if let Some(block) = item.1.blocks.last()
+                            && block.block_id as usize == idx
+                        {
+                            item.1.posting_count -= block.posting_count as u32 + 1;
+                            item.1.blocks.remove(idx);
                         }
                     }
                     self.segments_index[key0]
@@ -182,8 +187,6 @@ impl Index {
             self.last_level_index_file_start_pos = self.index_file.stream_position().unwrap();
             self.last_level_docstore_file_start_pos = self.docstore_file.stream_position().unwrap();
         };
-
-        update_stopwords_posting_counts(self, true);
 
         if self.committed_doc_count / ROARING_BLOCK_SIZE == 0 {
             write_u16(
@@ -359,7 +362,7 @@ impl Index {
         );
 
         let mut key_body_pointer_w: usize =
-            key_head_pointer_w + (self.segments_level0[key0].segment.len() * KEY_HEAD_SIZE);
+            key_head_pointer_w + (self.segments_level0[key0].segment.len() * self.key_head_size);
         let key_body_pointer_wstart: usize = key_body_pointer_w;
 
         let mut key_list: Vec<u64> = self.segments_level0[key0].segment.keys().cloned().collect();
@@ -400,7 +403,7 @@ impl Index {
 
             key_body_pointer_w = key_docid_pointer_w + size_compressed_docid_key;
 
-            size_compressed_docid_key += KEY_HEAD_SIZE;
+            size_compressed_docid_key += self.key_head_size;
 
             self.size_compressed_docid_index += size_compressed_docid_key as u64;
             self.size_compressed_positions_index += size_compressed_positions_key as u64;
@@ -520,20 +523,24 @@ impl Index {
                 } else {
                     value.posting_count = plo.posting_count as u32;
                     value.max_list_score = 0.0;
-                    value.bigram_term_index1 = if plo.is_bigram {
-                        self.frequent_words
-                            .binary_search(&plo.term_bigram1)
-                            .unwrap() as u8
-                    } else {
-                        255
-                    };
-                    value.bigram_term_index2 = if plo.is_bigram {
-                        self.frequent_words
-                            .binary_search(&plo.term_bigram2)
-                            .unwrap() as u8
-                    } else {
-                        255
-                    };
+
+                    match plo.ngram_type {
+                        NgramType::SingleTerm => {}
+                        NgramType::NgramFF | NgramType::NgramRF | NgramType::NgramFR => {
+                            value.posting_count_ngram_1_compressed =
+                                plo.posting_count_ngram_1_compressed;
+                            value.posting_count_ngram_2_compressed =
+                                plo.posting_count_ngram_2_compressed;
+                        }
+                        _ => {
+                            value.posting_count_ngram_1_compressed =
+                                plo.posting_count_ngram_1_compressed;
+                            value.posting_count_ngram_2_compressed =
+                                plo.posting_count_ngram_2_compressed;
+                            value.posting_count_ngram_3_compressed =
+                                plo.posting_count_ngram_3_compressed;
+                        }
+                    }
 
                     if self.meta.access_type != AccessType::Mmap {
                         value.blocks = vec![BlockObjectIndex {
@@ -564,9 +571,10 @@ impl Index {
         docid: usize,
         key_hash: u64,
         key0: usize,
-        is_bigram: bool,
-        bigram_term_index1: u8,
-        bigram_term_index2: u8,
+        ngram_type: &NgramType,
+        posting_count_ngram_1_compressed: u8,
+        posting_count_ngram_2_compressed: u8,
+        posting_count_ngram_3_compressed: u8,
     ) {
         let mut field_positions_vec: Vec<Vec<u16>> = vec![Vec::new(); self.indexed_field_vec.len()];
 
@@ -630,50 +638,91 @@ impl Index {
             }
         }
 
-        let term = TermObject {
-            key_hash,
-            key0: key0 as u32,
-            is_bigram,
-            term_bigram1: if bigram_term_index1 == 255 {
-                String::new()
-            } else {
-                self.frequent_words[bigram_term_index1 as usize].to_owned()
-            },
-            term_bigram2: if bigram_term_index2 == 255 {
-                String::new()
-            } else {
-                self.frequent_words[bigram_term_index2 as usize].to_owned()
-            },
-            field_positions_vec,
-            field_vec_bigram1: if is_bigram {
-                if self.indexed_field_vec.len() == 1 {
-                    vec![(0, plo.tf_bigram1)]
-                } else {
-                    plo.field_vec_bigram1
-                        .iter()
-                        .map(|field| (field.0 as usize, field.1 as u32))
-                        .collect()
-                }
-            } else {
-                Vec::new()
-            },
-            field_vec_bigram2: if is_bigram {
-                if self.indexed_field_vec.len() == 1 {
-                    vec![(0, plo.tf_bigram2)]
-                } else {
-                    plo.field_vec_bigram2
-                        .iter()
-                        .map(|field| (field.0 as usize, field.1 as u32))
-                        .collect()
-                }
-            } else {
-                Vec::new()
-            },
+        let term = match ngram_type {
+            NgramType::SingleTerm => TermObject {
+                key_hash,
+                key0: key0 as u32,
+                ngram_type: ngram_type.clone(),
+                term_ngram_1: String::new(),
+                term_ngram_0: String::new(),
+                field_positions_vec,
 
-            ..Default::default()
+                ..Default::default()
+            },
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => TermObject {
+                key_hash,
+                key0: key0 as u32,
+                ngram_type: ngram_type.clone(),
+                term_ngram_1: String::new(),
+                term_ngram_0: String::new(),
+                field_positions_vec,
+                field_vec_ngram1: if self.indexed_field_vec.len() == 1 {
+                    vec![(0, plo.tf_ngram1)]
+                } else {
+                    plo.field_vec_ngram1
+                        .iter()
+                        .map(|field| (field.0 as usize, field.1 as u32))
+                        .collect()
+                },
+
+                field_vec_ngram2: if self.indexed_field_vec.len() == 1 {
+                    vec![(0, plo.tf_ngram2)]
+                } else {
+                    plo.field_vec_ngram2
+                        .iter()
+                        .map(|field| (field.0 as usize, field.1 as u32))
+                        .collect()
+                },
+
+                ..Default::default()
+            },
+            _ => TermObject {
+                key_hash,
+                key0: key0 as u32,
+                ngram_type: ngram_type.clone(),
+                term_ngram_1: String::new(),
+                term_ngram_0: String::new(),
+
+                field_positions_vec,
+                field_vec_ngram1: if self.indexed_field_vec.len() == 1 {
+                    vec![(0, plo.tf_ngram1)]
+                } else {
+                    plo.field_vec_ngram1
+                        .iter()
+                        .map(|field| (field.0 as usize, field.1 as u32))
+                        .collect()
+                },
+
+                field_vec_ngram2: if self.indexed_field_vec.len() == 1 {
+                    vec![(0, plo.tf_ngram2)]
+                } else {
+                    plo.field_vec_ngram2
+                        .iter()
+                        .map(|field| (field.0 as usize, field.1 as u32))
+                        .collect()
+                },
+
+                field_vec_ngram3: if self.indexed_field_vec.len() == 1 {
+                    vec![(0, plo.tf_ngram3)]
+                } else {
+                    plo.field_vec_ngram3
+                        .iter()
+                        .map(|field| (field.0 as usize, field.1 as u32))
+                        .collect()
+                },
+
+                ..Default::default()
+            },
         };
 
-        self.index_posting(term, docid, true);
+        self.index_posting(
+            term,
+            docid,
+            true,
+            posting_count_ngram_1_compressed,
+            posting_count_ngram_2_compressed,
+            posting_count_ngram_3_compressed,
+        );
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -685,9 +734,10 @@ impl Index {
         block_id: usize,
         key0: usize,
         key_hash: u64,
-        is_bigram: bool,
-        bigram_term_index1: u8,
-        bigram_term_index2: u8,
+        ngram_type: NgramType,
+        posting_count_ngram_1_compressed: u8,
+        posting_count_ngram_2_compressed: u8,
+        posting_count_ngram_3_compressed: u8,
     ) {
         let compression_type: CompressionType =
             FromPrimitive::from_i32((compression_type_pointer >> 30) as i32).unwrap();
@@ -718,7 +768,7 @@ impl Index {
             pointer_pivot_p_docid,
             byte_array: &byte_array,
             p_docid: 0,
-            is_bigram,
+            ngram_type: ngram_type.clone(),
             ..Default::default()
         };
 
@@ -738,9 +788,10 @@ impl Index {
                         docid,
                         key_hash,
                         key0,
-                        is_bigram,
-                        bigram_term_index1,
-                        bigram_term_index2,
+                        &ngram_type,
+                        posting_count_ngram_1_compressed,
+                        posting_count_ngram_2_compressed,
+                        posting_count_ngram_3_compressed,
                     );
                 }
             }
@@ -767,9 +818,10 @@ impl Index {
                             docid,
                             key_hash,
                             key0,
-                            is_bigram,
-                            bigram_term_index1,
-                            bigram_term_index2,
+                            &ngram_type,
+                            posting_count_ngram_1_compressed,
+                            posting_count_ngram_2_compressed,
+                            posting_count_ngram_3_compressed,
                         );
 
                         plo.p_docid += 1;
@@ -798,9 +850,10 @@ impl Index {
                             docid,
                             key_hash,
                             key0,
-                            is_bigram,
-                            bigram_term_index1,
-                            bigram_term_index2,
+                            &ngram_type,
+                            posting_count_ngram_1_compressed,
+                            posting_count_ngram_2_compressed,
+                            posting_count_ngram_3_compressed,
                         );
 
                         plo.p_docid += 1;
@@ -854,23 +907,49 @@ impl Index {
                     let key_address;
                     let key_hash;
                     let posting_count;
-                    let bigram_term_index1;
-                    let bigram_term_index2;
+
+                    let ngram_type;
+                    let posting_count_ngram_1_compressed;
+                    let posting_count_ngram_2_compressed;
+                    let posting_count_ngram_3_compressed;
                     let pointer_pivot_p_docid_old;
                     let compression_type_pointer;
                     {
                         let byte_array = &self.index_file_mmap
-                            [pointer.0 - (key_count * KEY_HEAD_SIZE)..pointer.0];
-                        key_address = key_index * KEY_HEAD_SIZE;
+                            [pointer.0 - (key_count * self.key_head_size)..pointer.0];
+                        key_address = key_index * self.key_head_size;
                         key_hash = read_u64(byte_array, key_address);
                         posting_count = read_u16(byte_array, key_address + 8);
-                        bigram_term_index1 = read_u8(byte_array, key_address + 14);
-                        bigram_term_index2 = read_u8(byte_array, key_address + 15);
+                        ngram_type = FromPrimitive::from_u64(key_hash & 0b111)
+                            .unwrap_or(NgramType::SingleTerm);
+                        match ngram_type {
+                            NgramType::SingleTerm => {
+                                posting_count_ngram_1_compressed = 0;
+                                posting_count_ngram_2_compressed = 0;
+                                posting_count_ngram_3_compressed = 0;
+                            }
+                            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                                posting_count_ngram_1_compressed =
+                                    read_u8(byte_array, key_address + 14);
+                                posting_count_ngram_2_compressed =
+                                    read_u8(byte_array, key_address + 15);
+                                posting_count_ngram_3_compressed = 0;
+                            }
+                            _ => {
+                                posting_count_ngram_1_compressed =
+                                    read_u8(byte_array, key_address + 14);
+                                posting_count_ngram_2_compressed =
+                                    read_u8(byte_array, key_address + 15);
+                                posting_count_ngram_3_compressed =
+                                    read_u8(byte_array, key_address + 16);
+                            }
+                        }
 
-                        pointer_pivot_p_docid_old = read_u16(byte_array, key_address + 16);
-                        compression_type_pointer = read_u32(byte_array, key_address + 18);
+                        pointer_pivot_p_docid_old =
+                            read_u16(byte_array, key_address + self.key_head_size - 6);
+                        compression_type_pointer =
+                            read_u32(byte_array, key_address + self.key_head_size - 4);
                     }
-                    let is_bigram = bigram_term_index1 < 255;
 
                     let mut pointer_pivot_p_docid_new = 0;
                     let mut size_compressed_positions_key_new = 0;
@@ -899,9 +978,10 @@ impl Index {
                         block_id,
                         key0,
                         key_hash,
-                        is_bigram,
-                        bigram_term_index1,
-                        bigram_term_index2,
+                        ngram_type,
+                        posting_count_ngram_1_compressed,
+                        posting_count_ngram_2_compressed,
+                        posting_count_ngram_3_compressed,
                     );
 
                     if merge {
@@ -941,13 +1021,12 @@ impl Index {
 
                     let posting_count = last_block.posting_count;
 
-                    let bigram_term_index1 = plo.bigram_term_index1;
-                    let bigram_term_index2 = plo.bigram_term_index2;
+                    let posting_count_ngram_1_compressed = plo.posting_count_ngram_1_compressed;
+                    let posting_count_ngram_2_compressed = plo.posting_count_ngram_2_compressed;
+                    let posting_count_ngram_3_compressed = plo.posting_count_ngram_3_compressed;
 
                     let pointer_pivot_p_docid = last_block.pointer_pivot_p_docid;
                     let compression_type_pointer = last_block.compression_type_pointer;
-
-                    let is_bigram = bigram_term_index1 < 255;
 
                     let mut pointer_pivot_p_docid_new = 0;
                     let mut size_compressed_positions_key_new = 0;
@@ -969,6 +1048,9 @@ impl Index {
                         None => false,
                     };
 
+                    let ngram_type =
+                        FromPrimitive::from_u64(key_hash & 0b111).unwrap_or(NgramType::SingleTerm);
+
                     self.iterate_docid(
                         compression_type_pointer,
                         pointer_pivot_p_docid,
@@ -976,9 +1058,10 @@ impl Index {
                         block_id,
                         key0,
                         key_hash,
-                        is_bigram,
-                        bigram_term_index1,
-                        bigram_term_index2,
+                        ngram_type,
+                        posting_count_ngram_1_compressed,
+                        posting_count_ngram_2_compressed,
+                        posting_count_ngram_3_compressed,
                     );
 
                     if merge {

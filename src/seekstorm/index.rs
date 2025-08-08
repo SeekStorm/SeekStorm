@@ -6,11 +6,9 @@ use lazy_static::lazy_static;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
-
 use num_format::{Locale, ToFormattedString};
-
 use rust_stemmers::{Algorithm, Stemmer};
-use search::{QueryType, Search, decode_posting_list_object};
+use search::{QueryType, Search};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::{
@@ -29,8 +27,7 @@ use utoipa::ToSchema;
 #[cfg(feature = "zh")]
 use crate::word_segmentation::WordSegmentationTM;
 use crate::{
-    add_result::{self, B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA},
-    commit::KEY_HEAD_SIZE,
+    add_result::{self, B, K, SIGMA},
     geo_search::encode_morton_2_d,
     search::{self, FacetFilter, Point, QueryFacet, Ranges, ResultObject, ResultSort, ResultType},
     tokenizer::tokenizer,
@@ -39,6 +36,9 @@ use crate::{
         write_f64, write_i8, write_i16, write_i32, write_i64, write_u32, write_u64,
     },
 };
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+use gxhash::{gxhash32, gxhash64};
 
 pub(crate) const FILE_PATH: &str = "files";
 pub(crate) const INDEX_FILENAME: &str = "index.bin";
@@ -68,10 +68,9 @@ pub const ROARING_BLOCK_SIZE: usize = 65_536;
 
 pub(crate) const SPEEDUP_FLAG: bool = true;
 pub(crate) const SORT_FLAG: bool = true;
-pub(crate) const BIGRAM_FLAG: bool = true;
 
 pub(crate) const POSTING_BUFFER_SIZE: usize = 400_000_000;
-pub(crate) const MAX_TERM_NUMBER: usize = 10;
+pub(crate) const MAX_QUERY_TERM_NUMBER: usize = 100;
 
 pub(crate) const SEGMENT_KEY_CAPACITY: usize = 1000;
 
@@ -239,15 +238,19 @@ pub(crate) struct BlockObjectIndex {
 #[derive(Default)]
 pub(crate) struct PostingListObjectIndex {
     pub posting_count: u32,
-    pub bigram_term_index1: u8,
-    pub bigram_term_index2: u8,
+    pub posting_count_ngram_1: u32,
+    pub posting_count_ngram_2: u32,
+    pub posting_count_ngram_3: u32,
+    pub posting_count_ngram_1_compressed: u8,
+    pub posting_count_ngram_2_compressed: u8,
+    pub posting_count_ngram_3_compressed: u8,
     pub max_list_score: f32,
     pub blocks: Vec<BlockObjectIndex>,
 
     pub position_range_previous: u32,
 }
 
-#[derive(Default, Debug, Deserialize, Serialize, Clone)]
+#[derive(Default, Debug, Serialize, Clone)]
 pub(crate) struct PostingListObject0 {
     pub pointer_first: usize,
     pub pointer_last: usize,
@@ -256,11 +259,16 @@ pub(crate) struct PostingListObject0 {
     pub max_block_score: f32,
     pub max_docid: u16,
     pub max_p_docid: u16,
-    pub is_bigram: bool,
-    pub term_bigram1: String,
-    pub term_bigram2: String,
-    pub posting_count_bigram1: usize,
-    pub posting_count_bigram2: usize,
+    pub ngram_type: NgramType,
+    pub term_ngram1: String,
+    pub term_ngram2: String,
+    pub term_ngram3: String,
+    pub posting_count_ngram_1: f32,
+    pub posting_count_ngram_2: f32,
+    pub posting_count_ngram_3: f32,
+    pub posting_count_ngram_1_compressed: u8,
+    pub posting_count_ngram_2_compressed: u8,
+    pub posting_count_ngram_3_compressed: u8,
     pub position_count: usize,
     pub pointer_pivot_p_docid: u16,
     pub size_compressed_positions_key: usize,
@@ -329,19 +337,22 @@ pub(crate) struct PostingListObjectQuery<'a> {
     pub positions_pointer: u32,
 
     pub idf: f32,
-    pub idf_bigram1: f32,
-    pub idf_bigram2: f32,
-    pub tf_bigram1: u32,
-    pub tf_bigram2: u32,
-    pub is_bigram: bool,
+    pub idf_ngram1: f32,
+    pub idf_ngram2: f32,
+    pub idf_ngram3: f32,
+    pub tf_ngram1: u32,
+    pub tf_ngram2: u32,
+    pub tf_ngram3: u32,
+    pub ngram_type: NgramType,
 
     pub end_flag: bool,
     pub end_flag_block: bool,
     pub is_embedded: bool,
     pub embedded_positions: [u32; 4],
     pub field_vec: SmallVec<[(u16, usize); 2]>,
-    pub field_vec_bigram1: SmallVec<[(u16, usize); 2]>,
-    pub field_vec_bigram2: SmallVec<[(u16, usize); 2]>,
+    pub field_vec_ngram1: SmallVec<[(u16, usize); 2]>,
+    pub field_vec_ngram2: SmallVec<[(u16, usize); 2]>,
+    pub field_vec_ngram3: SmallVec<[(u16, usize); 2]>,
     pub bm25_flag: bool,
 }
 
@@ -379,17 +390,19 @@ impl Default for PostingListObjectQuery<'_> {
             positions_count: 0,
             positions_pointer: 0,
             idf: 0.0,
-            idf_bigram1: 0.0,
-            idf_bigram2: 0.0,
-            is_bigram: false,
+            idf_ngram1: 0.0,
+            idf_ngram2: 0.0,
+            idf_ngram3: 0.0,
+            ngram_type: NgramType::SingleTerm,
             is_embedded: false,
             embedded_positions: [0; 4],
             field_vec: SmallVec::new(),
-            tf_bigram1: 0,
-            tf_bigram2: 0,
-            field_vec_bigram1: SmallVec::new(),
-            field_vec_bigram2: SmallVec::new(),
-
+            tf_ngram1: 0,
+            tf_ngram2: 0,
+            tf_ngram3: 0,
+            field_vec_ngram1: SmallVec::new(),
+            field_vec_ngram2: SmallVec::new(),
+            field_vec_ngram3: SmallVec::new(),
             end_flag: false,
             end_flag_block: false,
             bm25_flag: true,
@@ -645,6 +658,8 @@ pub enum FrequentwordType {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IndexMetaObject {
     /// unique index ID
+    /// Only used in SeekStorm server, not by the SeekStorm library itself.
+    /// In the SeekStorm server with REST API, the index ID is used to specify the index (within the API key) where you want to index and search.
     #[serde(skip)]
     pub id: u64,
     /// index name: used informational purposes
@@ -669,9 +684,26 @@ pub struct IndexMetaObject {
     /// The lists of stop_words and frequent_words should not overlap.
     #[serde(default)]
     pub frequent_words: FrequentwordType,
+    /// N-gram indexing: n-grams are indexed in addition to single terms, for fast phrase search, at the cost of higher index size
+    /// Preference valid both for index time and query time. Any change requires reindexing.
+    /// bitwise OR flags:
+    /// SingleTerm = 0b00000000, always enabled in addition to the other optional NgramSet below
+    /// NgramFF    = 0b00000001, frequent frequent
+    /// NgramFR    = 0b00000010, frequent rare
+    /// NgramRF    = 0b00000100, rare frequent
+    /// NgramFFF   = 0b00001000, frequent frequent frequent
+    /// NgramRFF   = 0b00010000, rare frequent frequent
+    /// NgramFFR   = 0b00100000, frequent frequent rare
+    /// NgramFRF   = 0b01000000, frequent rare frequent
+    #[serde(default = "ngram_indexing_default")]
+    pub ngram_indexing: u8,
 
     /// AccessType defines where the index resides during search: Ram or Mmap
     pub access_type: AccessType,
+}
+
+fn ngram_indexing_default() -> u8 {
+    NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8
 }
 
 #[derive(Debug, Clone, Default)]
@@ -816,11 +848,6 @@ pub struct Index {
     /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
     pub meta: IndexMetaObject,
 
-    pub(crate) hasher_32: RandomState,
-    pub(crate) hasher_64: RandomState,
-
-    pub(crate) frequentword_posting_counts: Vec<u32>,
-
     pub(crate) docstore_file: File,
     pub(crate) docstore_file_mmap: Mmap,
 
@@ -846,7 +873,6 @@ pub struct Index {
     /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents, or once commit is invoked manually.
     pub uncommitted: bool,
 
-    pub(crate) enable_bigram: bool,
     pub(crate) enable_fallback: bool,
     pub(crate) enable_single_term_topk: bool,
     pub(crate) enable_search_quality_test: bool,
@@ -877,7 +903,7 @@ pub struct Index {
     pub(crate) position_count: usize,
 
     pub(crate) mute: bool,
-    pub(crate) stopword_results: AHashMap<String, ResultObject>,
+    pub(crate) frequentword_results: AHashMap<String, ResultObject>,
 
     pub(crate) facets: Vec<FacetField>,
     pub(crate) facets_map: AHashMap<String, usize>,
@@ -897,6 +923,7 @@ pub struct Index {
     pub(crate) stop_words: AHashSet<String>,
     pub(crate) frequent_words: Vec<String>,
     pub(crate) frequent_hashset: AHashSet<u64>,
+    pub(crate) key_head_size: usize,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -909,8 +936,6 @@ pub fn version() -> &'static str {
 
 pub(crate) fn get_synonyms_map(
     synonyms: &[Synonym],
-    hasher_64: &RandomState,
-    hasher_32: &RandomState,
     segment_number_mask1: u32,
 ) -> AHashMap<u64, SynonymItem> {
     let mut synonyms_map: AHashMap<u64, SynonymItem> = AHashMap::new();
@@ -922,8 +947,8 @@ pub(crate) fn get_synonyms_map(
                 hashes.push((
                     term.to_string(),
                     (
-                        hasher_64.hash_one(term_bytes.as_bytes()),
-                        hasher_32.hash_one(term_bytes.as_bytes()) as u32 & segment_number_mask1,
+                        hash64(term_bytes.as_bytes()),
+                        hash32(term_bytes.as_bytes()) & segment_number_mask1,
                     ),
                 ));
             }
@@ -955,6 +980,50 @@ pub(crate) fn get_synonyms_map(
         }
     }
     synonyms_map
+}
+
+/// N-gram indexing: n-grams are indexed in addition to single terms, for faster phrase search, at the cost of higher index size
+/// Setting valid both for index time and query time. Any change requires reindexing.
+/// bitwise OR flags:
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromPrimitive)]
+pub enum NgramSet {
+    /// no n-grams, only single terms are indexed
+    SingleTerm = 0b00000000,
+    /// Ngram frequent frequent
+    NgramFF = 0b00000001,
+    /// Ngram frequent rare
+    NgramFR = 0b00000010,
+    /// Ngram rare frequent
+    NgramRF = 0b00000100,
+    /// Ngram frequent frequent frequent
+    NgramFFF = 0b00001000,
+    /// Ngram rare frequent frequent
+    NgramRFF = 0b00010000,
+    /// Ngram frequent frequent rare
+    NgramFFR = 0b00100000,
+    /// Ngram frequent rare frequent
+    NgramFRF = 0b01000000,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromPrimitive, Default)]
+pub(crate) enum NgramType {
+    /// no n-grams, only single terms are indexed
+    #[default]
+    SingleTerm = 0,
+    /// Ngram frequent frequent
+    NgramFF = 1,
+    /// Ngram frequent rare
+    NgramFR = 2,
+    /// Ngram rare frequent
+    NgramRF = 3,
+    /// Ngram frequent frequent frequent
+    NgramFFF = 4,
+    /// Ngram rare frequent frequent
+    NgramRFF = 5,
+    /// Ngram frequent frequent rare
+    NgramFFR = 6,
+    /// Ngram frequent rare frequent
+    NgramFRF = 7,
 }
 
 /// Create index in RAM.
@@ -1095,9 +1164,6 @@ pub fn create_index(
             let indexed_field_id_bits =
                 (u64::BITS - (indexed_field_vec.len() - 1).leading_zeros()) as usize;
 
-            let hasher_32 = RandomState::with_seeds(805272099, 242851902, 646123436, 591410655);
-            let hasher_64 = RandomState::with_seeds(808259318, 750368348, 84901999, 789810389);
-
             let index_file_mmap;
             let docstore_file_mmap = if meta.access_type == AccessType::Mmap {
                 index_file_mmap = unsafe { Mmap::map(&index_file).expect("Unable to create Mmap") };
@@ -1117,19 +1183,18 @@ pub fn create_index(
                 }
             };
 
-            if !facets_vec.is_empty() {
-                if let Ok(file) = File::open(Path::new(index_path).join(FACET_VALUES_FILENAME)) {
-                    if let Ok(facets) = serde_json::from_reader(BufReader::new(file)) {
-                        let mut facets: Vec<FacetField> = facets;
-                        if facets_vec.len() == facets.len() {
-                            for i in 0..facets.len() {
-                                facets[i].offset = facets_vec[i].offset;
-                                facets[i].field_type = facets_vec[i].field_type.clone();
-                            }
-                        }
-                        facets_vec = facets;
+            if !facets_vec.is_empty()
+                && let Ok(file) = File::open(Path::new(index_path).join(FACET_VALUES_FILENAME))
+                && let Ok(facets) = serde_json::from_reader(BufReader::new(file))
+            {
+                let mut facets: Vec<FacetField> = facets;
+                if facets_vec.len() == facets.len() {
+                    for i in 0..facets.len() {
+                        facets[i].offset = facets_vec[i].offset;
+                        facets[i].field_type = facets_vec[i].field_type.clone();
                     }
                 }
+                facets_vec = facets;
             }
 
             let facets_file_mmap = if !facets_vec.is_empty() {
@@ -1144,8 +1209,7 @@ pub fn create_index(
                 unsafe { MmapMut::map_mut(&facets_file).expect("Unable to create Mmap") }
             };
 
-            let synonyms_map =
-                get_synonyms_map(synonyms, &hasher_64, &hasher_32, segment_number_mask1);
+            let synonyms_map = get_synonyms_map(synonyms, segment_number_mask1);
 
             let facets_len = facets_vec.len();
 
@@ -1217,8 +1281,7 @@ pub fn create_index(
                     words
                 }
                 FrequentwordType::Custom { terms } => {
-                    let mut words: Vec<String> =
-                        terms.iter().take(256).map(|x| x.to_string()).collect();
+                    let mut words: Vec<String> = terms.iter().map(|x| x.to_string()).collect();
                     words.sort_unstable();
                     words
                 }
@@ -1226,15 +1289,12 @@ pub fn create_index(
 
             let frequent_hashset: AHashSet<u64> = frequent_words
                 .iter()
-                .map(|x| HASHER_64.hash_one(x.as_bytes()))
+                .map(|x| hash64(x.as_bytes()))
                 .collect();
 
             let mut index = Index {
                 index_format_version_major: INDEX_FORMAT_VERSION_MAJOR,
                 index_format_version_minor: INDEX_FORMAT_VERSION_MINOR,
-                hasher_32,
-                hasher_64,
-                frequentword_posting_counts: vec![0; frequent_words.len()],
                 docstore_file,
                 delete_file,
                 delete_hashset: AHashSet::new(),
@@ -1263,7 +1323,6 @@ pub fn create_index(
                 segments_index: Vec::new(),
                 segments_level0: Vec::new(),
                 uncommitted: false,
-                enable_bigram: BIGRAM_FLAG,
                 enable_fallback: false,
                 enable_single_term_topk: false,
                 enable_search_quality_test: false,
@@ -1275,7 +1334,7 @@ pub fn create_index(
                 longest_field_id: 0,
                 indexed_field_vec,
                 indexed_schema_vec,
-                meta,
+                meta: meta.clone(),
                 document_length_compressed_array,
                 key_count_sum: 0,
 
@@ -1291,7 +1350,7 @@ pub fn create_index(
                 postinglist_count: 0,
                 permits: Arc::new(Semaphore::new(available_parallelism().unwrap().get())),
                 mute,
-                stopword_results: AHashMap::new(),
+                frequentword_results: AHashMap::new(),
                 facets: facets_vec,
                 facets_map,
                 facets_size_sum,
@@ -1306,6 +1365,13 @@ pub fn create_index(
                 stop_words,
                 frequent_words,
                 frequent_hashset,
+                key_head_size: if meta.ngram_indexing == 0 {
+                    20
+                } else if meta.ngram_indexing < 8 {
+                    22
+                } else {
+                    23
+                },
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -1406,14 +1472,16 @@ pub(crate) fn get_document_length_compressed_mmap(
 pub(crate) fn get_max_score(
     index: &Index,
     segment: &SegmentIndex,
-    bigram_term_index1: u8,
-    bigram_term_index2: u8,
+    posting_count_ngram_1: u32,
+    posting_count_ngram_2: u32,
+    posting_count_ngram_3: u32,
     posting_count: u32,
     block_id: usize,
     max_docid: usize,
     max_p_docid: usize,
     pointer_pivot_p_docid: usize,
     compression_type_pointer: u32,
+    ngram_type: &NgramType,
 ) -> f32 {
     let byte_array = if index.meta.access_type == AccessType::Mmap {
         &index.index_file_mmap[segment.byte_array_blocks_pointer[block_id].0
@@ -1463,25 +1531,29 @@ pub(crate) fn get_max_score(
     };
 
     let mut field_vec: SmallVec<[(u16, usize); 2]> = SmallVec::new();
-    let mut field_vec_bigram1 = SmallVec::new();
-    let mut field_vec_bigram2 = SmallVec::new();
+    let mut field_vec_ngram1 = SmallVec::new();
+    let mut field_vec_ngram2 = SmallVec::new();
+    let mut field_vec_ngram3 = SmallVec::new();
 
     decode_positions_commit(
         posting_pointer_size,
         embed_flag,
         byte_array,
         positions_pointer,
-        bigram_term_index1 < 255,
+        ngram_type,
         index.indexed_field_vec.len(),
         index.indexed_field_id_bits,
         index.indexed_field_id_mask,
         index.longest_field_id as u16,
         &mut field_vec,
-        &mut field_vec_bigram1,
-        &mut field_vec_bigram2,
+        &mut field_vec_ngram1,
+        &mut field_vec_ngram2,
+        &mut field_vec_ngram3,
     );
 
-    if bigram_term_index1 == 255 || index.meta.similarity == SimilarityType::Bm25fProximity {
+    if ngram_type == &NgramType::SingleTerm
+        || index.meta.similarity == SimilarityType::Bm25fProximity
+    {
         let idf = (((index.indexed_doc_count as f32 - posting_count as f32 + 0.5)
             / (posting_count as f32 + 0.5))
             + 1.0)
@@ -1509,21 +1581,21 @@ pub(crate) fn get_max_score(
                 * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient)))))
                     + SIGMA);
         }
-    } else {
-        let posting_count1 = index.frequentword_posting_counts[bigram_term_index1 as usize];
-        let posting_count2 = index.frequentword_posting_counts[bigram_term_index2 as usize];
-
-        let idf_bigram1 = (((index.indexed_doc_count as f32 - posting_count1 as f32 + 0.5)
-            / (posting_count1 as f32 + 0.5))
+    } else if ngram_type == &NgramType::NgramFF
+        || ngram_type == &NgramType::NgramFR
+        || ngram_type == &NgramType::NgramRF
+    {
+        let idf_ngram1 = (((index.indexed_doc_count as f32 - posting_count_ngram_1 as f32 + 0.5)
+            / (posting_count_ngram_1 as f32 + 0.5))
             + 1.0)
             .ln();
 
-        let idf_bigram2 = (((index.indexed_doc_count as f32 - posting_count2 as f32 + 0.5)
-            / (posting_count2 as f32 + 0.5))
+        let idf_ngram2 = (((index.indexed_doc_count as f32 - posting_count_ngram_2 as f32 + 0.5)
+            / (posting_count_ngram_2 as f32 + 0.5))
             + 1.0)
             .ln();
 
-        for field in field_vec_bigram1.iter() {
+        for field in field_vec_ngram1.iter() {
             let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
                 == AccessType::Mmap
             {
@@ -1536,18 +1608,18 @@ pub(crate) fn get_max_score(
             let document_length_quotient =
                 document_length_normalized / index.document_length_normalized_average;
 
-            let tf_bigram1 = field.1 as f32;
+            let tf_ngram1 = field.1 as f32;
 
             let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
-                * idf_bigram1
-                * ((tf_bigram1 * (K + 1.0)
-                    / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                * idf_ngram1
+                * ((tf_ngram1 * (K + 1.0)
+                    / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
                     + SIGMA);
         }
 
-        for field in field_vec_bigram2.iter() {
+        for field in field_vec_ngram2.iter() {
             let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
                 == AccessType::Mmap
             {
@@ -1560,63 +1632,108 @@ pub(crate) fn get_max_score(
             let document_length_quotient =
                 document_length_normalized / index.document_length_normalized_average;
 
-            let tf_bigram2 = field.1 as f32;
+            let tf_ngram2 = field.1 as f32;
 
             let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
-                * idf_bigram2
-                * ((tf_bigram2 * (K + 1.0)
-                    / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                * idf_ngram2
+                * ((tf_ngram2 * (K + 1.0)
+                    / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                    + SIGMA);
+        }
+    } else {
+        let idf_ngram1 = (((index.indexed_doc_count as f32 - posting_count_ngram_1 as f32 + 0.5)
+            / (posting_count_ngram_1 as f32 + 0.5))
+            + 1.0)
+            .ln();
+
+        let idf_ngram2 = (((index.indexed_doc_count as f32 - posting_count_ngram_2 as f32 + 0.5)
+            / (posting_count_ngram_2 as f32 + 0.5))
+            + 1.0)
+            .ln();
+
+        let idf_ngram3 = (((index.indexed_doc_count as f32 - posting_count_ngram_3 as f32 + 0.5)
+            / (posting_count_ngram_3 as f32 + 0.5))
+            + 1.0)
+            .ln();
+
+        for field in field_vec_ngram1.iter() {
+            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
+                == AccessType::Mmap
+            {
+                get_document_length_compressed_mmap(index, field.0 as usize, block_id, max_docid)
+            } else {
+                index.level_index[block_id].document_length_compressed_array[field.0 as usize]
+                    [max_docid]
+            } as usize] as f32;
+
+            let document_length_quotient =
+                document_length_normalized / index.document_length_normalized_average;
+
+            let tf_ngram1 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            bm25f += weight
+                * idf_ngram1
+                * ((tf_ngram1 * (K + 1.0)
+                    / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient)))))
+                    + SIGMA);
+        }
+
+        for field in field_vec_ngram2.iter() {
+            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
+                == AccessType::Mmap
+            {
+                get_document_length_compressed_mmap(index, field.0 as usize, block_id, max_docid)
+            } else {
+                index.level_index[block_id].document_length_compressed_array[field.0 as usize]
+                    [max_docid]
+            } as usize] as f32;
+
+            let document_length_quotient =
+                document_length_normalized / index.document_length_normalized_average;
+
+            let tf_ngram2 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            bm25f += weight
+                * idf_ngram2
+                * ((tf_ngram2 * (K + 1.0)
+                    / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient)))))
+                    + SIGMA);
+        }
+
+        for field in field_vec_ngram3.iter() {
+            let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[if index.meta.access_type
+                == AccessType::Mmap
+            {
+                get_document_length_compressed_mmap(index, field.0 as usize, block_id, max_docid)
+            } else {
+                index.level_index[block_id].document_length_compressed_array[field.0 as usize]
+                    [max_docid]
+            } as usize] as f32;
+
+            let document_length_quotient =
+                document_length_normalized / index.document_length_normalized_average;
+
+            let tf_ngram3 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            bm25f += weight
+                * idf_ngram3
+                * ((tf_ngram3 * (K + 1.0)
+                    / (tf_ngram3 + (K * (1.0 - B + (B * document_length_quotient)))))
                     + SIGMA);
         }
     }
     bm25f
 }
 
-pub(crate) fn update_stopwords_posting_counts(
-    index: &mut Index,
-    update_last_block_with_level0: bool,
-) {
-    for (i, frequentword) in index.frequent_words.iter().enumerate() {
-        let index_ref = &*index;
-
-        let term_bytes = frequentword.as_bytes();
-        let key0 = HASHER_32.hash_one(term_bytes) as u32 & index_ref.segment_number_mask1;
-        let key_hash = HASHER_64.hash_one(term_bytes);
-
-        index.frequentword_posting_counts[i] = if index.meta.access_type == AccessType::Mmap {
-            let plo_option = decode_posting_list_object(
-                &index_ref.segments_index[key0 as usize],
-                index_ref,
-                key_hash,
-                false,
-            );
-            if let Some(plo) = plo_option {
-                plo.posting_count
-            } else {
-                0
-            }
-        } else if let Some(plo) = index_ref.segments_index[key0 as usize]
-            .segment
-            .get(&key_hash)
-        {
-            plo.posting_count
-        } else {
-            0
-        };
-
-        if update_last_block_with_level0 {
-            if let Some(x) = index.segments_level0[key0 as usize].segment.get(&key_hash) {
-                index.frequentword_posting_counts[i] += x.posting_count as u32;
-            }
-        }
-    }
-}
-
 pub(crate) fn update_list_max_impact_score(index: &mut Index) {
-    update_stopwords_posting_counts(index, false);
-
     if index.meta.access_type == AccessType::Mmap {
         return;
     }
@@ -1624,6 +1741,8 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
     for key0 in 0..index.segment_number1 {
         let keys: Vec<u64> = index.segments_index[key0].segment.keys().cloned().collect();
         for key in keys {
+            let ngram_type = FromPrimitive::from_u64(key & 0b111).unwrap_or(NgramType::SingleTerm);
+
             let blocks_len = index.segments_index[key0].segment[&key].blocks.len();
             let mut max_list_score = 0.0;
             for block_index in 0..blocks_len {
@@ -1633,14 +1752,16 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
                 let max_block_score = get_max_score(
                     index,
                     segment,
-                    posting_list.bigram_term_index1,
-                    posting_list.bigram_term_index2,
+                    posting_list.posting_count_ngram_1,
+                    posting_list.posting_count_ngram_2,
+                    posting_list.posting_count_ngram_3,
                     posting_list.posting_count,
                     block.block_id as usize,
                     block.max_docid as usize,
                     block.max_p_docid as usize,
                     block.pointer_pivot_p_docid as usize,
                     block.compression_type_pointer,
+                    &ngram_type,
                 );
 
                 index.segments_index[key0]
@@ -1905,10 +2026,11 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     block_count_sum += 1;
 
                                     let key_body_pointer_write_start: u32 =
-                                        key_count * KEY_HEAD_SIZE as u32;
+                                        key_count * index.key_head_size as u32;
 
                                     if is_mmap {
-                                        index_mmap_position += key_count as usize * KEY_HEAD_SIZE;
+                                        index_mmap_position +=
+                                            key_count as usize * index.key_head_size;
                                         index.segments_index[key0].byte_array_blocks_pointer.push(
                                             (
                                                 index_mmap_position,
@@ -1923,11 +2045,11 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     } else {
                                         let _ = index.index_file.read(
                                             &mut index.compressed_index_segment_block_buffer
-                                                [0..(key_count as usize * KEY_HEAD_SIZE)],
+                                                [0..(key_count as usize * index.key_head_size)],
                                         );
                                         let compressed_index_segment_block_buffer = &index
                                             .compressed_index_segment_block_buffer
-                                            [0..(key_count as usize * KEY_HEAD_SIZE)];
+                                            [0..(key_count as usize * index.key_head_size)];
 
                                         let mut block_array: Vec<u8> = vec![
                                             0;
@@ -1967,15 +2089,64 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                 &mut read_pointer,
                                             );
 
-                                            let bigram_term_index1 = read_u8_ref(
-                                                compressed_index_segment_block_buffer,
-                                                &mut read_pointer,
-                                            );
+                                            let mut posting_count_ngram_1 = 0;
+                                            let mut posting_count_ngram_2 = 0;
+                                            let mut posting_count_ngram_3 = 0;
+                                            match index.key_head_size {
+                                                20 => {}
+                                                22 => {
+                                                    let posting_count_ngram_1_compressed =
+                                                        read_u8_ref(
+                                                            compressed_index_segment_block_buffer,
+                                                            &mut read_pointer,
+                                                        );
+                                                    posting_count_ngram_1 =
+                                                        DOCUMENT_LENGTH_COMPRESSION
+                                                            [posting_count_ngram_1_compressed
+                                                                as usize];
 
-                                            let bigram_term_index2 = read_u8_ref(
-                                                compressed_index_segment_block_buffer,
-                                                &mut read_pointer,
-                                            );
+                                                    let posting_count_ngram_2_compressed =
+                                                        read_u8_ref(
+                                                            compressed_index_segment_block_buffer,
+                                                            &mut read_pointer,
+                                                        );
+                                                    posting_count_ngram_2 =
+                                                        DOCUMENT_LENGTH_COMPRESSION
+                                                            [posting_count_ngram_2_compressed
+                                                                as usize];
+                                                }
+                                                _ => {
+                                                    let posting_count_ngram_1_compressed =
+                                                        read_u8_ref(
+                                                            compressed_index_segment_block_buffer,
+                                                            &mut read_pointer,
+                                                        );
+                                                    posting_count_ngram_1 =
+                                                        DOCUMENT_LENGTH_COMPRESSION
+                                                            [posting_count_ngram_1_compressed
+                                                                as usize];
+
+                                                    let posting_count_ngram_2_compressed =
+                                                        read_u8_ref(
+                                                            compressed_index_segment_block_buffer,
+                                                            &mut read_pointer,
+                                                        );
+                                                    posting_count_ngram_2 =
+                                                        DOCUMENT_LENGTH_COMPRESSION
+                                                            [posting_count_ngram_2_compressed
+                                                                as usize];
+
+                                                    let posting_count_ngram_3_compressed =
+                                                        read_u8_ref(
+                                                            compressed_index_segment_block_buffer,
+                                                            &mut read_pointer,
+                                                        );
+                                                    posting_count_ngram_3 =
+                                                        DOCUMENT_LENGTH_COMPRESSION
+                                                            [posting_count_ngram_3_compressed
+                                                                as usize];
+                                                }
+                                            }
 
                                             let pointer_pivot_p_docid = read_u16_ref(
                                                 compressed_index_segment_block_buffer,
@@ -2005,8 +2176,9 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                             } else {
                                                 let value = PostingListObjectIndex {
                                                     posting_count: posting_count as u32 + 1,
-                                                    bigram_term_index1,
-                                                    bigram_term_index2,
+                                                    posting_count_ngram_1,
+                                                    posting_count_ngram_2,
+                                                    posting_count_ngram_3,
                                                     max_list_score: 0.0,
                                                     position_range_previous: 0,
                                                     blocks: vec![BlockObjectIndex {
@@ -2018,6 +2190,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                         pointer_pivot_p_docid,
                                                         compression_type_pointer,
                                                     }],
+                                                    ..Default::default()
                                                 };
                                                 index.segments_index[key0]
                                                     .segment
@@ -2169,7 +2342,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 }
 
 pub(crate) async fn warmup(index_object_arc: &IndexArc) {
-    index_object_arc.write().await.stopword_results.clear();
+    index_object_arc.write().await.frequentword_results.clear();
     let mut query_facets: Vec<QueryFacet> = Vec::new();
     for facet in index_object_arc.read().await.facets.iter() {
         match facet.field_type {
@@ -2206,7 +2379,7 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
 
         let mut index_mut = index_object_arc.write().await;
         index_mut
-            .stopword_results
+            .frequentword_results
             .insert(frequentword.to_string(), results_list);
     }
 }
@@ -2216,12 +2389,14 @@ pub(crate) struct TermObject {
     pub key_hash: u64,
     pub key0: u32,
     pub term: String,
+    pub ngram_type: NgramType,
 
-    pub is_bigram: bool,
-    pub term_bigram1: String,
-    pub term_bigram2: String,
-    pub field_vec_bigram1: Vec<(usize, u32)>,
-    pub field_vec_bigram2: Vec<(usize, u32)>,
+    pub term_ngram_2: String,
+    pub term_ngram_1: String,
+    pub term_ngram_0: String,
+    pub field_vec_ngram1: Vec<(usize, u32)>,
+    pub field_vec_ngram2: Vec<(usize, u32)>,
+    pub field_vec_ngram3: Vec<(usize, u32)>,
 
     pub field_positions_vec: Vec<Vec<u16>>,
 }
@@ -2229,9 +2404,11 @@ pub(crate) struct TermObject {
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct NonUniqueTermObject {
     pub term: String,
-    pub term_bigram1: String,
-    pub term_bigram2: String,
-    pub is_bigram: bool,
+    pub ngram_type: NgramType,
+
+    pub term_ngram_2: String,
+    pub term_ngram_1: String,
+    pub term_ngram_0: String,
     pub op: QueryType,
 }
 
@@ -2242,18 +2419,84 @@ lazy_static! {
         RandomState::with_seeds(808259318, 750368348, 84901999, 789810389);
 }
 
+#[inline]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
+    gxhash32(term_bytes, 1234)
+}
+
+#[inline]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
+    gxhash64(term_bytes, 1234) & 0b1111111111111111111111111111111111111111111111111111111111111000
+}
+
+#[inline]
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
+    HASHER_32.hash_one(term_bytes)
+}
+
+#[inline]
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
+    HASHER_64.hash_one(term_bytes)
+        & 0b1111111111111111111111111111111111111111111111111111111111111000
+}
+
 static FREQUENT_EN: &str = include_str!("../../assets/dictionaries/frequent_en.txt");
 static FREQUENT_DE: &str = include_str!("../../assets/dictionaries/frequent_de.txt");
 static FREQUENT_FR: &str = include_str!("../../assets/dictionaries/frequent_fr.txt");
 static FREQUENT_ES: &str = include_str!("../../assets/dictionaries/frequent_es.txt");
 
-/// Compress termFrequency : 90 -> 88, 96 = index of previous smaller number
-pub(crate) fn norm_frequency(term_frequency: u32) -> u8 {
-    match DOCUMENT_LENGTH_COMPRESSION.binary_search(&term_frequency) {
-        Ok(term_frequency_compressed) => term_frequency_compressed as u8,
-        Err(term_frequency_compressed2) => term_frequency_compressed2 as u8 - 1,
+pub(crate) const NUM_FREE_VALUES: u32 = 24;
+
+/// Compress an u32 to a byte, preserving 4 significant bits.
+/// used for compressing n-gram frequent_term positions_count and doc/field length
+/// Ported from Lucene SmallFloat.java https://github.com/apache/lucene/blob/main/lucene/core/src/java/org/apache/lucene/util/SmallFloat.java
+pub(crate) fn int_to_byte4(i: u32) -> u8 {
+    if i < NUM_FREE_VALUES {
+        i as u8
+    } else {
+        let ii = i - NUM_FREE_VALUES;
+        let num_bits = 32 - ii.leading_zeros();
+        if num_bits < 4 {
+            (NUM_FREE_VALUES + ii) as u8
+        } else {
+            let shift = num_bits - 4;
+            (NUM_FREE_VALUES + (((ii >> shift) & 0x07) | (shift + 1) << 3)) as u8
+        }
     }
 }
+
+/// Decompress a byte that has been compressed with intToByte4(int), to an u32
+/// used for pre-calculating DOCUMENT_LENGTH_COMPRESSION table. Decompressing n-gram frequent_term positions_count and doc/field length via table lookup.
+/// Ported from Lucene SmallFloat.java https://github.com/apache/lucene/blob/main/lucene/core/src/java/org/apache/lucene/util/SmallFloat.java
+pub(crate) const fn byte4_to_int(b: u8) -> u32 {
+    if (b as u32) < NUM_FREE_VALUES {
+        b as u32
+    } else {
+        let i = b as u32 - NUM_FREE_VALUES;
+        let bits = i & 0x07;
+        let shift = i >> 3;
+        if shift == 0 {
+            NUM_FREE_VALUES + bits
+        } else {
+            NUM_FREE_VALUES + ((bits | 0x08) << (shift - 1))
+        }
+    }
+}
+
+/// Pre-calculated DOCUMENT_LENGTH_COMPRESSION table for fast lookup.
+pub(crate) const DOCUMENT_LENGTH_COMPRESSION: [u32; 256] = {
+    let mut k2 = [0; 256];
+    let mut i = 0usize;
+    while i < 256 {
+        k2[i] = byte4_to_int(i as u8);
+        i += 1;
+    }
+    k2
+};
 
 impl Index {
     /// Get number of index levels. One index level comprises 64K documents.
@@ -2402,14 +2645,14 @@ impl Index {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = self.facets_map.get(field) {
-                            if self.facets[*idx].field_type == FieldType::String {
-                                result_query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    prefix: prefix.clone(),
-                                    length: *length,
-                                    ..Default::default()
-                                }
+                        if let Some(idx) = self.facets_map.get(field)
+                            && self.facets[*idx].field_type == FieldType::String
+                        {
+                            result_query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                prefix: prefix.clone(),
+                                length: *length,
+                                ..Default::default()
                             }
                         }
                     }
@@ -2418,14 +2661,14 @@ impl Index {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = self.facets_map.get(field) {
-                            if self.facets[*idx].field_type == FieldType::StringSet {
-                                result_query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    prefix: prefix.clone(),
-                                    length: *length,
-                                    ..Default::default()
-                                }
+                        if let Some(idx) = self.facets_map.get(field)
+                            && self.facets[*idx].field_type == FieldType::StringSet
+                        {
+                            result_query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                prefix: prefix.clone(),
+                                length: *length,
+                                ..Default::default()
                             }
                         }
                     }
@@ -2649,12 +2892,7 @@ impl Index {
         )
         .unwrap();
 
-        self.synonyms_map = get_synonyms_map(
-            synonyms,
-            &self.hasher_64,
-            &self.hasher_32,
-            self.segment_number_mask1,
-        );
+        self.synonyms_map = get_synonyms_map(synonyms, self.segment_number_mask1);
         Ok(synonyms.len())
     }
 
@@ -2677,12 +2915,7 @@ impl Index {
         )
         .unwrap();
 
-        self.synonyms_map = get_synonyms_map(
-            &merged_synonyms,
-            &self.hasher_64,
-            &self.hasher_32,
-            self.segment_number_mask1,
-        );
+        self.synonyms_map = get_synonyms_map(&merged_synonyms, self.segment_number_mask1);
         Ok(merged_synonyms.len())
     }
 
@@ -2876,10 +3109,10 @@ impl IndexDocuments for IndexArc {
     }
 }
 
-/// Indexes as single document
+/// Indexes a single document
 #[allow(async_fn_in_trait)]
 pub trait IndexDocument {
-    /// Indexes as single document
+    /// Indexes a single document
     /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_document(&self, document: Document, file: FileType);
 }
@@ -2891,7 +3124,7 @@ impl IndexDocument for IndexArc {
         let index_arc_clone = self.clone();
         let index_ref = self.read().await;
         let schema = index_ref.indexed_schema_vec.clone();
-        let enable_bigram = index_ref.enable_bigram;
+        let ngram_indexing = index_ref.meta.ngram_indexing;
         let indexed_field_vec_len = index_ref.indexed_field_vec.len();
         let tokenizer_type = index_ref.meta.tokenizer;
         let segment_number_mask1 = index_ref.segment_number_mask1;
@@ -2939,12 +3172,12 @@ impl IndexDocument for IndexArc {
                         MAX_POSITIONS_PER_TERM,
                         false,
                         &mut query_type_mut,
-                        enable_bigram,
+                        ngram_indexing,
                         schema_field.indexed_field_id,
                         indexed_field_vec_len,
                     );
 
-                    let document_length_compressed: u8 = norm_frequency(nonunique_terms_count);
+                    let document_length_compressed: u8 = int_to_byte4(nonunique_terms_count);
                     let document_length_normalized: u32 =
                         DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize];
                     field_vec.push((
@@ -2957,33 +3190,75 @@ impl IndexDocument for IndexArc {
             }
             drop(index_ref2);
 
-            let bigrams: Vec<String> = unique_terms
+            let ngrams: Vec<String> = unique_terms
                 .iter()
-                .filter(|term| term.1.is_bigram)
+                .filter(|term| term.1.ngram_type != NgramType::SingleTerm)
                 .map(|term| term.1.term.clone())
                 .collect();
 
-            for term in bigrams.iter() {
-                let bigram = unique_terms.get(term).unwrap();
-                let term_bigram1 = bigram.term_bigram1.clone();
-                let term_bigram2 = bigram.term_bigram2.clone();
+            for term in ngrams.iter() {
+                let ngram = unique_terms.get(term).unwrap();
 
-                for indexed_field_id in 0..indexed_field_vec_len {
-                    let positions_count_bigram1 =
-                        unique_terms[&term_bigram1].field_positions_vec[indexed_field_id].len();
-                    let positions_count_bigram2 =
-                        unique_terms[&term_bigram2].field_positions_vec[indexed_field_id].len();
-                    let bigram = unique_terms.get_mut(term).unwrap();
+                match ngram.ngram_type {
+                    NgramType::SingleTerm => {}
+                    NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                        let term_ngram1 = ngram.term_ngram_1.clone();
+                        let term_ngram2 = ngram.term_ngram_0.clone();
 
-                    if positions_count_bigram1 > 0 {
-                        bigram
-                            .field_vec_bigram1
-                            .push((indexed_field_id, positions_count_bigram1 as u32));
+                        for indexed_field_id in 0..indexed_field_vec_len {
+                            let positions_count_ngram1 = unique_terms[&term_ngram1]
+                                .field_positions_vec[indexed_field_id]
+                                .len();
+                            let positions_count_ngram2 = unique_terms[&term_ngram2]
+                                .field_positions_vec[indexed_field_id]
+                                .len();
+                            let ngram = unique_terms.get_mut(term).unwrap();
+
+                            if positions_count_ngram1 > 0 {
+                                ngram
+                                    .field_vec_ngram1
+                                    .push((indexed_field_id, positions_count_ngram1 as u32));
+                            }
+                            if positions_count_ngram2 > 0 {
+                                ngram
+                                    .field_vec_ngram2
+                                    .push((indexed_field_id, positions_count_ngram2 as u32));
+                            }
+                        }
                     }
-                    if positions_count_bigram2 > 0 {
-                        bigram
-                            .field_vec_bigram2
-                            .push((indexed_field_id, positions_count_bigram2 as u32));
+                    _ => {
+                        let term_ngram1 = ngram.term_ngram_2.clone();
+                        let term_ngram2 = ngram.term_ngram_1.clone();
+                        let term_ngram3 = ngram.term_ngram_0.clone();
+
+                        for indexed_field_id in 0..indexed_field_vec_len {
+                            let positions_count_ngram1 = unique_terms[&term_ngram1]
+                                .field_positions_vec[indexed_field_id]
+                                .len();
+                            let positions_count_ngram2 = unique_terms[&term_ngram2]
+                                .field_positions_vec[indexed_field_id]
+                                .len();
+                            let positions_count_ngram3 = unique_terms[&term_ngram3]
+                                .field_positions_vec[indexed_field_id]
+                                .len();
+                            let ngram = unique_terms.get_mut(term).unwrap();
+
+                            if positions_count_ngram1 > 0 {
+                                ngram
+                                    .field_vec_ngram1
+                                    .push((indexed_field_id, positions_count_ngram1 as u32));
+                            }
+                            if positions_count_ngram2 > 0 {
+                                ngram
+                                    .field_vec_ngram2
+                                    .push((indexed_field_id, positions_count_ngram2 as u32));
+                            }
+                            if positions_count_ngram3 > 0 {
+                                ngram
+                                    .field_vec_ngram3
+                                    .push((indexed_field_id, positions_count_ngram3 as u32));
+                            }
+                        }
                     }
                 }
             }
@@ -3272,25 +3547,20 @@ impl IndexDocument2 for IndexArc {
                         }
                         FieldType::Point => {
                             if let Ok(point) = serde_json::from_value::<Point>(field_value.clone())
+                                && point.len() == 2
                             {
-                                if point.len() == 2 {
-                                    if point[0] >= -90.0
-                                        && point[0] <= 90.0
-                                        && point[1] >= -180.0
-                                        && point[1] <= 180.0
-                                    {
-                                        let morton_code = encode_morton_2_d(&point);
-                                        write_u64(
-                                            morton_code,
-                                            &mut index_mut.facets_file_mmap,
-                                            address,
-                                        )
-                                    } else {
-                                        println!(
-                                            "outside valid coordinate range: {} {}",
-                                            point[0], point[1]
-                                        );
-                                    }
+                                if point[0] >= -90.0
+                                    && point[0] <= 90.0
+                                    && point[1] >= -180.0
+                                    && point[1] <= 180.0
+                                {
+                                    let morton_code = encode_morton_2_d(&point);
+                                    write_u64(morton_code, &mut index_mut.facets_file_mmap, address)
+                                } else {
+                                    println!(
+                                        "outside valid coordinate range: {} {}",
+                                        point[0], point[1]
+                                    );
                                 }
                             }
                         }
@@ -3339,7 +3609,7 @@ impl IndexDocument2 for IndexArc {
         if !index_mut.synonyms_map.is_empty() {
             let unique_terms_clone = unique_terms.clone();
             for term in unique_terms_clone.iter() {
-                if !term.1.is_bigram {
+                if term.1.ngram_type == NgramType::SingleTerm {
                     let synonym = index_mut.synonyms_map.get(&term.1.key_hash).cloned();
                     if let Some(synonym) = synonym {
                         for synonym_term in synonym {
@@ -3367,7 +3637,7 @@ impl IndexDocument2 for IndexArc {
         }
 
         for term in unique_terms {
-            index_mut.index_posting(term.1, doc_id, false);
+            index_mut.index_posting(term.1, doc_id, false, 0, 0, 0);
         }
 
         match file {

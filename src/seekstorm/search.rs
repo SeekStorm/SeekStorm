@@ -1,6 +1,7 @@
-use crate::commit::KEY_HEAD_SIZE;
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
-use crate::index::{DistanceUnit, Facet, FieldType, ResultFacet};
+use crate::index::{
+    DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet,
+};
 use crate::min_heap::Result;
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
@@ -20,6 +21,7 @@ use crate::{
     single::single_blockid,
     union::union_blockid,
 };
+use num::FromPrimitive;
 
 use ahash::{AHashMap, AHashSet};
 use itertools::Itertools;
@@ -838,13 +840,18 @@ pub trait Search {
 
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
 #[inline(never)]
-pub(crate) fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i64 {
+pub(crate) fn binary_search(
+    byte_array: &[u8],
+    len: usize,
+    key_hash: u64,
+    key_head_size: usize,
+) -> i64 {
     let mut left = 0i64;
     let mut right = len as i64 - 1;
     while left <= right {
         let mid = (left + right) / 2;
 
-        let pivot = read_u64(byte_array, mid as usize * KEY_HEAD_SIZE);
+        let pivot = read_u64(byte_array, mid as usize * key_head_size);
         match pivot.cmp(&key_hash) {
             std::cmp::Ordering::Equal => {
                 return mid;
@@ -859,6 +866,138 @@ pub(crate) fn binary_search(byte_array: &[u8], len: usize, key_hash: u64) -> i64
 
 /// Decode posting_list_object and blocks on demand from mmap, instead keepping all posting_list_object and blocks for all keys in ram
 #[inline(always)]
+pub(crate) fn decode_posting_list_count(
+    segment: &SegmentIndex,
+    index: &Index,
+    key_hash1: u64,
+    previous: bool,
+) -> Option<u32> {
+    let offset = if previous { 1 } else { 0 };
+
+    let mut posting_count_list = 0u32;
+    let mut found = false;
+
+    if segment.byte_array_blocks_pointer.len() <= offset {
+        return None;
+    }
+
+    let block_id_last = segment.byte_array_blocks_pointer.len() - 1 - offset;
+    for pointer in segment
+        .byte_array_blocks_pointer
+        .iter()
+        .take(block_id_last + 1)
+    {
+        let key_count = pointer.2 as usize;
+
+        let byte_array =
+            &index.index_file_mmap[pointer.0 - (key_count * index.key_head_size)..pointer.0];
+        let key_index = binary_search(byte_array, key_count, key_hash1, index.key_head_size);
+
+        if key_index >= 0 {
+            found = true;
+            let key_address = key_index as usize * index.key_head_size;
+            let posting_count = read_u16(byte_array, key_address + 8);
+            posting_count_list += posting_count as u32 + 1;
+        }
+    }
+
+    if found {
+        Some(posting_count_list)
+    } else {
+        None
+    }
+}
+
+#[inline(always)]
+pub(crate) fn decode_posting_list_counts(
+    segment: &SegmentIndex,
+    index: &Index,
+    key_hash1: u64,
+) -> Option<(u32, u32, u32, u32)> {
+    let mut posting_count_list = 0u32;
+    let mut posting_count_ngram_1_compressed = 0;
+    let mut posting_count_ngram_2_compressed = 0;
+    let mut posting_count_ngram_3_compressed = 0;
+    let mut posting_count_ngram_1 = 0;
+    let mut posting_count_ngram_2 = 0;
+    let mut posting_count_ngram_3 = 0;
+    let mut found = false;
+
+    let read_flag = key_hash1 & 0b111 > 0;
+
+    if segment.byte_array_blocks_pointer.is_empty() {
+        return None;
+    }
+
+    for pointer in segment.byte_array_blocks_pointer.iter() {
+        let key_count = pointer.2 as usize;
+
+        let byte_array =
+            &index.index_file_mmap[pointer.0 - (key_count * index.key_head_size)..pointer.0];
+        let key_index = binary_search(byte_array, key_count, key_hash1, index.key_head_size);
+
+        if key_index >= 0 {
+            found = true;
+            let key_address = key_index as usize * index.key_head_size;
+            let posting_count = read_u16(byte_array, key_address + 8);
+
+            match index.key_head_size {
+                20 => {}
+                22 => {
+                    if read_flag {
+                        posting_count_ngram_1_compressed = read_u8(byte_array, key_address + 14);
+                        posting_count_ngram_2_compressed = read_u8(byte_array, key_address + 15);
+                    }
+                }
+                _ => {
+                    if read_flag {
+                        posting_count_ngram_1_compressed = read_u8(byte_array, key_address + 14);
+                        posting_count_ngram_2_compressed = read_u8(byte_array, key_address + 15);
+                        posting_count_ngram_3_compressed = read_u8(byte_array, key_address + 16);
+                    }
+                }
+            }
+
+            posting_count_list += posting_count as u32 + 1;
+        }
+    }
+
+    if found {
+        match index.key_head_size {
+            20 => {}
+            22 => {
+                if read_flag {
+                    posting_count_ngram_1 =
+                        DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_1_compressed as usize];
+                    posting_count_ngram_2 =
+                        DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_2_compressed as usize];
+                }
+            }
+            _ => {
+                if read_flag {
+                    posting_count_ngram_1 =
+                        DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_1_compressed as usize];
+                    posting_count_ngram_2 =
+                        DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_2_compressed as usize];
+                    posting_count_ngram_3 =
+                        DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_3_compressed as usize];
+                }
+            }
+        }
+
+        Some((
+            posting_count_list,
+            posting_count_ngram_1,
+            posting_count_ngram_2,
+            posting_count_ngram_3,
+        ))
+    } else {
+        None
+    }
+}
+
+/// Decode posting_list_object and blocks on demand from mmap, instead keepping all posting_list_object and blocks for all keys in ram
+#[inline(always)]
 pub(crate) fn decode_posting_list_object(
     segment: &SegmentIndex,
     index: &Index,
@@ -867,32 +1006,52 @@ pub(crate) fn decode_posting_list_object(
 ) -> Option<PostingListObjectIndex> {
     let mut posting_count_list = 0u32;
     let mut max_list_score = 0.0;
-    let mut first = true;
     let mut blocks_owned: Vec<BlockObjectIndex> = Vec::new();
-    let mut bigram_term_index1 = 0;
-    let mut bigram_term_index2 = 0;
+    let mut posting_count_ngram_1_compressed = 0;
+    let mut posting_count_ngram_2_compressed = 0;
+    let mut posting_count_ngram_3_compressed = 0;
+    let mut posting_count_ngram_1 = 0;
+    let mut posting_count_ngram_2 = 0;
+    let mut posting_count_ngram_3 = 0;
+
+    let read_flag = key_hash1 & 0b111 > 0;
+
     for (block_id, pointer) in segment.byte_array_blocks_pointer.iter().enumerate() {
         let key_count = pointer.2 as usize;
 
-        let byte_array = &index.index_file_mmap[pointer.0 - (key_count * KEY_HEAD_SIZE)..pointer.0];
-        let key_index = binary_search(byte_array, key_count, key_hash1);
+        let byte_array =
+            &index.index_file_mmap[pointer.0 - (key_count * index.key_head_size)..pointer.0];
+        let key_index = binary_search(byte_array, key_count, key_hash1, index.key_head_size);
 
         if key_index >= 0 {
-            let key_address = key_index as usize * KEY_HEAD_SIZE;
+            let key_address = key_index as usize * index.key_head_size;
             let posting_count = read_u16(byte_array, key_address + 8);
 
             let max_docid = read_u16(byte_array, key_address + 10);
             let max_p_docid = read_u16(byte_array, key_address + 12);
-            let pointer_pivot_p_docid = read_u16(byte_array, key_address + 16);
-            let compression_type_pointer = read_u32(byte_array, key_address + 18);
+
+            match index.key_head_size {
+                20 => {}
+                22 => {
+                    if read_flag {
+                        posting_count_ngram_1_compressed = read_u8(byte_array, key_address + 14);
+                        posting_count_ngram_2_compressed = read_u8(byte_array, key_address + 15);
+                    }
+                }
+                _ => {
+                    if read_flag {
+                        posting_count_ngram_1_compressed = read_u8(byte_array, key_address + 14);
+                        posting_count_ngram_2_compressed = read_u8(byte_array, key_address + 15);
+                        posting_count_ngram_3_compressed = read_u8(byte_array, key_address + 16);
+                    }
+                }
+            }
+
+            let pointer_pivot_p_docid = read_u16(byte_array, key_address + index.key_head_size - 6);
+            let compression_type_pointer =
+                read_u32(byte_array, key_address + index.key_head_size - 4);
 
             posting_count_list += posting_count as u32 + 1;
-
-            if first {
-                bigram_term_index1 = read_u8(byte_array, key_address + 14);
-                bigram_term_index2 = read_u8(byte_array, key_address + 15);
-                first = false;
-            }
 
             let block_object_index = BlockObjectIndex {
                 max_block_score: 0.0,
@@ -909,18 +1068,45 @@ pub(crate) fn decode_posting_list_object(
 
     if !blocks_owned.is_empty() {
         if calculate_score {
+            match index.key_head_size {
+                20 => {}
+                22 => {
+                    if read_flag {
+                        posting_count_ngram_1 =
+                            DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_1_compressed as usize];
+                        posting_count_ngram_2 =
+                            DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_2_compressed as usize];
+                    }
+                }
+                _ => {
+                    if read_flag {
+                        posting_count_ngram_1 =
+                            DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_1_compressed as usize];
+                        posting_count_ngram_2 =
+                            DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_2_compressed as usize];
+                        posting_count_ngram_3 =
+                            DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_3_compressed as usize];
+                    }
+                }
+            }
+
+            let ngram_type =
+                FromPrimitive::from_u64(key_hash1 & 0b111).unwrap_or(NgramType::SingleTerm);
+
             for block in blocks_owned.iter_mut() {
                 block.max_block_score = get_max_score(
                     index,
                     segment,
-                    bigram_term_index1,
-                    bigram_term_index2,
+                    posting_count_ngram_1,
+                    posting_count_ngram_2,
+                    posting_count_ngram_3,
                     posting_count_list,
                     block.block_id as usize,
                     block.max_docid as usize,
                     block.max_p_docid as usize,
                     block.pointer_pivot_p_docid as usize,
                     block.compression_type_pointer,
+                    &ngram_type,
                 );
 
                 if block.max_block_score > max_list_score {
@@ -931,11 +1117,13 @@ pub(crate) fn decode_posting_list_object(
 
         let posting_list_object_index = PostingListObjectIndex {
             posting_count: posting_count_list,
-            bigram_term_index1,
-            bigram_term_index2,
+            posting_count_ngram_1,
+            posting_count_ngram_2,
+            posting_count_ngram_3,
             max_list_score,
             blocks: blocks_owned,
             position_range_previous: 0,
+            ..Default::default()
         };
 
         Some(posting_list_object_index)
@@ -1060,80 +1248,80 @@ impl Search for IndexArc {
             for facet_filter_item in facet_filter.iter() {
                 match &facet_filter_item {
                     FacetFilter::U8 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U8 {
-                                facet_filter_sparse[*idx] = FilterSparse::U8(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U8
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::U8(filter.clone())
                         }
                     }
                     FacetFilter::U16 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U16 {
-                                facet_filter_sparse[*idx] = FilterSparse::U16(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U16
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::U16(filter.clone())
                         }
                     }
                     FacetFilter::U32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U32 {
-                                facet_filter_sparse[*idx] = FilterSparse::U32(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U32
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::U32(filter.clone())
                         }
                     }
                     FacetFilter::U64 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U64 {
-                                facet_filter_sparse[*idx] = FilterSparse::U64(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U64
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::U64(filter.clone())
                         }
                     }
                     FacetFilter::I8 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I8 {
-                                facet_filter_sparse[*idx] = FilterSparse::I8(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I8
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::I8(filter.clone())
                         }
                     }
                     FacetFilter::I16 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I16 {
-                                facet_filter_sparse[*idx] = FilterSparse::I16(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I16
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::I16(filter.clone())
                         }
                     }
                     FacetFilter::I32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I32 {
-                                facet_filter_sparse[*idx] = FilterSparse::I32(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I32
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::I32(filter.clone())
                         }
                     }
                     FacetFilter::I64 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I64 {
-                                facet_filter_sparse[*idx] = FilterSparse::I64(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I64
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::I64(filter.clone())
                         }
                     }
                     FacetFilter::Timestamp { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::Timestamp {
-                                facet_filter_sparse[*idx] = FilterSparse::Timestamp(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::Timestamp
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::Timestamp(filter.clone())
                         }
                     }
                     FacetFilter::F32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::F32 {
-                                facet_filter_sparse[*idx] = FilterSparse::F32(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::F32
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::F32(filter.clone())
                         }
                     }
                     FacetFilter::F64 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::F64 {
-                                facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::F64
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
                         }
                     }
                     FacetFilter::String { field, filter } => {
@@ -1181,19 +1369,15 @@ impl Search for IndexArc {
                     }
 
                     FacetFilter::Point { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::Point {
-                                facet_filter_sparse[*idx] = FilterSparse::Point(
-                                    filter.0.clone(),
-                                    filter.1.clone(),
-                                    filter.2.clone(),
-                                    point_distance_to_morton_range(
-                                        &filter.0,
-                                        filter.1.end,
-                                        &filter.2,
-                                    ),
-                                );
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::Point
+                        {
+                            facet_filter_sparse[*idx] = FilterSparse::Point(
+                                filter.0.clone(),
+                                filter.1.clone(),
+                                filter.2.clone(),
+                                point_distance_to_morton_range(&filter.0, filter.1.end, &filter.2),
+                            );
                         }
                     }
                 }
@@ -1210,16 +1394,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U8 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::U8(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U8
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::U8(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::U16 {
@@ -1227,16 +1411,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U16 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::U16(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U16
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::U16(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::U32 {
@@ -1244,16 +1428,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U32 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::U32(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U32
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::U32(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::U64 {
@@ -1261,16 +1445,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::U64 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::U64(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::U64
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::U64(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::I8 {
@@ -1278,16 +1462,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I8 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::I8(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I8
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::I8(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::I16 {
@@ -1295,16 +1479,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I16 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::I16(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I16
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::I16(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::I32 {
@@ -1312,16 +1496,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I32 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::I32(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I32
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::I32(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::I64 {
@@ -1329,16 +1513,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::I64 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::I64(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::I64
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::I64(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::Timestamp {
@@ -1346,16 +1530,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::Timestamp {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::Timestamp(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::Timestamp
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::Timestamp(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::F32 {
@@ -1363,16 +1547,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::F32 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::F32(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::F32
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::F32(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::F64 {
@@ -1380,16 +1564,16 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::F64 {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::F64(range_type.clone(), ranges.clone()),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::F64
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::F64(range_type.clone(), ranges.clone()),
+                                ..Default::default()
+                            };
                         }
                     }
                     QueryFacet::String {
@@ -1397,14 +1581,14 @@ impl Search for IndexArc {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::String {
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    prefix: prefix.clone(),
-                                    length: *length,
-                                    ..Default::default()
-                                }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::String
+                        {
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                prefix: prefix.clone(),
+                                length: *length,
+                                ..Default::default()
                             }
                         }
                     }
@@ -1413,14 +1597,14 @@ impl Search for IndexArc {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::StringSet {
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    prefix: prefix.clone(),
-                                    length: *length,
-                                    ..Default::default()
-                                }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::StringSet
+                        {
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                prefix: prefix.clone(),
+                                length: *length,
+                                ..Default::default()
                             }
                         }
                     }
@@ -1432,21 +1616,21 @@ impl Search for IndexArc {
                         base,
                         unit,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            if index_ref.facets[*idx].field_type == FieldType::Point {
-                                is_range_facet = true;
-                                search_result.query_facets[*idx] = ResultFacet {
-                                    field: field.clone(),
-                                    length: u16::MAX,
-                                    ranges: Ranges::Point(
-                                        range_type.clone(),
-                                        ranges.clone(),
-                                        base.clone(),
-                                        unit.clone(),
-                                    ),
-                                    ..Default::default()
-                                };
-                            }
+                        if let Some(idx) = index_ref.facets_map.get(field)
+                            && index_ref.facets[*idx].field_type == FieldType::Point
+                        {
+                            is_range_facet = true;
+                            search_result.query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                length: u16::MAX,
+                                ranges: Ranges::Point(
+                                    range_type.clone(),
+                                    ranges.clone(),
+                                    base.clone(),
+                                    unit.clone(),
+                                ),
+                                ..Default::default()
+                            };
                         }
                     }
 
@@ -1475,7 +1659,7 @@ impl Search for IndexArc {
                 MAX_POSITIONS_PER_TERM,
                 true,
                 &mut query_type_mut,
-                index_ref.enable_bigram,
+                index_ref.meta.ngram_indexing,
                 0,
                 1,
             );
@@ -1501,7 +1685,7 @@ impl Search for IndexArc {
             let mut not_query_list: Vec<PostingListObjectQuery>;
 
             let mut non_unique_query_list: Vec<NonUniquePostingListObjectQuery> = Vec::new();
-            let mut preceding_bigram_count = 0;
+            let mut preceding_ngram_count = 0;
 
             let mut blocks_vec: Vec<Vec<BlockObjectIndex>> = Vec::new();
 
@@ -1514,8 +1698,9 @@ impl Search for IndexArc {
                 let term_no_diacritics_umlaut_case = &non_unique_term.term;
 
                 let mut idf = 0.0;
-                let mut idf_bigram1 = 0.0;
-                let mut idf_bigram2 = 0.0;
+                let mut idf_ngram1 = 0.0;
+                let mut idf_ngram2 = 0.0;
+                let mut idf_ngram3 = 0.0;
 
                 let mut term_index_unique = 0;
                 if non_unique_term.op == QueryType::Not {
@@ -1536,41 +1721,38 @@ impl Search for IndexArc {
                                 false,
                             );
 
-                            if posting_list_object_index_option.is_none() {
-                                posting_count = 0;
-                                max_list_score = 0.0;
-                                blocks = &DUMMY_VEC;
-                                blocks_len = 0;
-                                false
-                            } else {
-                                let plo = posting_list_object_index_option.unwrap();
-
+                            if let Some(plo) = posting_list_object_index_option {
                                 posting_count = plo.posting_count;
                                 max_list_score = plo.max_list_score;
                                 blocks = &DUMMY_VEC;
                                 blocks_len = plo.blocks.len();
                                 blocks_vec.push(plo.blocks);
                                 true
+                            } else {
+                                posting_count = 0;
+                                max_list_score = 0.0;
+                                blocks = &DUMMY_VEC;
+                                blocks_len = 0;
+                                false
                             }
                         } else {
                             let posting_list_object_index_option = index_ref.segments_index
                                 [key0 as usize]
                                 .segment
                                 .get(&key_hash);
-                            if posting_list_object_index_option.is_none() {
-                                posting_count = 0;
-                                max_list_score = 0.0;
-                                blocks = &DUMMY_VEC;
-                                blocks_len = 0;
-                                false
-                            } else {
-                                let plo = posting_list_object_index_option.unwrap();
 
+                            if let Some(plo) = posting_list_object_index_option {
                                 posting_count = plo.posting_count;
                                 max_list_score = plo.max_list_score;
                                 blocks_len = plo.blocks.len();
                                 blocks = &plo.blocks;
                                 true
+                            } else {
+                                posting_count = 0;
+                                max_list_score = 0.0;
+                                blocks = &DUMMY_VEC;
+                                blocks_len = 0;
+                                false
                             }
                         };
 
@@ -1585,9 +1767,10 @@ impl Search for IndexArc {
                                 key0,
                                 term_index_unique: query_list_map_len,
                                 idf,
-                                idf_bigram1,
-                                idf_bigram2,
-                                is_bigram: non_unique_term.is_bigram,
+                                idf_ngram1,
+                                idf_ngram2,
+                                idf_ngram3,
+                                ngram_type: non_unique_term.ngram_type.clone(),
                                 ..Default::default()
                             };
                             not_query_list_map.insert(key_hash, value_new);
@@ -1603,8 +1786,9 @@ impl Search for IndexArc {
                         None => {
                             if !not_found_terms_hashset.contains(&key_hash) {
                                 let posting_count;
-                                let bigram_term_index1;
-                                let bigram_term_index2;
+                                let posting_count_ngram_1;
+                                let posting_count_ngram_2;
+                                let posting_count_ngram_3;
                                 let max_list_score;
                                 let blocks;
                                 let blocks_len;
@@ -1617,56 +1801,56 @@ impl Search for IndexArc {
                                             true,
                                         );
 
-                                    if posting_list_object_index_option.is_none() {
-                                        posting_count = 0;
-                                        bigram_term_index1 = 0;
-                                        bigram_term_index2 = 0;
-                                        max_list_score = 0.0;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = 0;
-                                        false
-                                    } else {
-                                        let plo = posting_list_object_index_option.unwrap();
-
+                                    if let Some(plo) = posting_list_object_index_option {
                                         posting_count = plo.posting_count;
-                                        bigram_term_index1 = plo.bigram_term_index1;
-                                        bigram_term_index2 = plo.bigram_term_index2;
+                                        posting_count_ngram_1 = plo.posting_count_ngram_1;
+                                        posting_count_ngram_2 = plo.posting_count_ngram_2;
+                                        posting_count_ngram_3 = plo.posting_count_ngram_3;
                                         max_list_score = plo.max_list_score;
                                         blocks = &DUMMY_VEC;
                                         blocks_len = plo.blocks.len();
                                         blocks_vec.push(plo.blocks);
                                         true
+                                    } else {
+                                        posting_count = 0;
+                                        posting_count_ngram_1 = 0;
+                                        posting_count_ngram_2 = 0;
+                                        posting_count_ngram_3 = 0;
+                                        max_list_score = 0.0;
+                                        blocks = &DUMMY_VEC;
+                                        blocks_len = 0;
+                                        false
                                     }
                                 } else {
                                     let posting_list_object_index_option = index_ref.segments_index
                                         [key0 as usize]
                                         .segment
                                         .get(&key_hash);
-                                    if posting_list_object_index_option.is_none() {
+
+                                    if let Some(plo) = posting_list_object_index_option {
+                                        posting_count = plo.posting_count;
+                                        posting_count_ngram_1 = plo.posting_count_ngram_1;
+                                        posting_count_ngram_2 = plo.posting_count_ngram_2;
+                                        posting_count_ngram_3 = plo.posting_count_ngram_3;
+                                        max_list_score = plo.max_list_score;
+                                        blocks_len = plo.blocks.len();
+                                        blocks = &plo.blocks;
+                                        true
+                                    } else {
                                         posting_count = 0;
-                                        bigram_term_index1 = 0;
-                                        bigram_term_index2 = 0;
+                                        posting_count_ngram_1 = 0;
+                                        posting_count_ngram_2 = 0;
+                                        posting_count_ngram_3 = 0;
                                         max_list_score = 0.0;
                                         blocks = &DUMMY_VEC;
                                         blocks_len = 0;
                                         false
-                                    } else {
-                                        let plo = posting_list_object_index_option.unwrap();
-
-                                        posting_count = plo.posting_count;
-                                        bigram_term_index1 = plo.bigram_term_index1;
-                                        bigram_term_index2 = plo.bigram_term_index2;
-                                        max_list_score = plo.max_list_score;
-                                        blocks_len = plo.blocks.len();
-                                        blocks = &plo.blocks;
-
-                                        true
                                     }
                                 };
 
                                 if found_plo {
                                     if result_type != ResultType::Count {
-                                        if !non_unique_term.is_bigram
+                                        if non_unique_term.ngram_type == NgramType::SingleTerm
                                             || index_ref.meta.similarity
                                                 == SimilarityType::Bm25fProximity
                                         {
@@ -1676,25 +1860,42 @@ impl Search for IndexArc {
                                                 / (posting_count as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
-                                        } else {
-                                            let posting_count1 = index_ref
-                                                .frequentword_posting_counts
-                                                [bigram_term_index1 as usize];
-                                            let posting_count2 = index_ref
-                                                .frequentword_posting_counts
-                                                [bigram_term_index2 as usize];
-
-                                            idf_bigram1 = (((index_ref.indexed_doc_count as f32
-                                                - posting_count1 as f32
+                                        } else if non_unique_term.ngram_type == NgramType::NgramFF
+                                            || non_unique_term.ngram_type == NgramType::NgramRF
+                                            || non_unique_term.ngram_type == NgramType::NgramFR
+                                        {
+                                            idf_ngram1 = (((index_ref.indexed_doc_count as f32
+                                                - posting_count_ngram_1 as f32
                                                 + 0.5)
-                                                / (posting_count1 as f32 + 0.5))
+                                                / (posting_count_ngram_1 as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
 
-                                            idf_bigram2 = (((index_ref.indexed_doc_count as f32
-                                                - posting_count2 as f32
+                                            idf_ngram2 = (((index_ref.indexed_doc_count as f32
+                                                - posting_count_ngram_2 as f32
                                                 + 0.5)
-                                                / (posting_count2 as f32 + 0.5))
+                                                / (posting_count_ngram_2 as f32 + 0.5))
+                                                + 1.0)
+                                                .ln();
+                                        } else {
+                                            idf_ngram1 = (((index_ref.indexed_doc_count as f32
+                                                - posting_count_ngram_1 as f32
+                                                + 0.5)
+                                                / (posting_count_ngram_1 as f32 + 0.5))
+                                                + 1.0)
+                                                .ln();
+
+                                            idf_ngram2 = (((index_ref.indexed_doc_count as f32
+                                                - posting_count_ngram_2 as f32
+                                                + 0.5)
+                                                / (posting_count_ngram_2 as f32 + 0.5))
+                                                + 1.0)
+                                                .ln();
+
+                                            idf_ngram3 = (((index_ref.indexed_doc_count as f32
+                                                - posting_count_ngram_3 as f32
+                                                + 0.5)
+                                                / (posting_count_ngram_3 as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
                                         }
@@ -1710,9 +1911,10 @@ impl Search for IndexArc {
                                         key0,
                                         term_index_unique: query_list_map_len,
                                         idf,
-                                        idf_bigram1,
-                                        idf_bigram2,
-                                        is_bigram: non_unique_term.is_bigram,
+                                        idf_ngram1,
+                                        idf_ngram2,
+                                        idf_ngram3,
+                                        ngram_type: non_unique_term.ngram_type.clone(),
                                         ..Default::default()
                                     };
                                     term_index_unique = value_new.term_index_unique;
@@ -1737,7 +1939,7 @@ impl Search for IndexArc {
                         let nu_plo = NonUniquePostingListObjectQuery {
                             term_index_unique,
                             term_index_nonunique: non_unique_query_list.len()
-                                + preceding_bigram_count,
+                                + preceding_ngram_count,
                             pos: 0,
                             p_pos: 0,
                             positions_pointer: 0,
@@ -1750,21 +1952,40 @@ impl Search for IndexArc {
                             embedded_positions: [0; 4],
                         };
 
-                        if non_unique_term.is_bigram {
-                            preceding_bigram_count += 1
+                        match non_unique_term.ngram_type {
+                            NgramType::SingleTerm => {}
+                            NgramType::NgramFF | NgramType::NgramRF | NgramType::NgramFR => {
+                                preceding_ngram_count += 1
+                            }
+                            _ => preceding_ngram_count += 2,
                         };
 
                         non_unique_query_list.push(nu_plo);
                     }
                 }
-                if term.is_bigram {
-                    result_object
-                        .query_terms
-                        .push(term.term_bigram1.to_string());
-                    result_object
-                        .query_terms
-                        .push(term.term_bigram2.to_string());
-                }
+                match term.ngram_type {
+                    NgramType::SingleTerm => {}
+                    NgramType::NgramFF | NgramType::NgramRF | NgramType::NgramFR => {
+                        result_object
+                            .query_terms
+                            .push(term.term_ngram_1.to_string());
+                        result_object
+                            .query_terms
+                            .push(term.term_ngram_0.to_string());
+                    }
+                    _ => {
+                        result_object
+                            .query_terms
+                            .push(term.term_ngram_2.to_string());
+                        result_object
+                            .query_terms
+                            .push(term.term_ngram_1.to_string());
+                        result_object
+                            .query_terms
+                            .push(term.term_ngram_0.to_string());
+                    }
+                };
+
                 {
                     result_object.query_terms.push(term.term.to_string());
                 }
@@ -1786,6 +2007,7 @@ impl Search for IndexArc {
             let non_unique_query_list_len = non_unique_query_list.len();
 
             let mut matching_blocks: i32 = 0;
+            let query_term_count = non_unique_terms.len();
             if query_list_len == 0 {
             } else if query_list_len == 1 {
                 if !(index_ref.uncommitted && include_uncommited)
@@ -1796,59 +2018,57 @@ impl Search for IndexArc {
                     && facet_filter_sparse.is_empty()
                     && !is_range_facet
                     && result_sort_index.is_empty()
+                    && let Some(frequentword_result_object) = index_ref
+                        .frequentword_results
+                        .get(&non_unique_terms[0].term)
                 {
-                    if let Some(stopword_result_object) =
-                        index_ref.stopword_results.get(&non_unique_terms[0].term)
-                    {
-                        result_object.query = stopword_result_object.query.clone();
-                        result_object
-                            .query_terms
-                            .clone_from(&stopword_result_object.query_terms);
-                        result_object.result_count = stopword_result_object.result_count;
-                        result_object.result_count_total =
-                            stopword_result_object.result_count_total;
+                    result_object.query = frequentword_result_object.query.clone();
+                    result_object
+                        .query_terms
+                        .clone_from(&frequentword_result_object.query_terms);
+                    result_object.result_count = frequentword_result_object.result_count;
+                    result_object.result_count_total =
+                        frequentword_result_object.result_count_total;
 
-                        if result_type != ResultType::Count {
-                            result_object
-                                .results
-                                .clone_from(&stopword_result_object.results);
-                            if offset > 0 {
-                                result_object.results.drain(..offset);
+                    if result_type != ResultType::Count {
+                        result_object
+                            .results
+                            .clone_from(&frequentword_result_object.results);
+                        if offset > 0 {
+                            result_object.results.drain(..offset);
+                        }
+                        if length < 1000 {
+                            result_object.results.truncate(length);
+                        }
+                    }
+
+                    if !search_result.query_facets.is_empty() && result_type != ResultType::Topk {
+                        let mut facets: AHashMap<String, Facet> = AHashMap::new();
+                        for facet in search_result.query_facets.iter() {
+                            if facet.length == 0
+                                || frequentword_result_object.facets[&facet.field].is_empty()
+                            {
+                                continue;
                             }
-                            if length < 1000 {
-                                result_object.results.truncate(length);
+
+                            let v = frequentword_result_object.facets[&facet.field]
+                                .iter()
+                                .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
+                                .map(|(a, c)| (a.clone(), *c))
+                                .filter(|(a, _c)| {
+                                    facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                                })
+                                .take(facet.length as usize)
+                                .collect::<Vec<_>>();
+
+                            if !v.is_empty() {
+                                facets.insert(facet.field.clone(), v);
                             }
                         }
+                        result_object.facets = facets;
+                    };
 
-                        if !search_result.query_facets.is_empty() && result_type != ResultType::Topk
-                        {
-                            let mut facets: AHashMap<String, Facet> = AHashMap::new();
-                            for facet in search_result.query_facets.iter() {
-                                if facet.length == 0
-                                    || stopword_result_object.facets[&facet.field].is_empty()
-                                {
-                                    continue;
-                                }
-
-                                let v = stopword_result_object.facets[&facet.field]
-                                    .iter()
-                                    .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
-                                    .map(|(a, c)| (a.clone(), *c))
-                                    .filter(|(a, _c)| {
-                                        facet.prefix.is_empty() || a.starts_with(&facet.prefix)
-                                    })
-                                    .take(facet.length as usize)
-                                    .collect::<Vec<_>>();
-
-                                if !v.is_empty() {
-                                    facets.insert(facet.field.clone(), v);
-                                }
-                            }
-                            result_object.facets = facets;
-                        };
-
-                        return result_object;
-                    }
+                    return result_object;
                 }
 
                 single_blockid(
@@ -1868,7 +2088,7 @@ impl Search for IndexArc {
             } else if query_type_mut == QueryType::Union {
                 search_result.skip_facet_count = true;
 
-                if result_type == ResultType::Count {
+                if result_type == ResultType::Count && query_list_len != 2 {
                     union_blockid(
                         &index_ref,
                         &mut non_unique_query_list,
@@ -1900,6 +2120,7 @@ impl Search for IndexArc {
                         &field_filter_set,
                         &facet_filter_sparse,
                         &mut matching_blocks,
+                        query_term_count,
                     )
                     .await;
                 } else if SPEEDUP_FLAG && search_result.topk_candidates.result_sort.is_empty() {
@@ -1920,6 +2141,7 @@ impl Search for IndexArc {
                         &facet_filter_sparse,
                         &mut matching_blocks,
                         0,
+                        query_term_count,
                     )
                     .await;
                 } else {
@@ -1951,6 +2173,7 @@ impl Search for IndexArc {
                     &facet_filter_sparse,
                     &mut matching_blocks,
                     query_type_mut == QueryType::Phrase && non_unique_query_list_len >= 2,
+                    query_term_count,
                 )
                 .await;
                 if index_ref.enable_fallback

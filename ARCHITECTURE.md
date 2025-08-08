@@ -49,7 +49,7 @@ You can manually delete, copy, or backup and restore both API key and index dire
 * SIMD vector processing hardware support for intersection and union of roaring bitmaps compressed posting lists
 * Galloping intersection
 * Improved Block-max WAND
-* Bigram indexing of frequent terms
+* N-gram indexing of frequent terms
 
 ## Database schema
 

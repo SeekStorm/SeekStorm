@@ -3,10 +3,9 @@ use std::cmp;
 use num::FromPrimitive;
 
 use crate::{
-    commit::KEY_HEAD_SIZE,
     compress_postinglist::compress_positions,
     index::{
-        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index, NgramType,
         POSTING_BUFFER_SIZE, PostingListObject0, ROARING_BLOCK_SIZE, STOP_BIT, TermObject,
     },
     search::binary_search,
@@ -14,7 +13,15 @@ use crate::{
 };
 
 impl Index {
-    pub(crate) fn index_posting(&mut self, term: TermObject, doc_id: usize, restore: bool) {
+    pub(crate) fn index_posting(
+        &mut self,
+        term: TermObject,
+        doc_id: usize,
+        restore: bool,
+        posting_count_ngram_1_compressed: u8,
+        posting_count_ngram_2_compressed: u8,
+        posting_count_ngram_3_compressed: u8,
+    ) {
         let mut positions_count_sum = 0;
         let mut field_positions_vec: Vec<Vec<u16>> = Vec::new();
         for positions_uncompressed in term.field_positions_vec.iter() {
@@ -48,6 +55,9 @@ impl Index {
             .segment
             .entry(term.key_hash)
             .or_insert(PostingListObject0 {
+                posting_count_ngram_1_compressed,
+                posting_count_ngram_2_compressed,
+                posting_count_ngram_3_compressed,
                 ..Default::default()
             });
         let exists: bool = value.posting_count > 0;
@@ -62,12 +72,18 @@ impl Index {
                 let key_count = pointer.2 as usize;
 
                 let byte_array_keys =
-                    &self.index_file_mmap[pointer.0 - (key_count * KEY_HEAD_SIZE)..pointer.0];
-                let key_index = binary_search(byte_array_keys, key_count, term.key_hash);
+                    &self.index_file_mmap[pointer.0 - (key_count * self.key_head_size)..pointer.0];
+                let key_index = binary_search(
+                    byte_array_keys,
+                    key_count,
+                    term.key_hash,
+                    self.key_head_size,
+                );
 
                 if key_index >= 0 {
-                    let key_address = key_index as usize * KEY_HEAD_SIZE;
-                    let compression_type_pointer = read_u32(byte_array_keys, key_address + 18);
+                    let key_address = key_index as usize * self.key_head_size;
+                    let compression_type_pointer =
+                        read_u32(byte_array_keys, key_address + self.key_head_size - 4);
                     let rank_position_pointer_range =
                         compression_type_pointer & 0b0011_1111_1111_1111_1111_1111_1111_1111;
 
@@ -75,9 +91,11 @@ impl Index {
                         0
                     } else {
                         let posting_count_previous =
-                            read_u16(byte_array_keys, key_address + 8 - KEY_HEAD_SIZE) as usize + 1;
+                            read_u16(byte_array_keys, key_address + 8 - self.key_head_size)
+                                as usize
+                                + 1;
                         let pointer_pivot_p_docid_previous =
-                            read_u16(byte_array_keys, key_address + 16 - KEY_HEAD_SIZE);
+                            read_u16(byte_array_keys, key_address - 6);
 
                         let posting_pointer_size_sum_previous = pointer_pivot_p_docid_previous
                             as usize
@@ -91,7 +109,7 @@ impl Index {
                             };
 
                         let compression_type_pointer_previous =
-                            read_u32(byte_array_keys, key_address + 18 - KEY_HEAD_SIZE);
+                            read_u32(byte_array_keys, key_address + 18 - self.key_head_size);
                         let rank_position_pointer_range_previous = compression_type_pointer_previous
                             & 0b0011_1111_1111_1111_1111_1111_1111_1111;
                         let compression_type_previous: CompressionType = FromPrimitive::from_i32(
@@ -134,8 +152,7 @@ impl Index {
                     .segment
                     .get(&term.key_hash);
 
-                if posting_list_object_index_option.is_some() {
-                    let plo = posting_list_object_index_option.unwrap();
+                if let Some(plo) = posting_list_object_index_option {
                     let block = plo.blocks.last().unwrap();
                     if block.block_id as usize == self.level_index.len() - 1 {
                         let rank_position_pointer_range: u32 = block.compression_type_pointer
@@ -170,74 +187,184 @@ impl Index {
 
         let mut positions_meta_compressed_nonembedded_size = 0;
 
-        if term.is_bigram {
-            for (i, field) in term.field_vec_bigram1.iter().enumerate() {
-                if field_positions_vec.len() == 1 {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 128 {
-                        1
-                    } else if field.1 < 16_384 {
-                        2
+        match term.ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                for (i, field) in term.field_vec_ngram1.iter().enumerate() {
+                    if field_positions_vec.len() == 1 {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                            1
+                        } else if field.1 < 16_384 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else if term.field_vec_ngram1.len() == 1
+                        && term.field_vec_ngram1[0].0 == self.longest_field_id
+                    {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                            1
+                        } else if field.1 < 8_192 {
+                            2
+                        } else {
+                            3
+                        };
                     } else {
-                        3
-                    };
-                } else if term.field_vec_bigram1.len() == 1
-                    && term.field_vec_bigram1[0].0 == self.longest_field_id
-                {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 64 {
-                        1
-                    } else if field.1 < 8_192 {
-                        2
-                    } else {
-                        3
-                    };
-                } else {
-                    let required_position_count_bits = u32::BITS - field.1.leading_zeros();
-                    let only_longest_field_bit = if i == 0 { 1 } else { 0 };
-                    let meta_bits = only_longest_field_bit
-                        + required_position_count_bits
-                        + self.indexed_field_id_bits as u32;
+                        let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                        let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                        let meta_bits = only_longest_field_bit
+                            + required_position_count_bits
+                            + self.indexed_field_id_bits as u32;
 
-                    if meta_bits <= 6 {
-                        positions_meta_compressed_nonembedded_size += 1;
-                    } else if meta_bits <= 13 {
-                        positions_meta_compressed_nonembedded_size += 2;
-                    } else if meta_bits <= 20 {
-                        positions_meta_compressed_nonembedded_size += 3;
+                        if meta_bits <= 6 {
+                            positions_meta_compressed_nonembedded_size += 1;
+                        } else if meta_bits <= 13 {
+                            positions_meta_compressed_nonembedded_size += 2;
+                        } else if meta_bits <= 20 {
+                            positions_meta_compressed_nonembedded_size += 3;
+                        }
+                    }
+                }
+                for (i, field) in term.field_vec_ngram2.iter().enumerate() {
+                    if field_positions_vec.len() == 1 {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                            1
+                        } else if field.1 < 16_384 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else if term.field_vec_ngram2.len() == 1
+                        && term.field_vec_ngram2[0].0 == self.longest_field_id
+                    {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                            1
+                        } else if field.1 < 8_192 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else {
+                        let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                        let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                        let meta_bits = only_longest_field_bit
+                            + required_position_count_bits
+                            + self.indexed_field_id_bits as u32;
+
+                        if meta_bits <= 6 {
+                            positions_meta_compressed_nonembedded_size += 1;
+                        } else if meta_bits <= 13 {
+                            positions_meta_compressed_nonembedded_size += 2;
+                        } else if meta_bits <= 20 {
+                            positions_meta_compressed_nonembedded_size += 3;
+                        }
                     }
                 }
             }
-            for (i, field) in term.field_vec_bigram2.iter().enumerate() {
-                if field_positions_vec.len() == 1 {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 128 {
-                        1
-                    } else if field.1 < 16_384 {
-                        2
+            _ => {
+                for (i, field) in term.field_vec_ngram1.iter().enumerate() {
+                    if field_positions_vec.len() == 1 {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                            1
+                        } else if field.1 < 16_384 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else if term.field_vec_ngram1.len() == 1
+                        && term.field_vec_ngram1[0].0 == self.longest_field_id
+                    {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                            1
+                        } else if field.1 < 8_192 {
+                            2
+                        } else {
+                            3
+                        };
                     } else {
-                        3
-                    };
-                } else if term.field_vec_bigram2.len() == 1
-                    && term.field_vec_bigram2[0].0 == self.longest_field_id
-                {
-                    positions_meta_compressed_nonembedded_size += if field.1 < 64 {
-                        1
-                    } else if field.1 < 8_192 {
-                        2
-                    } else {
-                        3
-                    };
-                } else {
-                    let required_position_count_bits = u32::BITS - field.1.leading_zeros();
-                    let only_longest_field_bit = if i == 0 { 1 } else { 0 };
-                    let meta_bits = only_longest_field_bit
-                        + required_position_count_bits
-                        + self.indexed_field_id_bits as u32;
+                        let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                        let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                        let meta_bits = only_longest_field_bit
+                            + required_position_count_bits
+                            + self.indexed_field_id_bits as u32;
 
-                    if meta_bits <= 6 {
-                        positions_meta_compressed_nonembedded_size += 1;
-                    } else if meta_bits <= 13 {
-                        positions_meta_compressed_nonembedded_size += 2;
-                    } else if meta_bits <= 20 {
-                        positions_meta_compressed_nonembedded_size += 3;
+                        if meta_bits <= 6 {
+                            positions_meta_compressed_nonembedded_size += 1;
+                        } else if meta_bits <= 13 {
+                            positions_meta_compressed_nonembedded_size += 2;
+                        } else if meta_bits <= 20 {
+                            positions_meta_compressed_nonembedded_size += 3;
+                        }
+                    }
+                }
+                for (i, field) in term.field_vec_ngram2.iter().enumerate() {
+                    if field_positions_vec.len() == 1 {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                            1
+                        } else if field.1 < 16_384 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else if term.field_vec_ngram2.len() == 1
+                        && term.field_vec_ngram2[0].0 == self.longest_field_id
+                    {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                            1
+                        } else if field.1 < 8_192 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else {
+                        let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                        let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                        let meta_bits = only_longest_field_bit
+                            + required_position_count_bits
+                            + self.indexed_field_id_bits as u32;
+
+                        if meta_bits <= 6 {
+                            positions_meta_compressed_nonembedded_size += 1;
+                        } else if meta_bits <= 13 {
+                            positions_meta_compressed_nonembedded_size += 2;
+                        } else if meta_bits <= 20 {
+                            positions_meta_compressed_nonembedded_size += 3;
+                        }
+                    }
+                }
+                for (i, field) in term.field_vec_ngram3.iter().enumerate() {
+                    if field_positions_vec.len() == 1 {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 128 {
+                            1
+                        } else if field.1 < 16_384 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else if term.field_vec_ngram3.len() == 1
+                        && term.field_vec_ngram3[0].0 == self.longest_field_id
+                    {
+                        positions_meta_compressed_nonembedded_size += if field.1 < 64 {
+                            1
+                        } else if field.1 < 8_192 {
+                            2
+                        } else {
+                            3
+                        };
+                    } else {
+                        let required_position_count_bits = u32::BITS - field.1.leading_zeros();
+                        let only_longest_field_bit = if i == 0 { 1 } else { 0 };
+                        let meta_bits = only_longest_field_bit
+                            + required_position_count_bits
+                            + self.indexed_field_id_bits as u32;
+
+                        if meta_bits <= 6 {
+                            positions_meta_compressed_nonembedded_size += 1;
+                        } else if meta_bits <= 13 {
+                            positions_meta_compressed_nonembedded_size += 2;
+                        } else if meta_bits <= 20 {
+                            positions_meta_compressed_nonembedded_size += 3;
+                        }
                     }
                 }
             }
@@ -290,7 +417,7 @@ impl Index {
             }
         }
 
-        let mut embed_flag = !term.is_bigram;
+        let mut embed_flag = term.ngram_type == NgramType::SingleTerm;
 
         if self.indexed_field_vec.len() == 1 {
             if posting_pointer_size == 2 {
@@ -511,27 +638,62 @@ impl Index {
         } else {
             let write_pointer_start = write_pointer;
 
-            if term.is_bigram {
-                write_field_vec(
-                    &mut self.postings_buffer,
-                    &mut write_pointer,
-                    &term.field_vec_bigram1,
-                    self.indexed_field_vec.len(),
-                    term.field_vec_bigram1.len() == 1
-                        && term.field_vec_bigram1[0].0 == self.longest_field_id,
-                    term.field_vec_bigram1.len() as u32,
-                    self.indexed_field_id_bits as u32,
-                );
-                write_field_vec(
-                    &mut self.postings_buffer,
-                    &mut write_pointer,
-                    &term.field_vec_bigram2,
-                    self.indexed_field_vec.len(),
-                    term.field_vec_bigram2.len() == 1
-                        && term.field_vec_bigram2[0].0 == self.longest_field_id,
-                    term.field_vec_bigram2.len() as u32,
-                    self.indexed_field_id_bits as u32,
-                );
+            match term.ngram_type {
+                NgramType::SingleTerm => {}
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    write_field_vec(
+                        &mut self.postings_buffer,
+                        &mut write_pointer,
+                        &term.field_vec_ngram1,
+                        self.indexed_field_vec.len(),
+                        term.field_vec_ngram1.len() == 1
+                            && term.field_vec_ngram1[0].0 == self.longest_field_id,
+                        term.field_vec_ngram1.len() as u32,
+                        self.indexed_field_id_bits as u32,
+                    );
+                    write_field_vec(
+                        &mut self.postings_buffer,
+                        &mut write_pointer,
+                        &term.field_vec_ngram2,
+                        self.indexed_field_vec.len(),
+                        term.field_vec_ngram2.len() == 1
+                            && term.field_vec_ngram2[0].0 == self.longest_field_id,
+                        term.field_vec_ngram2.len() as u32,
+                        self.indexed_field_id_bits as u32,
+                    );
+                }
+                _ => {
+                    write_field_vec(
+                        &mut self.postings_buffer,
+                        &mut write_pointer,
+                        &term.field_vec_ngram1,
+                        self.indexed_field_vec.len(),
+                        term.field_vec_ngram1.len() == 1
+                            && term.field_vec_ngram1[0].0 == self.longest_field_id,
+                        term.field_vec_ngram1.len() as u32,
+                        self.indexed_field_id_bits as u32,
+                    );
+                    write_field_vec(
+                        &mut self.postings_buffer,
+                        &mut write_pointer,
+                        &term.field_vec_ngram2,
+                        self.indexed_field_vec.len(),
+                        term.field_vec_ngram2.len() == 1
+                            && term.field_vec_ngram2[0].0 == self.longest_field_id,
+                        term.field_vec_ngram2.len() as u32,
+                        self.indexed_field_id_bits as u32,
+                    );
+                    write_field_vec(
+                        &mut self.postings_buffer,
+                        &mut write_pointer,
+                        &term.field_vec_ngram3,
+                        self.indexed_field_vec.len(),
+                        term.field_vec_ngram3.len() == 1
+                            && term.field_vec_ngram3[0].0 == self.longest_field_id,
+                        term.field_vec_ngram3.len() as u32,
+                        self.indexed_field_id_bits as u32,
+                    );
+                }
             }
 
             write_field_vec(
@@ -574,15 +736,35 @@ impl Index {
             );
 
             value.pointer_last = write_pointer_base;
+        } else if term.ngram_type == NgramType::NgramFF
+            || term.ngram_type == NgramType::NgramRF
+            || term.ngram_type == NgramType::NgramFR
+        {
+            *value = PostingListObject0 {
+                pointer_first: write_pointer_base,
+                pointer_last: write_pointer_base,
+                posting_count: 1,
+                position_count: positions_count_sum,
+                ngram_type: term.ngram_type.clone(),
+                term_ngram1: term.term_ngram_1,
+                term_ngram2: term.term_ngram_0,
+                term_ngram3: term.term_ngram_2,
+                size_compressed_positions_key: value.size_compressed_positions_key
+                    + positions_stack,
+                docid_delta_max: docid_lsb,
+                docid_old: docid_lsb,
+                ..*value
+            };
         } else {
             *value = PostingListObject0 {
                 pointer_first: write_pointer_base,
                 pointer_last: write_pointer_base,
                 posting_count: 1,
                 position_count: positions_count_sum,
-                is_bigram: term.is_bigram,
-                term_bigram1: term.term_bigram1,
-                term_bigram2: term.term_bigram2,
+                ngram_type: term.ngram_type.clone(),
+                term_ngram1: term.term_ngram_2,
+                term_ngram2: term.term_ngram_1,
+                term_ngram3: term.term_ngram_0,
                 size_compressed_positions_key: value.size_compressed_positions_key
                     + positions_stack,
                 docid_delta_max: docid_lsb,
@@ -608,15 +790,17 @@ impl Index {
 
         if !embed_flag && positions_stack != compressed_position_size {
             println!(
-                "size conflict: term {} bigram {} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {} posting_pointer_size {}",
+                "size conflict: embed {} term {} ngram_type {:?} frequent {} pos_count {} : positions_stack {} compressed_position_size {} : positions_compressed_pointer {} posting_pointer_size {} docid {}",
+                embed_flag,
                 term.term,
-                term.is_bigram,
+                term.ngram_type,
                 only_longest_field,
                 positions_count_sum,
                 positions_stack,
                 compressed_position_size,
                 positions_compressed_pointer,
-                posting_pointer_size
+                posting_pointer_size,
+                doc_id
             );
         }
 

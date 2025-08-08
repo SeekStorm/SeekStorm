@@ -44,7 +44,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * 6 tokenizers, including Chinese word segmentation.
 * Stemming for 18 languages
 * Stopword lists, custom and predefined, for smaller indices and faster search.
-* Frequent word lists, custom and predefined, for faster phrase search by n-gram indexing.
+* Frequent word lists, custom and predefined, for faster phrase search by N-gram indexing.
 * KWIC snippets, highlighting
 * One-way and multi-way synonyms
 * Billion-scale index
@@ -363,7 +363,7 @@ let document= Document::from([
     ("url".to_string(), Value::String("url4".to_string())),
 ]);
 
-idx.0.index_document(document,FileType::None).await;
+index_arc.index_document(document,FileType::None).await;
 ```
 
 commit documents
@@ -845,6 +845,7 @@ The Rust port is not yet feature complete. The following features are currently 
 
 **Improvements**
 * ✅ Better REST API documentation: integrated OpenAPI generator
+* ✅ Faster phrase search through N-gram indexing
 * 👷 Faster indexing
 * Relevancy benchmarks: BeIR, MS MARCO
 

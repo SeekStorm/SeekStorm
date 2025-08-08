@@ -123,10 +123,10 @@ pub(crate) async fn union_docid<'a>(
             query_list_item_mut.blocks[query_list_item_mut.p_block as usize].posting_count as usize
                 + 1;
 
-        query_list_item_mut.compression_type = FromPrimitive::from_u8(
-            (query_list_item_mut.blocks[query_list_item_mut.p_block as usize]
+        query_list_item_mut.compression_type = FromPrimitive::from_u32(
+            query_list_item_mut.blocks[query_list_item_mut.p_block as usize]
                 .compression_type_pointer
-                >> 30) as u8,
+                >> 30,
         )
         .unwrap();
 
@@ -907,6 +907,7 @@ pub(crate) async fn union_docid_2<'a>(
     field_filter_set: &AHashSet<u16>,
     facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
+    query_term_count: usize,
 ) {
     let filtered = !not_query_list.is_empty() || !field_filter_set.is_empty();
     let mut count = 0;
@@ -958,6 +959,7 @@ pub(crate) async fn union_docid_2<'a>(
         facet_filter,
         matching_blocks,
         false,
+        query_term_count,
     )
     .await;
 
@@ -1047,6 +1049,7 @@ pub(crate) async fn union_docid_3<'a>(
     facet_filter: &[FilterSparse],
     matching_blocks: &mut i32,
     recursion_count: usize,
+    query_term_count: usize,
 ) {
     let queue_object = query_queue.remove(0);
 
@@ -1067,6 +1070,7 @@ pub(crate) async fn union_docid_3<'a>(
                 facet_filter,
                 matching_blocks,
                 false,
+                query_term_count,
             )
             .await;
 
@@ -1143,6 +1147,7 @@ pub(crate) async fn union_docid_3<'a>(
                 field_filter_set,
                 facet_filter,
                 matching_blocks,
+                query_term_count,
             )
             .await;
         }
@@ -1173,6 +1178,7 @@ pub(crate) async fn union_docid_3<'a>(
                     facet_filter,
                     matching_blocks,
                     recursion_count + 1,
+                    query_term_count,
                 )
                 .await;
             }

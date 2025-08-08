@@ -316,5 +316,3 @@ content-type: application/json
     ]}}],
     "facet_filter": [{"Timestamp": {"field": "date","filter": [820450800,1577833200]}}]
 }      
-
-// todo: other API endpoints

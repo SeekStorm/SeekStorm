@@ -2,7 +2,7 @@ use base64::{Engine, engine::general_purpose};
 use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
-    index::{FrequentwordType, SimilarityType, StemmerType, StopwordType, TokenizerType},
+    index::{FrequentwordType, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType},
     ingest::{IngestCsv, IngestJson, IngestPdf},
 };
 use std::{
@@ -152,9 +152,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                 let mut dash:HashMap<String,String>=HashMap::new();
                 for (i,component) in parameter.iter().enumerate(){
-                    if let Some(key_stripped) = component.strip_prefix("-") {
-                        if i+1<parameter.len() {dash.insert(key_stripped.to_string(),parameter[i+1].to_string());}
-                    }
+                    if let Some(key_stripped) = component.strip_prefix("-") && i+1<parameter.len() {dash.insert(key_stripped.to_string(),parameter[i+1].to_string());}
                 }
 
                 match command
@@ -250,6 +248,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                     StemmerType::None,
                                                     StopwordType::None,
                                                     FrequentwordType::English,
+                                                    NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
                                                     Vec::new(),
                                                     apikey_object,
                                                 )

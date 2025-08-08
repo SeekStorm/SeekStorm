@@ -3,9 +3,13 @@ use std::cmp;
 use smallvec::SmallVec;
 
 use crate::{
-    add_result::{B, DOCUMENT_LENGTH_COMPRESSION, K, SIGMA, decode_positions_commit},
+    add_result::{B, K, SIGMA, decode_positions_commit},
     compatible::_lzcnt_u32,
-    index::{CompressionType, Index, STOP_BIT, SimilarityType},
+    index::{
+        AccessType, CompressionType, DOCUMENT_LENGTH_COMPRESSION, Index, NgramType, STOP_BIT,
+        SimilarityType, hash32, hash64, int_to_byte4,
+    },
+    search::decode_posting_list_count,
     utils::{
         block_copy, read_u16_ref, read_u32_ref, write_u8_ref, write_u16, write_u16_ref,
         write_u32_ref, write_u64_ref,
@@ -21,22 +25,194 @@ pub(crate) fn compress_postinglist(
     key0: &usize,
     key_hash: &u64,
 ) -> usize {
-    let mut posting_count_bigram1 = 0;
-    let mut posting_count_bigram2 = 0;
+    let mut posting_count_ngram_1 = 0;
+    let mut posting_count_ngram_2 = 0;
+    let mut posting_count_ngram_3 = 0;
+    let mut posting_count_ngram_1_compressed = 0;
+    let mut posting_count_ngram_2_compressed = 0;
+    let mut posting_count_ngram_3_compressed = 0;
     {
         let plo = index.segments_level0[*key0].segment.get(key_hash).unwrap();
 
-        if plo.is_bigram {
-            let bigram_term_index1 = index
-                .frequent_words
-                .binary_search(&plo.term_bigram1)
-                .unwrap();
-            let bigram_term_index2 = index
-                .frequent_words
-                .binary_search(&plo.term_bigram2)
-                .unwrap();
-            posting_count_bigram1 = index.frequentword_posting_counts[bigram_term_index1] as usize;
-            posting_count_bigram2 = index.frequentword_posting_counts[bigram_term_index2] as usize;
+        match plo.ngram_type {
+            NgramType::SingleTerm => {}
+            NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                posting_count_ngram_1_compressed = if plo.term_ngram1.is_empty() {
+                    plo.posting_count_ngram_1_compressed
+                } else {
+                    let term_bytes_1 = plo.term_ngram1.as_bytes();
+                    let key0_1 = hash32(term_bytes_1) & index.segment_number_mask1;
+                    let key_hash_1 = hash64(term_bytes_1);
+                    let mut posting_count_ngram1 = if index.meta.access_type == AccessType::Mmap {
+                        decode_posting_list_count(
+                            &index.segments_index[key0_1 as usize],
+                            index,
+                            key_hash_1,
+                            key0_1 < *key0 as u32,
+                        )
+                        .unwrap_or_default()
+                    } else if let Some(plo) = index.segments_index[key0_1 as usize]
+                        .segment
+                        .get(&key_hash_1)
+                    {
+                        plo.posting_count
+                    } else {
+                        0
+                    };
+
+                    if let Some(x) = index.segments_level0[key0_1 as usize]
+                        .segment
+                        .get(&key_hash_1)
+                    {
+                        posting_count_ngram1 += x.posting_count as u32;
+                    }
+                    int_to_byte4(posting_count_ngram1)
+                };
+
+                posting_count_ngram_2_compressed = if plo.term_ngram2.is_empty() {
+                    plo.posting_count_ngram_2_compressed
+                } else {
+                    let term_bytes_2 = plo.term_ngram2.as_bytes();
+                    let key0_2 = hash32(term_bytes_2) & index.segment_number_mask1;
+                    let key_hash_2 = hash64(term_bytes_2);
+
+                    let mut posting_count_ngram2 = if index.meta.access_type == AccessType::Mmap {
+                        decode_posting_list_count(
+                            &index.segments_index[key0_2 as usize],
+                            index,
+                            key_hash_2,
+                            key0_2 < *key0 as u32,
+                        )
+                        .unwrap_or_default()
+                    } else if let Some(plo) = index.segments_index[key0_2 as usize]
+                        .segment
+                        .get(&key_hash_2)
+                    {
+                        plo.posting_count
+                    } else {
+                        0
+                    };
+
+                    if let Some(x) = index.segments_level0[key0_2 as usize]
+                        .segment
+                        .get(&key_hash_2)
+                    {
+                        posting_count_ngram2 += x.posting_count as u32;
+                    }
+                    int_to_byte4(posting_count_ngram2)
+                };
+
+                posting_count_ngram_1 =
+                    DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_1_compressed as usize];
+                posting_count_ngram_2 =
+                    DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_2_compressed as usize];
+            }
+            _ => {
+                posting_count_ngram_1_compressed = if plo.term_ngram1.is_empty() {
+                    plo.posting_count_ngram_1_compressed
+                } else {
+                    let term_bytes_1 = plo.term_ngram1.as_bytes();
+                    let key0_1 = hash32(term_bytes_1) & index.segment_number_mask1;
+                    let key_hash_1 = hash64(term_bytes_1);
+                    let mut posting_count_ngram1 = if index.meta.access_type == AccessType::Mmap {
+                        decode_posting_list_count(
+                            &index.segments_index[key0_1 as usize],
+                            index,
+                            key_hash_1,
+                            key0_1 < *key0 as u32,
+                        )
+                        .unwrap_or_default()
+                    } else if let Some(plo) = index.segments_index[key0_1 as usize]
+                        .segment
+                        .get(&key_hash_1)
+                    {
+                        plo.posting_count
+                    } else {
+                        0
+                    };
+
+                    if let Some(x) = index.segments_level0[key0_1 as usize]
+                        .segment
+                        .get(&key_hash_1)
+                    {
+                        posting_count_ngram1 += x.posting_count as u32;
+                    }
+                    int_to_byte4(posting_count_ngram1)
+                };
+
+                posting_count_ngram_2_compressed = if plo.term_ngram2.is_empty() {
+                    plo.posting_count_ngram_2_compressed
+                } else {
+                    let term_bytes_2 = plo.term_ngram2.as_bytes();
+                    let key0_2 = hash32(term_bytes_2) & index.segment_number_mask1;
+                    let key_hash_2 = hash64(term_bytes_2);
+
+                    let mut posting_count_ngram2 = if index.meta.access_type == AccessType::Mmap {
+                        decode_posting_list_count(
+                            &index.segments_index[key0_2 as usize],
+                            index,
+                            key_hash_2,
+                            key0_2 < *key0 as u32,
+                        )
+                        .unwrap_or_default()
+                    } else if let Some(plo) = index.segments_index[key0_2 as usize]
+                        .segment
+                        .get(&key_hash_2)
+                    {
+                        plo.posting_count
+                    } else {
+                        0
+                    };
+
+                    if let Some(x) = index.segments_level0[key0_2 as usize]
+                        .segment
+                        .get(&key_hash_2)
+                    {
+                        posting_count_ngram2 += x.posting_count as u32;
+                    }
+                    int_to_byte4(posting_count_ngram2)
+                };
+
+                posting_count_ngram_3_compressed = if plo.term_ngram3.is_empty() {
+                    plo.posting_count_ngram_3_compressed
+                } else {
+                    let term_bytes_3 = plo.term_ngram3.as_bytes();
+                    let key0_3 = hash32(term_bytes_3) & index.segment_number_mask1;
+                    let key_hash_3 = hash64(term_bytes_3);
+
+                    let mut posting_count_ngram3 = if index.meta.access_type == AccessType::Mmap {
+                        decode_posting_list_count(
+                            &index.segments_index[key0_3 as usize],
+                            index,
+                            key_hash_3,
+                            key0_3 < *key0 as u32,
+                        )
+                        .unwrap_or_default()
+                    } else if let Some(plo) = index.segments_index[key0_3 as usize]
+                        .segment
+                        .get(&key_hash_3)
+                    {
+                        plo.posting_count
+                    } else {
+                        0
+                    };
+
+                    if let Some(x) = index.segments_level0[key0_3 as usize]
+                        .segment
+                        .get(&key_hash_3)
+                    {
+                        posting_count_ngram3 += x.posting_count as u32;
+                    }
+                    int_to_byte4(posting_count_ngram3)
+                };
+
+                posting_count_ngram_1 =
+                    DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_1_compressed as usize];
+                posting_count_ngram_2 =
+                    DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_2_compressed as usize];
+                posting_count_ngram_3 =
+                    DOCUMENT_LENGTH_COMPRESSION[posting_count_ngram_3_compressed as usize];
+            }
         }
     }
 
@@ -46,9 +222,17 @@ pub(crate) fn compress_postinglist(
         .unwrap();
     let plo_posting_count = plo.posting_count;
 
-    if plo.is_bigram {
-        plo.posting_count_bigram1 = posting_count_bigram1;
-        plo.posting_count_bigram2 = posting_count_bigram2;
+    match plo.ngram_type {
+        NgramType::SingleTerm => {}
+        NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+            plo.posting_count_ngram_1 = posting_count_ngram_1 as f32;
+            plo.posting_count_ngram_2 = posting_count_ngram_2 as f32;
+        }
+        _ => {
+            plo.posting_count_ngram_1 = posting_count_ngram_1 as f32;
+            plo.posting_count_ngram_2 = posting_count_ngram_2 as f32;
+            plo.posting_count_ngram_3 = posting_count_ngram_3 as f32;
+        }
     }
 
     let mut size_compressed_docid_key: usize = 0;
@@ -176,33 +360,41 @@ pub(crate) fn compress_postinglist(
         key_head_pointer_w,
     );
 
-    let bigram_term_index1 = if plo.is_bigram {
-        index
-            .frequent_words
-            .binary_search(&plo.term_bigram1)
-            .unwrap() as u8
-    } else {
-        255
-    };
-    write_u8_ref(
-        bigram_term_index1,
-        &mut index.compressed_index_segment_block_buffer,
-        key_head_pointer_w,
-    );
+    match index.key_head_size {
+        20 => {}
+        22 => {
+            write_u8_ref(
+                posting_count_ngram_1_compressed,
+                &mut index.compressed_index_segment_block_buffer,
+                key_head_pointer_w,
+            );
 
-    let bigram_term_index2 = if plo.is_bigram {
-        index
-            .frequent_words
-            .binary_search(&plo.term_bigram2)
-            .unwrap() as u8
-    } else {
-        255
-    };
-    write_u8_ref(
-        bigram_term_index2,
-        &mut index.compressed_index_segment_block_buffer,
-        key_head_pointer_w,
-    );
+            write_u8_ref(
+                posting_count_ngram_2_compressed,
+                &mut index.compressed_index_segment_block_buffer,
+                key_head_pointer_w,
+            );
+        }
+        _ => {
+            write_u8_ref(
+                posting_count_ngram_1_compressed,
+                &mut index.compressed_index_segment_block_buffer,
+                key_head_pointer_w,
+            );
+
+            write_u8_ref(
+                posting_count_ngram_2_compressed,
+                &mut index.compressed_index_segment_block_buffer,
+                key_head_pointer_w,
+            );
+
+            write_u8_ref(
+                posting_count_ngram_3_compressed,
+                &mut index.compressed_index_segment_block_buffer,
+                key_head_pointer_w,
+            );
+        }
+    }
 
     write_u16_ref(
         plo.pointer_pivot_p_docid,
@@ -247,22 +439,24 @@ pub(crate) fn docid_iterator(
         .unwrap();
 
     let mut field_vec: SmallVec<[(u16, usize); 2]> = SmallVec::new();
-    let mut field_vec_bigram1 = SmallVec::new();
-    let mut field_vec_bigram2 = SmallVec::new();
+    let mut field_vec_ngram1 = SmallVec::new();
+    let mut field_vec_ngram2 = SmallVec::new();
+    let mut field_vec_ngram3 = SmallVec::new();
 
     decode_positions_commit(
         posting_pointer_size,
         embed_flag,
         &index.postings_buffer,
         read_pointer,
-        plo.is_bigram,
+        &plo.ngram_type,
         index.indexed_field_vec.len(),
         index.indexed_field_id_bits,
         index.indexed_field_id_mask,
         index.longest_field_id as u16,
         &mut field_vec,
-        &mut field_vec_bigram1,
-        &mut field_vec_bigram2,
+        &mut field_vec_ngram1,
+        &mut field_vec_ngram2,
+        &mut field_vec_ngram3,
     );
 
     if posting_pointer_size == 2 {
@@ -332,7 +526,9 @@ pub(crate) fn docid_iterator(
         println!("postingPointerSize exceeded: {}", posting_pointer_size);
     }
 
-    if !plo.is_bigram || index.meta.similarity == SimilarityType::Bm25fProximity {
+    if plo.ngram_type == NgramType::SingleTerm
+        || index.meta.similarity == SimilarityType::Bm25fProximity
+    {
         let mut posting_score = 0.0;
         for field in field_vec.iter() {
             let document_length_compressed =
@@ -357,20 +553,21 @@ pub(crate) fn docid_iterator(
             plo.max_docid = *doc_id;
             plo.max_p_docid = p_docid as u16;
         }
-    } else {
-        let idf_bigram1 = (((index.indexed_doc_count as f32 - plo.posting_count_bigram1 as f32
-            + 0.5)
-            / (plo.posting_count_bigram1 as f32 + 0.5))
+    } else if plo.ngram_type == NgramType::NgramFF
+        || plo.ngram_type == NgramType::NgramRF
+        || plo.ngram_type == NgramType::NgramFR
+    {
+        let idf_ngram1 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_1 + 0.5)
+            / (plo.posting_count_ngram_1 + 0.5))
             + 1.0)
             .ln();
-        let idf_bigram2 = (((index.indexed_doc_count as f32 - plo.posting_count_bigram2 as f32
-            + 0.5)
-            / (plo.posting_count_bigram2 as f32 + 0.5))
+        let idf_ngram2 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_2 + 0.5)
+            / (plo.posting_count_ngram_2 + 0.5))
             + 1.0)
             .ln();
 
         let mut posting_score = 0.0;
-        for field in field_vec_bigram1.iter() {
+        for field in field_vec_ngram1.iter() {
             let document_length_compressed =
                 index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
@@ -378,18 +575,18 @@ pub(crate) fn docid_iterator(
             let document_length_quotient_doc =
                 document_length_normalized_doc / index.document_length_normalized_average;
 
-            let tf_bigram1 = field.1 as f32;
+            let tf_ngram1 = field.1 as f32;
 
             let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
-                * idf_bigram1
-                * ((tf_bigram1 * (K + 1.0)
-                    / (tf_bigram1 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
+                * idf_ngram1
+                * ((tf_ngram1 * (K + 1.0)
+                    / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
                     + SIGMA);
         }
 
-        for field in field_vec_bigram2.iter() {
+        for field in field_vec_ngram2.iter() {
             let document_length_compressed =
                 index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
@@ -397,14 +594,91 @@ pub(crate) fn docid_iterator(
             let document_length_quotient_doc =
                 document_length_normalized_doc / index.document_length_normalized_average;
 
-            let tf_bigram2 = field.1 as f32;
+            let tf_ngram2 = field.1 as f32;
 
             let weight = index.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
-                * idf_bigram2
-                * ((tf_bigram2 * (K + 1.0)
-                    / (tf_bigram2 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
+                * idf_ngram2
+                * ((tf_ngram2 * (K + 1.0)
+                    / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
+                    + SIGMA);
+        }
+
+        if posting_score > plo.max_block_score {
+            plo.max_block_score = posting_score;
+            plo.max_docid = *doc_id;
+            plo.max_p_docid = p_docid as u16;
+        }
+    } else {
+        let idf_ngram1 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_1 + 0.5)
+            / (plo.posting_count_ngram_1 + 0.5))
+            + 1.0)
+            .ln();
+        let idf_ngram2 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_2 + 0.5)
+            / (plo.posting_count_ngram_2 + 0.5))
+            + 1.0)
+            .ln();
+        let idf_ngram3 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_3 + 0.5)
+            / (plo.posting_count_ngram_3 + 0.5))
+            + 1.0)
+            .ln();
+
+        let mut posting_score = 0.0;
+        for field in field_vec_ngram1.iter() {
+            let document_length_compressed =
+                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+            let document_length_normalized_doc =
+                DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
+            let document_length_quotient_doc =
+                document_length_normalized_doc / index.document_length_normalized_average;
+
+            let tf_ngram1 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            posting_score += weight
+                * idf_ngram1
+                * ((tf_ngram1 * (K + 1.0)
+                    / (tf_ngram1 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
+                    + SIGMA);
+        }
+
+        for field in field_vec_ngram2.iter() {
+            let document_length_compressed =
+                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+            let document_length_normalized_doc =
+                DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
+            let document_length_quotient_doc =
+                document_length_normalized_doc / index.document_length_normalized_average;
+
+            let tf_ngram2 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            posting_score += weight
+                * idf_ngram2
+                * ((tf_ngram2 * (K + 1.0)
+                    / (tf_ngram2 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
+                    + SIGMA);
+        }
+
+        for field in field_vec_ngram3.iter() {
+            let document_length_compressed =
+                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+            let document_length_normalized_doc =
+                DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
+            let document_length_quotient_doc =
+                document_length_normalized_doc / index.document_length_normalized_average;
+
+            let tf_ngram3 = field.1 as f32;
+
+            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+
+            posting_score += weight
+                * idf_ngram3
+                * ((tf_ngram3 * (K + 1.0)
+                    / (tf_ngram3 + (K * (1.0 - B + (B * document_length_quotient_doc)))))
                     + SIGMA);
         }
 

@@ -155,9 +155,10 @@ pub(crate) async fn single_docid<'a>(
         byte_array,
         p_docid: 0,
         idf: query_list_item_mut.idf,
-        idf_bigram1: query_list_item_mut.idf_bigram1,
-        idf_bigram2: query_list_item_mut.idf_bigram2,
-        is_bigram: query_list_item_mut.is_bigram,
+        idf_ngram1: query_list_item_mut.idf_ngram1,
+        idf_ngram2: query_list_item_mut.idf_ngram2,
+        idf_ngram3: query_list_item_mut.idf_ngram3,
+        ngram_type: query_list_item_mut.ngram_type.clone(),
     };
 
     match compression_type {

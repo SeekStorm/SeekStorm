@@ -5,8 +5,8 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, DeleteDocument, FileType, FrequentwordType, IndexDocument, IndexDocuments,
-    IndexMetaObject, SimilarityType, StemmerType, StopwordType, TokenizerType, create_index,
-    open_index,
+    IndexMetaObject, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType,
+    create_index, open_index,
 };
 use seekstorm::search::{QueryType, ResultType, Search};
 use std::collections::HashSet;
@@ -33,6 +33,7 @@ fn test_01_create_index() {
         stemmer: StemmerType::None,
         stop_words: StopwordType::None,
         frequent_words: FrequentwordType::English,
+        ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
         access_type: AccessType::Mmap,
     };
 

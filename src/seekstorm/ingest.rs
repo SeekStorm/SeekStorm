@@ -425,13 +425,12 @@ pub(crate) async fn path_recurse(
         let path = entry.path();
 
         let md = metadata(path).unwrap();
-        if md.is_file() {
-            if let Some(extension) = path.extension().and_then(OsStr::to_str) {
-                if extension.to_lowercase() == "pdf" && index_arc.index_pdf_file(path).await.is_ok()
-                {
-                    *docid += 1;
-                }
-            }
+        if md.is_file()
+            && let Some(extension) = path.extension().and_then(OsStr::to_str)
+            && extension.to_lowercase() == "pdf"
+            && index_arc.index_pdf_file(path).await.is_ok()
+        {
+            *docid += 1;
         };
     }
 }
@@ -480,12 +479,10 @@ impl IngestPdf for IndexArc {
                         if let Some(extension) = Path::new(&data_path.display().to_string())
                             .extension()
                             .and_then(OsStr::to_str)
+                            && extension.to_lowercase() == "pdf"
+                            && self.index_pdf_file(data_path).await.is_ok()
                         {
-                            if extension.to_lowercase() == "pdf"
-                                && self.index_pdf_file(data_path).await.is_ok()
-                            {
-                                docid += 1;
-                            }
+                            docid += 1;
                         }
                     } else {
                         path_recurse(self, data_path, &mut docid).await;

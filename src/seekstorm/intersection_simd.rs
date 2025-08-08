@@ -461,6 +461,7 @@ pub(crate) fn intersection_vector16(
         let mut i_a = 0;
         let mut i_b = 0;
         let vectorlength = mem::size_of::<uint16x8_t>() / mem::size_of::<u16>();
+
         let st_b = (s_b / vectorlength) * vectorlength;
         while i_a < s_a && i_b < st_b {
             if read_u16(&a[..], i_a * 2) < read_u16(&b[..], i_b * 2) {
