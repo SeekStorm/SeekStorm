@@ -14,7 +14,7 @@
 If you strive for the best possible performance, there is no one-fits-all approach.
 
 Depending on the **query type** (union, intersection, phrase) and on the **term frequency** (posting list length) of your data,  
-many optimizations can be applied: WAND, MAXSCORE, roaring bitmaps, SIMD, galloping. Another interesting optimization is N-gram indexing.
+many optimizations can be applied: WAND, MAXSCORE, roaring bitmaps, SIMD, galloping, sharded index. Another interesting optimization is N-gram indexing.
 
 ### What are N-grams
 
@@ -192,9 +192,13 @@ In AND search, the terms of a query might occur everywhere within a document, an
 But there is something slightly similar: Keyword combination indexing. We could derive all keyword combinations that occur within a document and index those combinations in addition to the single terms and N-grams.
 This would be essentially a precalculation of AND search at indexing time, and offer the same speed benefits to AND search that N-Gram indexing offers for Phrase search.
 
-There is only one problem: The associated cost of naive keyword combination indexing in terms of index size and indexing time is unbearable: it is roughly O(UK^CL)  
-where UK is the number of unique terms in a document and CL is the keyword combination length, i.e., the maximum number of terms in a keyword combination we want to index.
-The latter equals the maximum length of AND queries we want to support.
+There is only one problem: The associated cost of naive keyword combination indexing in terms of index size and indexing time is unbearable. 
+The number of combinations without repetition is C(n, k) = ∑ᵢ₌₁..ₖ  n! / (i!(n-i)!),
+where n is the number of unique terms in a document and k is the keyword combination length, 
+i.e., the maximum number of terms in an AND query we want to support = the maximum number of terms in a keyword combination we need to index.
+
+E.g., a document with 200 unique terms and a maximum query length of 5 ≈ 2.600.000.000 combinations we need to index!
+
 Luckily, there are several compression methods to significantly reduce the number of keyword combinations per document:
 * Stopword removal
 * Stemming
