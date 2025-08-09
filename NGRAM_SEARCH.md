@@ -14,8 +14,7 @@
 If you strive for the best possible performance, there is no one-fits-all approach.
 
 Depending on the **query type** (union, intersection, phrase) and on the **term frequency** (posting list length) of your data,  
-many optimizations can be applied:  
-WAND, MAXSCORE, roaring bitmaps, SIMD, galloping. Another interesting optimization is N-gram indexing.
+many optimizations can be applied: WAND, MAXSCORE, roaring bitmaps, SIMD, galloping. Another interesting optimization is N-gram indexing.
 
 ### What are N-grams
 
@@ -206,7 +205,7 @@ Luckily, there are several compression methods to significantly reduce the numbe
 
 HDK (high discriminative key) is an interesting concept, where keyword combinations are only formed from frequent terms and term combinations, until the resulting term combination becomes **intrinsically rare**.  
 In a second step, within those intrinsically rare posting lists, a full check of all query terms is done within bloom filters of terms associated with every document in the intrinsically rare posting list.  
-For details, see https://www.researchgate.net/publication/4250903_Scalable_Peer-to-Peer_Web_Retrieval_with_Highly_Discriminative_Keys
+For details, see [Scalable Peer-to-Peer Web_Retrieval with Highly Discriminative Keys](https://www.researchgate.net/publication/4250903_Scalable_Peer-to-Peer_Web_Retrieval_with_Highly_Discriminative_Keys).
 
 Some of the above methods are reducing recall, but increasing relevancy. This could be useful in a two-tier approach, where we first try to find results with fast keyword combination search,  
 and only if that fails, we would fall back to slow conventional intersection.
@@ -337,13 +336,19 @@ Here we propose a sensible trade-off between query performance improvement and i
 > Furthermore, for medium-sized indices (<100 GB), index size is usually no concern at all, but (tail) latency is.
 
 For workloads where the **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
+```rust
 NgramSet::SingleTerm as u8
+```
 
 For workloads with a **good balance of performance and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams**:  
+```rust
 NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF
+```
 
 For workloads where **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**: 
+```rust
 NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF | NgramSet::NgramFFF
+```
 
 ### Summary
 
@@ -361,8 +366,10 @@ To implement N-gram indexing for faster phrase search, 30% of 25K LoC of the See
 
 So far, we have indexed the N-grams that occurred in the documents, independent of the likelihood that they will appear in queries. 
 With a probabilistic approach (i.e., via query log file analysis), we can judge how likely certain N-grams are to appear in queries, and we can abstain from indexing less likely N-grams.  
+
 The more likely N-grams can be stored in a Bloom filter, which is consulted during indexing and search to determine whether or not to combine terms into N-grams.
 This will significantly reduce the index size and indexing time overhead of N-gram indexing, while mostly maintaining its query latency benefits.  
+
 The achieved space savings can be used to increase the number of terms deemed to be frequent, and thus further improve (tail) latencies for more phrase queries.  
 
 ### Source code
