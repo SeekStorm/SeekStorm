@@ -197,7 +197,7 @@ The number of combinations without repetition is C(n, k) = ∑ᵢ₌₁..ₖ  n!
 where n is the number of unique terms in a document and k is the keyword combination length, 
 i.e., the maximum number of terms in an AND query we want to support = the maximum number of terms in a keyword combination we need to index.
 
-E.g., a document with 200 unique terms and a maximum query length of 5 ≈ 2.600.000.000 combinations we need to index!
+E.g., a document with 200 unique terms and a maximum query length of 5 ≈ 2,600,000,000 combinations we need to index!
 
 Luckily, there are several compression methods to significantly reduce the number of keyword combinations per document:
 * Stopword removal
