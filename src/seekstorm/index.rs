@@ -695,6 +695,19 @@ pub struct IndexMetaObject {
     /// NgramRFF   = 0b00010000, rare frequent frequent
     /// NgramFFR   = 0b00100000, frequent frequent rare
     /// NgramFRF   = 0b01000000, frequent rare frequent
+    /// 
+    /// When **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
+    /// ```rust
+    ///NgramSet::SingleTerm as u8
+    /// ```
+    /// For a **good balance of latency and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams** (default):  
+    /// ```rust
+    /// NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF
+    /// ```
+    /// When **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**: 
+    /// ```rust
+    /// NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF | NgramSet::NgramFFF
+    /// ```
     #[serde(default = "ngram_indexing_default")]
     pub ngram_indexing: u8,
 

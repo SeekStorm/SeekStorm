@@ -339,17 +339,17 @@ Here we propose a sensible trade-off between query performance improvement and i
 > But in order to reduce tail latency by a factor of 8, it would be much easier and less expensive to increase the disk capacity by a factor of 3, than to have 8x faster processors or increase the node number by a factor of 8.  
 > Furthermore, for medium-sized indices (<100 GB), index size is usually no concern at all, but (tail) latency is.
 
-For workloads where the **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
+When **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
 ```rust
 NgramSet::SingleTerm as u8
 ```
 
-For workloads with a **good balance of performance and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams**:  
+For a **good balance of latency and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams**:  
 ```rust
 NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF
 ```
 
-For workloads where **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**: 
+When **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**: 
 ```rust
 NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF | NgramSet::NgramFFF
 ```
