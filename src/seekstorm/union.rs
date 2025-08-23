@@ -211,20 +211,52 @@ pub(crate) async fn union_docid<'a>(
         return;
     }
 
-    union_scan(
-        index,
-        non_unique_query_list,
-        query_list,
-        not_query_list,
-        block_id,
-        result_count,
-        search_result,
-        top_k,
-        result_type,
-        field_filter_set,
-        facet_filter,
-    )
-    .await;
+    if query_list.len() <= 8 {
+        union_scan_8(
+            index,
+            non_unique_query_list,
+            query_list,
+            not_query_list,
+            block_id,
+            result_count,
+            search_result,
+            top_k,
+            result_type,
+            field_filter_set,
+            facet_filter,
+        )
+        .await;
+    } else {
+        let mut result_count_local = *result_count;
+        union_scan_32(
+            index,
+            non_unique_query_list,
+            query_list,
+            not_query_list,
+            block_id,
+            result_count,
+            search_result,
+            top_k,
+            result_type,
+            field_filter_set,
+            facet_filter,
+        )
+        .await;
+
+        if query_list.len() > 32 && result_type == &ResultType::TopkCount {
+            union_count(
+                index,
+                &mut result_count_local,
+                search_result,
+                query_list,
+                not_query_list,
+                facet_filter,
+                block_id,
+            )
+            .await;
+            *result_count = result_count_local;
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -365,10 +397,8 @@ pub(crate) async fn union_blockid<'a>(
     }
 }
 
-const MASK_ARRAY: [u8; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
-
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn union_scan<'a>(
+pub(crate) async fn union_scan_8<'a>(
     index: &'a Index,
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
     query_list: &mut [PostingListObjectQuery<'a>],
@@ -381,14 +411,21 @@ pub(crate) async fn union_scan<'a>(
     field_filter_set: &AHashSet<u16>,
     facet_filter: &[FilterSparse],
 ) {
+    let union_max = 8usize;
+
     let mut query_terms_bitset_table: [u8; ROARING_BLOCK_SIZE] = [0u8; ROARING_BLOCK_SIZE];
     let mut result_count_local = 0;
 
-    query_list.sort_by(|a, b| b.p_docid_count.partial_cmp(&a.p_docid_count).unwrap());
+    query_list.sort_by(|a, b| {
+        b.blocks[b.p_block as usize]
+            .max_block_score
+            .partial_cmp(&a.blocks[a.p_block as usize].max_block_score)
+            .unwrap()
+    });
 
     let mut max_score = 0.0;
 
-    for (i, plo) in query_list.iter_mut().take(8).enumerate() {
+    for (i, plo) in query_list.iter_mut().take(union_max).enumerate() {
         if plo.end_flag {
             continue;
         }
@@ -494,7 +531,7 @@ pub(crate) async fn union_scan<'a>(
         && max_score <= search_result.topk_candidates._elements[0].score
         && search_result.topk_candidates.result_sort.is_empty();
 
-    let query_list_len = cmp::min(query_list.len(), 8);
+    let query_list_len = cmp::min(query_list.len(), union_max);
 
     let query_combination_count = 1 << query_list_len;
     let mut query_terms_max_score_sum_table: Vec<f32> = vec![0.0; query_combination_count];
@@ -506,7 +543,7 @@ pub(crate) async fn union_scan<'a>(
         }
     }
 
-    let mut p_docid_array: [u16; 8] = [0; 8];
+    let mut p_docid_array = vec![0u16; union_max];
 
     let mut _result_count = 0;
     let block_id_msb = block_id << 16;
@@ -521,7 +558,7 @@ pub(crate) async fn union_scan<'a>(
                         > search_result.topk_candidates._elements[0].score)
             {
                 for (j, query_term) in query_list.iter_mut().take(query_list_len).enumerate() {
-                    query_term.bm25_flag = (query_terms_bitset & MASK_ARRAY[j]) > 0;
+                    query_term.bm25_flag = (query_terms_bitset & (1 << j)) > 0;
 
                     query_term.p_docid = p_docid_array[j] as usize;
                 }
@@ -545,12 +582,220 @@ pub(crate) async fn union_scan<'a>(
             }
 
             if !block_skip {
-                for j in 0..query_list_len {
-                    if (query_terms_bitset & MASK_ARRAY[j]) > 0 {
-                        p_docid_array[j] += 1;
-                    }
+                for (j, item) in p_docid_array.iter_mut().take(query_list_len).enumerate() {
+                    *item += ((query_terms_bitset >> j) & 1) as u16
                 }
             }
+        }
+    }
+
+    *result_count += result_count_local;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn union_scan_32<'a>(
+    index: &'a Index,
+    non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
+    query_list: &mut [PostingListObjectQuery<'a>],
+    not_query_list: &mut [PostingListObjectQuery<'a>],
+    block_id: usize,
+    result_count: &mut i32,
+    search_result: &mut SearchResult<'_>,
+    top_k: usize,
+    result_type: &ResultType,
+    field_filter_set: &AHashSet<u16>,
+    facet_filter: &[FilterSparse],
+) {
+    let union_max = 32usize;
+
+    let mut query_terms_bitset_table: [u32; ROARING_BLOCK_SIZE] = [0u32; ROARING_BLOCK_SIZE];
+    let mut result_count_local = 0;
+
+    query_list.sort_by(|a, b| {
+        b.blocks[b.p_block as usize]
+            .max_block_score
+            .partial_cmp(&a.blocks[a.p_block as usize].max_block_score)
+            .unwrap()
+    });
+
+    let mut max_score = 0.0;
+    let mut mask = u32::MAX >> (32 - query_list.len());
+    for plo in query_list.iter_mut().take(union_max).rev() {
+        if plo.end_flag {
+            continue;
+        }
+        max_score += plo.blocks[plo.p_block as usize].max_block_score;
+
+        if max_score > search_result.topk_candidates._elements[0].score {
+            break;
+        }
+
+        mask >>= 1;
+    }
+
+    let mut max_score = 0.0;
+
+    for (i, plo) in query_list.iter_mut().take(union_max).enumerate() {
+        if plo.end_flag {
+            continue;
+        }
+
+        plo.p_docid = 0;
+        let mask = 1 << i;
+        max_score += plo.blocks[plo.p_block as usize].max_block_score;
+
+        if plo.compression_type == CompressionType::Bitmap {
+            for ulong_pos in 0u64..1024 {
+                let mut intersect: u64 = read_u64(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ulong_pos as usize * 8,
+                );
+
+                while intersect != 0 {
+                    let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;
+                    intersect = unsafe { _blsr_u64(intersect) };
+
+                    let docid = ((ulong_pos << 6) + bit_pos) as usize;
+                    query_terms_bitset_table[docid] |= mask;
+                }
+            }
+        } else if plo.compression_type == CompressionType::Array {
+            for i in 0..plo.p_docid_count {
+                let docid =
+                    read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
+
+                query_terms_bitset_table[docid] |= mask;
+            }
+        } else {
+            let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
+
+            for ii in (1..(runs_count << 1) + 1).step_by(2) {
+                let startdocid = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ii as usize * 2,
+                ) as usize;
+                let runlength = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    (ii + 1) as usize * 2,
+                ) as usize;
+
+                for j in 0..=runlength {
+                    let docid = startdocid + j;
+
+                    query_terms_bitset_table[docid] |= mask;
+                }
+            }
+        }
+    }
+
+    for plo in not_query_list.iter_mut() {
+        if !plo.bm25_flag {
+            continue;
+        }
+
+        if plo.compression_type == CompressionType::Bitmap {
+            for ulong_pos in 0u64..1024 {
+                let mut intersect: u64 = read_u64(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ulong_pos as usize * 8,
+                );
+
+                while intersect != 0 {
+                    let bit_pos = unsafe { _mm_tzcnt_64(intersect) } as u64;
+                    intersect = unsafe { _blsr_u64(intersect) };
+
+                    let docid = ((ulong_pos << 6) + bit_pos) as usize;
+                    query_terms_bitset_table[docid] = 0;
+                }
+            }
+        } else if plo.compression_type == CompressionType::Array {
+            for i in 0..plo.p_docid_count {
+                let docid =
+                    read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
+
+                query_terms_bitset_table[docid] = 0;
+            }
+        } else {
+            let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
+
+            for ii in (1..(runs_count << 1) + 1).step_by(2) {
+                let startdocid = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    ii as usize * 2,
+                ) as usize;
+                let runlength = read_u16(
+                    &plo.byte_array[plo.compressed_doc_id_range..],
+                    (ii + 1) as usize * 2,
+                ) as usize;
+
+                for j in 0..=runlength {
+                    let docid = startdocid + j;
+
+                    query_terms_bitset_table[docid] = 0;
+                }
+            }
+        }
+    }
+
+    let block_skip = search_result.topk_candidates.current_heap_size >= top_k
+        && max_score <= search_result.topk_candidates._elements[0].score
+        && search_result.topk_candidates.result_sort.is_empty();
+
+    let query_list_len = cmp::min(query_list.len(), union_max);
+
+    let mut p_docid_array = vec![0u16; union_max];
+
+    let mut _result_count = 0;
+    let block_id_msb = block_id << 16;
+
+    for (i, query_terms_bitset) in query_terms_bitset_table.iter().enumerate() {
+        if *query_terms_bitset > 0 {
+            result_count_local += 1;
+
+            if !block_skip
+                && (search_result.topk_candidates.current_heap_size < top_k
+                    || query_terms_bitset & mask > 0)
+            {
+                let mut query_terms_max_score_sum = 0f32;
+                for (j, plo) in query_list.iter().enumerate() {
+                    if (query_terms_bitset & (1 << j)) > 0 {
+                        query_terms_max_score_sum +=
+                            plo.blocks[plo.p_block as usize].max_block_score;
+                    }
+                }
+                if query_terms_max_score_sum > search_result.topk_candidates._elements[0].score {
+                    for (j, query_term) in query_list.iter_mut().take(query_list_len).enumerate() {
+                        query_term.bm25_flag = (query_terms_bitset & (1 << j)) > 0;
+
+                        query_term.p_docid = p_docid_array[j] as usize;
+                    }
+
+                    add_result_multiterm_multifield(
+                        index,
+                        block_id_msb | i,
+                        &mut _result_count,
+                        search_result,
+                        top_k,
+                        result_type,
+                        field_filter_set,
+                        facet_filter,
+                        non_unique_query_list,
+                        query_list,
+                        not_query_list,
+                        false,
+                        f32::MAX,
+                        false,
+                    );
+                }
+            }
+
+            if !block_skip {
+                for (j, item) in p_docid_array.iter_mut().take(query_list_len).enumerate() {
+                    *item += ((query_terms_bitset >> j) & 1) as u16
+                }
+            }
+
+            continue;
         }
     }
 
@@ -1164,7 +1409,7 @@ pub(crate) async fn union_docid_3<'a>(
                 );
             }
 
-            if recursion_count < 100 {
+            if recursion_count < 200 {
                 union_docid_3(
                     index,
                     non_unique_query_list,

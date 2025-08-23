@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2025-08-23
+
+### Improved
+
+- Faster and complete topk results for union queries > 8 terms by using MAXSCORE.
+
+### Fixed
+
+- Required target_features for using gxhash fixed.
+
 ## [0.13.0] - 2025-08-08
 
 ### Added

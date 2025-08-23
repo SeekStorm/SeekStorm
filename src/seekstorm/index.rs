@@ -37,7 +37,7 @@ use crate::{
     },
 };
 
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(all(target_feature = "aes", target_feature = "sse2"))]
 use gxhash::{gxhash32, gxhash64};
 
 pub(crate) const FILE_PATH: &str = "files";
@@ -695,7 +695,7 @@ pub struct IndexMetaObject {
     /// NgramRFF   = 0b00010000, rare frequent frequent
     /// NgramFFR   = 0b00100000, frequent frequent rare
     /// NgramFRF   = 0b01000000, frequent rare frequent
-    /// 
+    ///
     /// When **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
     /// ```rust
     ///NgramSet::SingleTerm as u8
@@ -704,7 +704,7 @@ pub struct IndexMetaObject {
     /// ```rust
     /// NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF
     /// ```
-    /// When **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**: 
+    /// When **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**:
     /// ```rust
     /// NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF | NgramSet::NgramFFF
     /// ```
@@ -2320,7 +2320,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                             if !mute {
                                 println!(
-                                    "{} name {} id {} version {} {} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
+                                    "{} name {} id {} version {} {} shards (1) ngram {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
                                     INDEX_FILENAME,
                                     index.meta.name,
                                     index.meta.id,
@@ -2330,6 +2330,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     INDEX_FORMAT_VERSION_MAJOR.to_string()
                                         + "."
                                         + &INDEX_FORMAT_VERSION_MINOR.to_string(),
+                                    index.meta.ngram_indexing,
                                     index.level_index.len(),
                                     index.indexed_field_vec.len(),
                                     index.schema_map.len(),
@@ -2433,25 +2434,25 @@ lazy_static! {
 }
 
 #[inline]
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(all(target_feature = "aes", target_feature = "sse2"))]
 pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
     gxhash32(term_bytes, 1234)
 }
 
 #[inline]
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(all(target_feature = "aes", target_feature = "sse2"))]
 pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
     gxhash64(term_bytes, 1234) & 0b1111111111111111111111111111111111111111111111111111111111111000
 }
 
 #[inline]
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
 pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
     HASHER_32.hash_one(term_bytes)
 }
 
 #[inline]
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
 pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
     HASHER_64.hash_one(term_bytes)
         & 0b1111111111111111111111111111111111111111111111111111111111111000

@@ -601,9 +601,13 @@ impl IngestJson for IndexArc {
 
                 let elapsed_time = start_time.elapsed().as_nanos();
 
+                let date: DateTime<Utc> = DateTime::from(SystemTime::now());
+
                 println!(
-                    "{}: docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
+                    "{}: {}  shards (1)  ngrams {:08b}  docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
                     "Indexing finished".green(),
+                    date.format("%D"),
+                    self.read().await.meta.ngram_indexing,
                     docid.to_formatted_string(&Locale::en),
                     (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
                     ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)

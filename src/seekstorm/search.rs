@@ -2123,7 +2123,10 @@ impl Search for IndexArc {
                         query_term_count,
                     )
                     .await;
-                } else if SPEEDUP_FLAG && search_result.topk_candidates.result_sort.is_empty() {
+                } else if SPEEDUP_FLAG
+                    && search_result.topk_candidates.result_sort.is_empty()
+                    && query_list_len <= 10
+                {
                     union_docid_3(
                         &index_ref,
                         &mut non_unique_query_list,
