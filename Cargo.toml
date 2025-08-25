@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "0.13.1"
+version = "0.13.2"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -88,3 +88,8 @@ debug-assertions = false
 panic = "abort"
 overflow-checks = false
 strip = "debuginfo"
+
+[package.metadata.docs.rs]
+rustc-args = ["-C", "target-cpu=native"]
+rustdoc-args = ["-C", "target-cpu=native"]
+

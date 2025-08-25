@@ -1,5 +1,10 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
+rustdocflags = ["-C", "target-cpu=native"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=native"]
+rustdocflags = ["-C", "target-cpu=native"]
 
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "debug-assertions=false"]
