@@ -2448,7 +2448,7 @@ pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
 #[inline]
 #[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
 pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
-    HASHER_32.hash_one(term_bytes)
+    HASHER_32.hash_one(term_bytes) as u32
 }
 
 #[inline]
