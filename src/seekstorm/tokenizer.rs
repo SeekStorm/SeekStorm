@@ -217,7 +217,6 @@ pub fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -259,6 +258,7 @@ pub fn tokenizer(
                             }
                             true
                         }
+
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;

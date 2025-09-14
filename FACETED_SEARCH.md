@@ -43,7 +43,7 @@ at least one (boolean OR) of the specified values.
 
 If the **query is changed** and/or the **facet filter is changed** then both **search results and facet counts are changed**.
 
-#### String Facets (FieldType::String)
+#### String Facets (FieldType::String16 and FieldType::String32)
 
 E.g. the **Language field** of a document may have different values: e.g. English, French, German, Russian, Chinese.
 
@@ -61,7 +61,7 @@ If no **sort** field is specified, then the results are sorted by rank in descen
 
 SeekStorm supports the **String** field type for **String Facet** counting, filtering &amp; sorting.
 
-#### Multi-value string facets (FieldType::StringSet)
+#### Multi-value string facets (FieldType::StringSet16 and FieldType::StringSet32)
 
 Similar to String facets, but while string facets allow only one value per field per document, String Set facets allow to assign multiple values at the same time per field per document.
 Great for e.g. genres, authors, languages, educations, product categories, tags ..., where an item can be associated with multiple values of a field.
@@ -122,7 +122,7 @@ let schema_json = r#"
 [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 {"field":"body","field_type":"Text","stored":true,"indexed":true},
 {"field":"url","field_type":"Text","stored":true,"indexed":false},
-{"field":"town","field_type":"String","stored":false,"indexed":false,"facet":true}]"#;
+{"field":"town","field_type":"String16","stored":false,"indexed":false,"facet":true}]"#;
 
 let schema=serde_json::from_str(schema_json).unwrap();
 let meta = IndexMetaObject {
@@ -175,7 +175,7 @@ Therefore only string facets can be returned with get_index_string_facets, while
 
 ```rust
 let query_facets = vec![
-    QueryFacet::String {
+    QueryFacet::String16 {
         field: "age".into(),
         prefix: "".into(),
         length: u16::MAX},
@@ -193,7 +193,7 @@ The values are sorted by the frequency of the appearance of the value within the
 
 ```rust
 let query_facets = vec![
-    QueryFacet::String {
+    QueryFacet::String16 {
         field: "language".into(),
         prefix: "ger".into(),
         length: 10},
@@ -247,7 +247,7 @@ let query_type=QueryType::Intersection;
 let result_type=ResultType::TopkCount;
 let include_uncommitted=false;
 let field_filter=Vec::new();
-let query_facets = vec![QueryFacet::String {field: "age".into(),prefix: "".into(),length:u16::MAX}];
+let query_facets = vec![QueryFacet::String16 {field: "age".into(),prefix: "".into(),length:u16::MAX}];
 let facet_filter=Vec::new();
 
 let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;
@@ -301,7 +301,7 @@ The values are sorted by the frequency of the appearance of the value within the
 
 ```rust
 let query_facets = vec![
-    QueryFacet::String {
+    QueryFacet::String16 {
         field: "language".into(),
         prefix: "ger".into(),
         length: 10},

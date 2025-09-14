@@ -3,7 +3,7 @@ use crate::{
     compatible::{_blsr_u64, _mm_tzcnt_64},
     geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
-        AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
+        AccessType, CompressionType, FieldType, Index, NonUniquePostingListObjectQuery,
         PostingListObjectQuery, QueueObject, ROARING_BLOCK_SIZE,
     },
     intersection::intersection_blockid,
@@ -1011,6 +1011,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::U16(_range_type, ranges) => {
                             let facet_value = read_u16(
@@ -1020,6 +1021,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::U32(_range_type, ranges) => {
                             let facet_value = read_u32(
@@ -1029,6 +1031,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::U64(_range_type, ranges) => {
                             let facet_value = read_u64(
@@ -1038,6 +1041,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::I8(_range_type, ranges) => {
                             let facet_value = read_i8(
@@ -1047,6 +1051,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::I16(_range_type, ranges) => {
                             let facet_value = read_i16(
@@ -1056,6 +1061,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::I32(_range_type, ranges) => {
                             let facet_value = read_i32(
@@ -1065,6 +1071,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::I64(_range_type, ranges) => {
                             let facet_value = read_i64(
@@ -1074,6 +1081,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::Timestamp(_range_type, ranges) => {
                             let facet_value = read_i64(
@@ -1083,6 +1091,7 @@ pub(crate) async fn union_count<'a>(
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::F32(_range_type, ranges) => {
                             let facet_value = read_f32(
@@ -1094,6 +1103,7 @@ pub(crate) async fn union_count<'a>(
                                     range.1.partial_cmp(&facet_value).unwrap()
                                 })
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::F64(_range_type, ranges) => {
                             let facet_value = read_f64(
@@ -1105,6 +1115,7 @@ pub(crate) async fn union_count<'a>(
                                     range.1.partial_cmp(&facet_value).unwrap()
                                 })
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
                         Ranges::Point(_range_type, ranges, base, unit) => {
                             let facet_value = read_u64(
@@ -1118,12 +1129,23 @@ pub(crate) async fn union_count<'a>(
                                     range.1.partial_cmp(&facet_value_distance).unwrap()
                                 })
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                as u32
                         }
-
-                        _ => read_u16(
-                            &index.facets_file_mmap,
-                            (index.facets_size_sum * docid) + facet.offset,
-                        ),
+                        _ => {
+                            if facet.field_type == FieldType::String16
+                                || facet.field_type == FieldType::StringSet16
+                            {
+                                read_u16(
+                                    &index.facets_file_mmap,
+                                    (index.facets_size_sum * docid) + facet.offset,
+                                ) as u32
+                            } else {
+                                read_u32(
+                                    &index.facets_file_mmap,
+                                    (index.facets_size_sum * docid) + facet.offset,
+                                )
+                            }
+                        }
                     };
 
                     *search_result.query_facets[i]
@@ -1426,6 +1448,8 @@ pub(crate) async fn union_docid_3<'a>(
                     query_term_count,
                 )
                 .await;
+            } else {
+                println!("union early termination {}", recursion_count);
             }
         }
     }

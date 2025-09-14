@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2025-09-12
+
+### Improved
+
+- Maximum cardinality of distinct string facet values increased from 65_535 (16 bit) to 4_294_967_295 (32 bit). 
+  - FieldType::String32 and FieldType::StringSet32 added, that allow a cardinality of 4_294_967_295 (32 bit) distinct string facet values,  
+    while FieldType::String and FieldType::StringSet were renamed to FieldType::String16 and FieldType::StringSet16 that allow only a cardinality of 65_535 (16 bit) distinct string facet values, but are space-saving. 
+  - QueryFacet::String32 and QueryFacet::StringSet32 added, that allow a cardinality of 4_294_967_295 (32 bit) distinct string facet values,  
+    while QueryFacet::String and QueryFacet::StringSet were renamed to QueryFacet::String16 and QueryFacet::StringSet16 that allow only a cardinality of 65_535 (16 bit) distinct string facet values, but are space-saving. 
+  - FacetFilter::String32 and FacetFilter::StringSet32 added, FacetFilter::String and FacetFilter::StringSet renamed to FacetFilter::String16 and FacetFilter::StringSet16.  
+  - FilterSparse::String32 and FilterSparse::StringSet32 added, FilterSparse::String and FilterSparse::StringSet renamed to FilterSparse::String16 and FilterSparse::StringSet16
+
+### Changed
+
+- Index format changed (INDEX_FORMAT_VERSION_MAJOR changed).
+
 ## [0.13.3] - 2025-08-26
 
 ### Fixed

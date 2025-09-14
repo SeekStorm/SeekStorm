@@ -308,7 +308,7 @@ impl<'a> MinHeap<'a> {
                     };
                 }
 
-                FieldType::String => {
+                FieldType::String16 => {
                     let offset = self.index.facets[field.idx].offset;
 
                     let facet_id_1 = read_u16(
@@ -347,7 +347,7 @@ impl<'a> MinHeap<'a> {
                     };
                 }
 
-                FieldType::StringSet => {
+                FieldType::StringSet16 => {
                     let offset = self.index.facets[field.idx].offset;
 
                     let facet_id_1 = read_u16(
@@ -370,6 +370,84 @@ impl<'a> MinHeap<'a> {
                     let facet_value_2 = self.index.facets[field.idx]
                         .values
                         .get_index((facet_id_2).into())
+                        .unwrap()
+                        .1
+                        .0[0]
+                        .clone();
+
+                    let order = if field.order == SortOrder::Descending {
+                        facet_value_1.cmp(&facet_value_2)
+                    } else {
+                        facet_value_2.cmp(&facet_value_1)
+                    };
+
+                    if order != core::cmp::Ordering::Equal {
+                        return order;
+                    };
+                }
+
+                FieldType::String32 => {
+                    let offset = self.index.facets[field.idx].offset;
+
+                    let facet_id_1 = read_u32(
+                        &self.index.facets_file_mmap,
+                        (self.index.facets_size_sum * result1.doc_id) + offset,
+                    );
+                    let facet_id_2 = read_u32(
+                        &self.index.facets_file_mmap,
+                        (self.index.facets_size_sum * result2.doc_id) + offset,
+                    );
+
+                    let facet_value_1 = self.index.facets[field.idx]
+                        .values
+                        .get_index(facet_id_1 as usize)
+                        .unwrap()
+                        .1
+                        .0[0]
+                        .clone();
+
+                    let facet_value_2 = self.index.facets[field.idx]
+                        .values
+                        .get_index(facet_id_2 as usize)
+                        .unwrap()
+                        .1
+                        .0[0]
+                        .clone();
+
+                    let order = if field.order == SortOrder::Descending {
+                        facet_value_1.cmp(&facet_value_2)
+                    } else {
+                        facet_value_2.cmp(&facet_value_1)
+                    };
+
+                    if order != core::cmp::Ordering::Equal {
+                        return order;
+                    };
+                }
+
+                FieldType::StringSet32 => {
+                    let offset = self.index.facets[field.idx].offset;
+
+                    let facet_id_1 = read_u32(
+                        &self.index.facets_file_mmap,
+                        (self.index.facets_size_sum * result1.doc_id) + offset,
+                    );
+                    let facet_id_2 = read_u32(
+                        &self.index.facets_file_mmap,
+                        (self.index.facets_size_sum * result2.doc_id) + offset,
+                    );
+
+                    let facet_value_1 = self.index.facets[field.idx]
+                        .values
+                        .get_index(facet_id_1 as usize)
+                        .unwrap()
+                        .1
+                        .0[0]
+                        .clone();
+
+                    let facet_value_2 = self.index.facets[field.idx]
+                        .values
+                        .get_index(facet_id_2 as usize)
                         .unwrap()
                         .1
                         .0[0]

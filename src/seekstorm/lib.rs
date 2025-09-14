@@ -249,7 +249,7 @@
 //! [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 //! {"field":"body","field_type":"Text","stored":true,"indexed":true},
 //! {"field":"url","field_type":"Text","stored":true,"indexed":false},
-//! {"field":"town","field_type":"String","stored":false,"indexed":false,"facet":true}]"#;
+//! {"field":"town","field_type":"String16","stored":false,"indexed":false,"facet":true}]"#;
 //! let schema=serde_json::from_str(schema_json).unwrap();
 //! let meta = IndexMetaObject {
 //!     id: 0,
@@ -288,7 +288,7 @@
 //! let result_type=ResultType::TopkCount;
 //! let include_uncommitted=false;
 //! let field_filter=Vec::new();
-//! let query_facets = vec![QueryFacet::String {field: "town".to_string(),prefix: "".to_string(),length: u16::MAX}];
+//! let query_facets = vec![QueryFacet::String16 {field: "town".to_string(),prefix: "".to_string(),length: u16::MAX}];
 //! let facet_filter=Vec::new();
 //! //let facet_filter = vec![FacetFilter {field: "town".to_string(),   filter:Filter::String(vec!["Berlin".to_string()])}];
 //! let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;

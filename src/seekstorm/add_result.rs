@@ -5,8 +5,8 @@ use std::cmp::Ordering;
 use crate::{
     geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
-        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index, NgramType,
-        NonUniquePostingListObjectQuery, PostingListObjectQuery, SPEEDUP_FLAG, STOP_BIT,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, FieldType, Index,
+        NgramType, NonUniquePostingListObjectQuery, PostingListObjectQuery, SPEEDUP_FLAG, STOP_BIT,
         SimilarityType, get_document_length_compressed_mmap,
     },
     min_heap,
@@ -433,8 +433,17 @@ pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], doci
                     return true;
                 }
             }
-            FilterSparse::String(values) => {
+            FilterSparse::String16(values) => {
                 let facet_value_id = read_u16(
+                    &index.facets_file_mmap,
+                    (index.facets_size_sum * docid) + facet.offset,
+                );
+                if !values.contains(&facet_value_id) {
+                    return true;
+                }
+            }
+            FilterSparse::String32(values) => {
+                let facet_value_id = read_u32(
                     &index.facets_file_mmap,
                     (index.facets_size_sum * docid) + facet.offset,
                 );
@@ -482,6 +491,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::U16(_range_type, ranges) => {
                     let facet_value = read_u16(
@@ -491,6 +501,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::U32(_range_type, ranges) => {
                     let facet_value = read_u32(
@@ -500,6 +511,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::U64(_range_type, ranges) => {
                     let facet_value = read_u64(
@@ -509,6 +521,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::I8(_range_type, ranges) => {
                     let facet_value = read_i8(
@@ -518,6 +531,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::I16(_range_type, ranges) => {
                     let facet_value = read_i16(
@@ -527,6 +541,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::I32(_range_type, ranges) => {
                     let facet_value = read_i32(
@@ -536,6 +551,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
 
                 Ranges::I64(_range_type, ranges) => {
@@ -546,6 +562,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::Timestamp(_range_type, ranges) => {
                     let facet_value = read_i64(
@@ -555,6 +572,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::F32(_range_type, ranges) => {
                     let facet_value = read_f32(
@@ -564,6 +582,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
                 Ranges::F64(_range_type, ranges) => {
                     let facet_value = read_f64(
@@ -573,6 +592,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                     ranges
                         .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
 
                 Ranges::Point(_range_type, ranges, base, unit) => {
@@ -587,12 +607,24 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                             range.1.partial_cmp(&facet_value_distance).unwrap()
                         })
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                        as u32
                 }
 
-                _ => read_u16(
-                    &index.facets_file_mmap,
-                    (index.facets_size_sum * docid) + facet.offset,
-                ),
+                _ => {
+                    if facet.field_type == FieldType::String16
+                        || facet.field_type == FieldType::StringSet16
+                    {
+                        read_u16(
+                            &index.facets_file_mmap,
+                            (index.facets_size_sum * docid) + facet.offset,
+                        ) as u32
+                    } else {
+                        read_u32(
+                            &index.facets_file_mmap,
+                            (index.facets_size_sum * docid) + facet.offset,
+                        )
+                    }
+                }
             };
 
             *search_result.query_facets[i]

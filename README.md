@@ -568,7 +568,7 @@ let schema_json = r#"
 [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 {"field":"body","field_type":"Text","stored":true,"indexed":true},
 {"field":"url","field_type":"Text","stored":true,"indexed":false},
-{"field":"town","field_type":"String","stored":false,"indexed":false,"facet":true}]"#;
+{"field":"town","field_type":"String16","stored":false,"indexed":false,"facet":true}]"#;
 let schema=serde_json::from_str(schema_json).unwrap();
 
 let meta = IndexMetaObject {
@@ -610,7 +610,7 @@ let query_type=QueryType::Intersection;
 let result_type=ResultType::TopkCount;
 let include_uncommitted=false;
 let field_filter=Vec::new();
-let query_facets = vec![QueryFacet::String {field: "age".to_string(),prefix: "".to_string(),length:u16::MAX}];
+let query_facets = vec![QueryFacet::String16 {field: "age".to_string(),prefix: "".to_string(),length:u16::MAX}];
 let facet_filter=Vec::new();
 //let facet_filter = vec![FacetFilter::String { field: "town".to_string(),filter: vec!["Berlin".to_string()],}];
 

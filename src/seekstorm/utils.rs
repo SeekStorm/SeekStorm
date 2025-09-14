@@ -165,3 +165,12 @@ pub fn substring(source: &str, start: usize, length: usize) -> String {
     }
     source.chars().skip(start).take(length).collect()
 }
+
+/// Computes the factorial of `n` using `try_fold` to handle potential overflow.
+pub fn factorial(n: usize) -> Option<usize> {
+    if n > 1 {
+        (1..=n).try_fold(n, usize::checked_mul)
+    } else {
+        Some(1)
+    }
+}

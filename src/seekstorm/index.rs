@@ -54,9 +54,9 @@ pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const INDEX_HEADER_SIZE: u64 = 4;
 /// Incompatible index  format change: new library can't open old format, and old library can't open new format
-pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 3;
+pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 4;
 /// Backward compatible format change: new library can open old format, but old library can't open new format
-pub const INDEX_FORMAT_VERSION_MINOR: u16 = 2;
+pub const INDEX_FORMAT_VERSION_MINOR: u16 = 0;
 
 /// Maximum processed positions per term per document: default=65_536. E.g. 65,536 * 'the' per document, exceeding positions are ignored for search.
 pub const MAX_POSITIONS_PER_TERM: usize = 65_536;
@@ -476,11 +476,19 @@ pub enum FieldType {
     F64,
     /// Boolean
     Bool,
-    /// String
+    /// String16
+    /// allows a maximum cardinality of 65_535 (16 bit) distinct values, is space-saving.
     #[default]
-    String,
-    /// StringSet is a set of strings, e.g. tags, categories, keywords, authors, genres, etc.
-    StringSet,
+    String16,
+    /// String32
+    /// allows a maximum cardinality of 4_294_967_295 (32 bit) distinct values
+    String32,
+    /// StringSet16 is a set of strings, e.g. tags, categories, keywords, authors, genres, etc.
+    /// allows a maximum cardinality of 65_535 (16 bit) distinct values, is space-saving.
+    StringSet16,
+    /// StringSet32 is a set of strings, e.g. tags, categories, keywords, authors, genres, etc.
+    /// allows a maximum cardinality of 4_294_967_295 (32 bit) distinct values
+    StringSet32,
     /// Point is a geographic field type: A `Vec<f64>` with two coordinate values (latitude and longitude) are internally encoded into a single u64 value (Morton code).
     /// Morton codes enable efficient range queries.
     /// Latitude and longitude are a pair of numbers (coordinates) used to describe a position on the plane of a geographic coordinate system.
@@ -557,7 +565,7 @@ pub struct SchemaField {
 /// - SchemaField
 /// # Example
 /// ```rust
-/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String, false, 1.0);
+/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String16, false, 1.0);
 /// ```
 impl SchemaField {
     /// Creates a new SchemaField.
@@ -698,7 +706,7 @@ pub struct IndexMetaObject {
     ///
     /// When **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
     /// ```rust
-    ///NgramSet::SingleTerm as u8
+    /// NgramSet::SingleTerm as u8
     /// ```
     /// For a **good balance of latency and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams** (default):  
     /// ```rust
@@ -722,9 +730,9 @@ fn ngram_indexing_default() -> u8 {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResultFacet {
     pub field: String,
-    pub values: AHashMap<u16, usize>,
+    pub values: AHashMap<u32, usize>,
     pub prefix: String,
-    pub length: u16,
+    pub length: u32,
     pub ranges: Ranges,
 }
 
@@ -817,11 +825,13 @@ pub struct FacetField {
     /// Facet field name
     pub name: String,
     /// Vector of facet value names and their count
+    /// The number of distinct string values and numerical ranges per facet field (cardinality) is limited to 65_536.
+    /// Once that number is reached, the facet field is not updated anymore (no new values are added, no existing values are counted).
     pub values: IndexMap<String, (Vec<String>, usize)>,
 
-    ///Minimum value of the facet field
+    /// Minimum value of the facet field
     pub min: ValueType,
-    ///Maximum value of the facet field
+    /// Maximum value of the facet field
     pub max: ValueType,
 
     #[serde(skip)]
@@ -925,7 +935,7 @@ pub struct Index {
     pub(crate) facets_file_mmap: MmapMut,
     pub(crate) bm25_component_cache: [f32; 256],
 
-    pub(crate) string_set_to_single_term_id_vec: Vec<AHashMap<String, AHashSet<u16>>>,
+    pub(crate) string_set_to_single_term_id_vec: Vec<AHashMap<String, AHashSet<u32>>>,
 
     pub(crate) synonyms_map: AHashMap<u64, SynonymItem>,
 
@@ -939,7 +949,7 @@ pub struct Index {
     pub(crate) key_head_size: usize,
 }
 
-///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
+/// SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
 pub type SynonymItem = Vec<(String, (u64, u32))>;
 
 /// Get the version of the SeekStorm search library
@@ -1139,8 +1149,10 @@ pub fn create_index(
                         FieldType::Timestamp => 8,
                         FieldType::F32 => 4,
                         FieldType::F64 => 8,
-                        FieldType::String => 2,
-                        FieldType::StringSet => 2,
+                        FieldType::String16 => 2,
+                        FieldType::String32 => 4,
+                        FieldType::StringSet16 => 2,
+                        FieldType::StringSet32 => 4,
                         FieldType::Point => 8,
                         _ => 1,
                     };
@@ -2360,15 +2372,25 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
     let mut query_facets: Vec<QueryFacet> = Vec::new();
     for facet in index_object_arc.read().await.facets.iter() {
         match facet.field_type {
-            FieldType::String => query_facets.push(QueryFacet::String {
+            FieldType::String16 => query_facets.push(QueryFacet::String16 {
                 field: facet.name.clone(),
                 prefix: "".into(),
                 length: u16::MAX,
             }),
-            FieldType::StringSet => query_facets.push(QueryFacet::StringSet {
+            FieldType::String32 => query_facets.push(QueryFacet::String32 {
+                field: facet.name.clone(),
+                prefix: "".into(),
+                length: u32::MAX,
+            }),
+            FieldType::StringSet16 => query_facets.push(QueryFacet::StringSet16 {
                 field: facet.name.clone(),
                 prefix: "".into(),
                 length: u16::MAX,
+            }),
+            FieldType::StringSet32 => query_facets.push(QueryFacet::StringSet32 {
+                field: facet.name.clone(),
+                prefix: "".into(),
+                length: u32::MAX,
             }),
             _ => {}
         }
@@ -2640,7 +2662,7 @@ impl Index {
     ///   The length property of a QueryFacet allows limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
     ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
     ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///   Example: query_facets = vec![QueryFacet::String {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
+    ///   Example: query_facets = vec![16 {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String16 {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
     pub fn get_index_string_facets(
         &self,
         query_facets: Vec<QueryFacet>,
@@ -2654,13 +2676,46 @@ impl Index {
             result_query_facets = vec![ResultFacet::default(); self.facets.len()];
             for query_facet in query_facets.iter() {
                 match &query_facet {
-                    QueryFacet::String {
+                    QueryFacet::String16 {
                         field,
                         prefix,
                         length,
                     } => {
                         if let Some(idx) = self.facets_map.get(field)
-                            && self.facets[*idx].field_type == FieldType::String
+                            && self.facets[*idx].field_type == FieldType::String16
+                        {
+                            result_query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                prefix: prefix.clone(),
+                                length: *length as u32,
+                                ..Default::default()
+                            }
+                        }
+                    }
+                    QueryFacet::StringSet16 {
+                        field,
+                        prefix,
+                        length,
+                    } => {
+                        if let Some(idx) = self.facets_map.get(field)
+                            && self.facets[*idx].field_type == FieldType::StringSet16
+                        {
+                            result_query_facets[*idx] = ResultFacet {
+                                field: field.clone(),
+                                prefix: prefix.clone(),
+                                length: *length as u32,
+                                ..Default::default()
+                            }
+                        }
+                    }
+
+                    QueryFacet::String32 {
+                        field,
+                        prefix,
+                        length,
+                    } => {
+                        if let Some(idx) = self.facets_map.get(field)
+                            && self.facets[*idx].field_type == FieldType::String32
                         {
                             result_query_facets[*idx] = ResultFacet {
                                 field: field.clone(),
@@ -2670,13 +2725,13 @@ impl Index {
                             }
                         }
                     }
-                    QueryFacet::StringSet {
+                    QueryFacet::StringSet32 {
                         field,
                         prefix,
                         length,
                     } => {
                         if let Some(idx) = self.facets_map.get(field)
-                            && self.facets[*idx].field_type == FieldType::StringSet
+                            && self.facets[*idx].field_type == FieldType::StringSet32
                         {
                             result_query_facets[*idx] = ResultFacet {
                                 field: field.clone(),
@@ -2686,6 +2741,7 @@ impl Index {
                             }
                         }
                     }
+
                     _ => {}
                 };
             }
@@ -2697,7 +2753,9 @@ impl Index {
                 continue;
             }
 
-            if self.facets[i].field_type == FieldType::StringSet {
+            if self.facets[i].field_type == FieldType::StringSet16
+                || self.facets[i].field_type == FieldType::StringSet32
+            {
                 let mut hash_map: AHashMap<String, usize> = AHashMap::new();
                 for value in self.facets[i].values.iter() {
                     for term in value.1.0.iter() {
@@ -2737,13 +2795,15 @@ impl Index {
 
     pub(crate) fn string_set_to_single_term_id(&mut self) {
         for (i, facet) in self.facets.iter().enumerate() {
-            if facet.field_type == FieldType::StringSet {
+            if facet.field_type == FieldType::StringSet16
+                || facet.field_type == FieldType::StringSet32
+            {
                 for (idx, value) in facet.values.iter().enumerate() {
                     for term in value.1.0.iter() {
                         self.string_set_to_single_term_id_vec[i]
                             .entry(term.to_string())
-                            .or_insert(AHashSet::from_iter(vec![idx as u16]))
-                            .insert(idx as u16);
+                            .or_insert(AHashSet::from_iter(vec![idx as u32]))
+                            .insert(idx as u32);
                     }
                 }
             }
@@ -3165,7 +3225,7 @@ impl IndexDocument for IndexArc {
                     let mut nonunique_terms_count = 0u32;
 
                     let text = match schema_field.field_type {
-                        FieldType::Text | FieldType::String => {
+                        FieldType::Text | FieldType::String16 | FieldType::String32 => {
                             serde_json::from_value::<String>(field_value.clone())
                                 .unwrap_or(field_value.to_string())
                         }
@@ -3529,7 +3589,7 @@ impl IndexDocument2 for IndexArc {
 
                             write_f64(value, &mut index_mut.facets_file_mmap, address)
                         }
-                        FieldType::String => {
+                        FieldType::String16 => {
                             if facet.values.len() < u16::MAX as usize {
                                 let key = serde_json::from_value::<String>(field_value.clone())
                                     .unwrap_or(field_value.to_string());
@@ -3545,7 +3605,7 @@ impl IndexDocument2 for IndexArc {
                             }
                         }
 
-                        FieldType::StringSet => {
+                        FieldType::StringSet16 => {
                             if facet.values.len() < u16::MAX as usize {
                                 let mut key: Vec<String> =
                                     serde_json::from_value(field_value.clone()).unwrap();
@@ -3559,6 +3619,38 @@ impl IndexDocument2 for IndexArc {
                                 write_u16(facet_value_id, &mut index_mut.facets_file_mmap, address)
                             }
                         }
+
+                        FieldType::String32 => {
+                            if facet.values.len() < u32::MAX as usize {
+                                let key = serde_json::from_value::<String>(field_value.clone())
+                                    .unwrap_or(field_value.to_string());
+
+                                let key_string = key.clone();
+                                let key = vec![key];
+
+                                facet.values.entry(key_string.clone()).or_insert((key, 0)).1 += 1;
+
+                                let facet_value_id =
+                                    facet.values.get_index_of(&key_string).unwrap() as u32;
+                                write_u32(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                            }
+                        }
+
+                        FieldType::StringSet32 => {
+                            if facet.values.len() < u32::MAX as usize {
+                                let mut key: Vec<String> =
+                                    serde_json::from_value(field_value.clone()).unwrap();
+                                key.sort();
+
+                                let key_string = key.join("_");
+                                facet.values.entry(key_string.clone()).or_insert((key, 0)).1 += 1;
+
+                                let facet_value_id =
+                                    facet.values.get_index_of(&key_string).unwrap() as u32;
+                                write_u32(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                            }
+                        }
+
                         FieldType::Point => {
                             if let Ok(point) = serde_json::from_value::<Point>(field_value.clone())
                                 && point.len() == 2
