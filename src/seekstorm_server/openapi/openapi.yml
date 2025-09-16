@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 0.12.23
+  version: 0.14.0
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -203,6 +203,10 @@ paths:
                   $ref: '#/components/schemas/StopwordType'
                 frequent_words:
                   $ref: '#/components/schemas/FrequentwordType'
+                ngram_indexing:
+                  type: integer
+                  format: int32
+                  minimum: 0
                 synonyms:
                   type: array
                   items:
@@ -1213,13 +1217,13 @@ components:
                 $ref: '#/components/schemas/RangeF64'
                 description: 'filter: range start, range end'
       - type: object
-        description: String filter
+        description: String16 filter
         required:
-        - String
+        - String16
         properties:
-          String:
+          String16:
             type: object
-            description: String filter
+            description: String16 filter
             required:
             - field
             - filter
@@ -1233,13 +1237,53 @@ components:
                   type: string
                 description: 'filter: array of facet string values'
       - type: object
-        description: StringSet filter
+        description: StringSet16 filter
         required:
-        - StringSet
+        - StringSet16
         properties:
-          StringSet:
+          StringSet16:
             type: object
-            description: StringSet filter
+            description: StringSet16 filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                type: array
+                items:
+                  type: string
+                description: 'filter: array of facet string values'
+      - type: object
+        description: String32 filter
+        required:
+        - String32
+        properties:
+          String32:
+            type: object
+            description: String32 filter
+            required:
+            - field
+            - filter
+            properties:
+              field:
+                type: string
+                description: field name
+              filter:
+                type: array
+                items:
+                  type: string
+                description: 'filter: array of facet string values'
+      - type: object
+        description: StringSet32 filter
+        required:
+        - StringSet32
+        properties:
+          StringSet32:
+            type: object
+            description: StringSet32 filter
             required:
             - field
             - filter
@@ -1459,8 +1503,10 @@ components:
       - F32
       - F64
       - Bool
-      - String
-      - StringSet
+      - String16
+      - String32
+      - StringSet16
+      - StringSet32
       - Point
       - Text
     FrequentwordType:
@@ -1500,7 +1546,7 @@ components:
                 type: array
                 items:
                   type: string
-                description: List of frequent terms.
+                description: List of frequent terms, max. 256 terms.
       description: |-
         FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.
         Adjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms).
@@ -1990,9 +2036,33 @@ components:
       - type: object
         description: Facet field values of type string
         required:
-        - String
+        - String16
         properties:
-          String:
+          String16:
+            type: object
+            description: Facet field values of type string
+            required:
+            - field
+            - prefix
+            - length
+            properties:
+              field:
+                type: string
+                description: field name
+              prefix:
+                type: string
+                description: Prefix filter of facet values to return
+              length:
+                type: integer
+                format: int32
+                description: maximum number of facet values to return
+                minimum: 0
+      - type: object
+        description: Facet field values of type string
+        required:
+        - String32
+        properties:
+          String32:
             type: object
             description: Facet field values of type string
             required:
@@ -2014,9 +2084,33 @@ components:
       - type: object
         description: Facet field values of type string set
         required:
-        - StringSet
+        - StringSet16
         properties:
-          StringSet:
+          StringSet16:
+            type: object
+            description: Facet field values of type string set
+            required:
+            - field
+            - prefix
+            - length
+            properties:
+              field:
+                type: string
+                description: field name
+              prefix:
+                type: string
+                description: Prefix filter of facet values to return
+              length:
+                type: integer
+                format: int32
+                description: maximum number of facet values to return
+                minimum: 0
+      - type: object
+        description: Facet field values of type string set
+        required:
+        - StringSet32
+        properties:
+          StringSet32:
             type: object
             description: Facet field values of type string set
             required:
