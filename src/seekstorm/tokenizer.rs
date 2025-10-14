@@ -773,7 +773,7 @@ pub fn tokenizer(
                         key_hash: hash64(term_bytes) | NgramType::NgramFRF as u64,
                         field_positions_vec: vec![Vec::new(); indexed_field_number],
                         ngram_type: NgramType::NgramFRF,
-                        term_ngram_2: term_string_2.clone(),
+                        term_ngram_2: term_string_2,
                         term_ngram_1: term_string_1.clone(),
                         term_ngram_0: term_string_0.clone(),
 
