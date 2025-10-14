@@ -318,7 +318,8 @@ impl Index {
         update_list_max_impact_score(self);
 
         self.committed_doc_count = indexed_doc_count;
-        self.is_last_level_incomplete = (self.committed_doc_count) % ROARING_BLOCK_SIZE > 0;
+        self.is_last_level_incomplete =
+            !(self.committed_doc_count).is_multiple_of(ROARING_BLOCK_SIZE);
         if !self.mute {
             println!(
                 "commit level {} committed documents {} {} mode {}",
@@ -458,7 +459,7 @@ impl Index {
                 );
                 let exists: bool = value.posting_count > 0;
 
-                if self.indexed_doc_count % ROARING_BLOCK_SIZE > 0
+                if !self.indexed_doc_count.is_multiple_of(ROARING_BLOCK_SIZE)
                     && self.meta.access_type == AccessType::Ram
                 {
                     let position_range_previous = if key_index == 0 {

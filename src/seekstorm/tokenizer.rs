@@ -576,12 +576,6 @@ pub fn tokenizer(
             term_object.field_positions_vec[indexed_field_id].push(position as u16);
             term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
 
-            non_unique_terms.push(NonUniqueTermObject {
-                term: term_string_0.clone(),
-                ngram_type: NgramType::SingleTerm,
-                ..Default::default()
-            });
-
             if !term_string_1.is_empty()
                 && (ngram_indexing & NgramSet::NgramFF as u8 != 0
                     && term_frequent_1
@@ -605,15 +599,6 @@ pub fn tokenizer(
                 });
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramFF,
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             if !term_string_1.is_empty()
@@ -639,15 +624,6 @@ pub fn tokenizer(
                 });
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramRF,
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             if !term_string_1.is_empty()
@@ -674,15 +650,6 @@ pub fn tokenizer(
 
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 1);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramFR,
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             if !term_string_2.is_empty()
@@ -716,16 +683,6 @@ pub fn tokenizer(
                 });
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramFFF,
-                    term_ngram_2: term_string_2.clone(),
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             if !term_string_2.is_empty()
@@ -759,16 +716,6 @@ pub fn tokenizer(
                 });
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramRFF,
-                    term_ngram_2: term_string_2.clone(),
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             if !term_string_2.is_empty()
@@ -802,16 +749,6 @@ pub fn tokenizer(
                 });
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramFFR,
-                    term_ngram_2: term_string_2.clone(),
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             if !term_string_2.is_empty()
@@ -845,16 +782,6 @@ pub fn tokenizer(
                 });
                 term_object.field_positions_vec[indexed_field_id].push(position as u16 - 2);
                 term_positions_len = term_object.field_positions_vec[indexed_field_id].len();
-
-                non_unique_terms.push(NonUniqueTermObject {
-                    term: term_string,
-                    ngram_type: NgramType::NgramFRF,
-                    term_ngram_2: term_string_2.clone(),
-                    term_ngram_1: term_string_1.clone(),
-                    term_ngram_0: term_string_0.clone(),
-
-                    ..Default::default()
-                });
             }
 
             term_string_2 = term_string_1;

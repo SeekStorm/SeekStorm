@@ -2222,7 +2222,9 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                     .insert(key_hash, value);
                                             };
 
-                                            if index.indexed_doc_count % ROARING_BLOCK_SIZE > 0
+                                            if !index
+                                                .indexed_doc_count
+                                                .is_multiple_of(ROARING_BLOCK_SIZE)
                                                 && block_id as usize
                                                     == index.indexed_doc_count / ROARING_BLOCK_SIZE
                                                 && index.meta.access_type == AccessType::Ram
@@ -2296,7 +2298,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                             index.committed_doc_count = index.indexed_doc_count;
                             index.is_last_level_incomplete =
-                                index.committed_doc_count % ROARING_BLOCK_SIZE > 0;
+                                !(index.committed_doc_count).is_multiple_of(ROARING_BLOCK_SIZE);
 
                             for (i, component) in index.bm25_component_cache.iter_mut().enumerate()
                             {
