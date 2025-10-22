@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - open_index error handling refactored.
 - fn create_index() -> Index changed to async fn create_index() -> IndexArc
 - index.close_index (sync) -> index_arc.close().await (async)
-- index_arc.close() disconnects index_file_mmap from index_file, otherwise we cannot reuse the file (e.g. with open_index) when the program is still running #1?
+- index_arc.close() disconnects index_file_mmap from index_file, otherwise we cannot reuse the file (e.g. with open_index) when the program is still running
 - unit tests fixed for multi-sharded index
 - get_document changed from sync to async.
 - clear_index() from sync to async
