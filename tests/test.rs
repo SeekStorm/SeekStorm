@@ -2,7 +2,7 @@
 //! Use: cargo test
 //! To show output use: cargo test -- --show-output
 
-use seekstorm::commit::Commit;
+use seekstorm::commit::{Close, Commit};
 use seekstorm::index::{
     AccessType, DeleteDocument, FileType, FrequentwordType, IndexDocument, IndexDocuments,
     IndexMetaObject, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType,
@@ -10,18 +10,17 @@ use seekstorm::index::{
 };
 use seekstorm::search::{QueryType, ResultType, Search};
 use std::collections::HashSet;
-use std::path;
 use std::{fs, path::Path};
 
-#[test]
+#[tokio::test]
 /// create_index test
-fn test_01_create_index() {
+async fn test_01_create_index() {
     let index_path = Path::new("tests/index_test/");
     let _ = fs::remove_dir_all(index_path);
 
     let schema_json = r#"
     [{"field":"title","field_type":"Text","stored":false,"indexed":false},
-    {"field":"body","field_type":"Text","stored":true,"indexed":true},
+    {"field":"body","field_type":"Text","stored":true,"indexed":true,"longest":true},
     {"field":"url","field_type":"Text","stored":false,"indexed":false}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
 
@@ -37,26 +36,23 @@ fn test_01_create_index() {
         access_type: AccessType::Mmap,
     };
 
-    let serialize_schema = true;
     let segment_number_bits1 = 11;
-    let index = create_index(
+    let index_arc = create_index(
         index_path,
         meta,
         &schema,
-        serialize_schema,
         &Vec::new(),
         segment_number_bits1,
         false,
+        None,
     )
+    .await
     .unwrap();
-
-    println!(
-        "test index path: {}",
-        path::absolute(index_path).unwrap().to_string_lossy()
-    );
+    let index = index_arc.read().await;
 
     let result = index.meta.id;
     assert_eq!(result, 0);
+    index_arc.close().await;
 }
 
 #[tokio::test]
@@ -83,8 +79,10 @@ async fn test_02_index_document() {
     // wait until all index threads are finished and commit
     index_arc.commit().await;
 
-    let result = index_arc.read().await.indexed_doc_count;
+    let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 4);
+
+    index_arc.close().await;
 }
 
 #[tokio::test]
@@ -93,6 +91,9 @@ async fn test_03_query_index() {
     // open index
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
+
+    let result = index_arc.read().await.indexed_doc_count().await;
+    assert_eq!(result, 4);
 
     let query = "+body2 +test".into();
     let result_list = index_arc
@@ -118,6 +119,8 @@ async fn test_03_query_index() {
 
     let result = result_list.result_count_total;
     assert_eq!(result, 1);
+
+    index_arc.close().await;
 }
 
 #[tokio::test]
@@ -127,13 +130,13 @@ async fn test_04_clear_index() {
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
 
-    let result = index_arc.read().await.indexed_doc_count;
+    let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 4);
 
     // clear index
-    index_arc.write().await.clear_index();
+    index_arc.read().await.clear_index().await;
 
-    let result = index_arc.read().await.indexed_doc_count;
+    let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 0);
 
     // index document
@@ -145,9 +148,8 @@ async fn test_04_clear_index() {
     // wait until all index threads are finished and commit
     index_arc.commit().await;
 
-    let result = index_arc.read().await.indexed_doc_count;
+    let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 1);
-
     println!("indexed_doc_count: {}", result);
 
     // query index
@@ -173,6 +175,8 @@ async fn test_04_clear_index() {
 
     let result = result_list.result_count_total;
     assert_eq!(result, 1);
+
+    index_arc.close().await;
 }
 
 #[tokio::test]
@@ -181,6 +185,9 @@ async fn test_05_get_document() {
     // open index
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
+
+    let result = index_arc.read().await.indexed_doc_count().await;
+    assert_eq!(result, 1);
 
     let highlighter = None;
     let return_fields_filter = HashSet::new();
@@ -195,12 +202,14 @@ async fn test_05_get_document() {
             &return_fields_filter,
             &distance_fields,
         )
+        .await
         .unwrap();
 
     let value = doc.get("body").unwrap().to_owned();
     let result = serde_json::from_value::<String>(value).unwrap();
 
     assert_eq!(result, "body1");
+    index_arc.close().await;
 }
 
 #[tokio::test]
@@ -210,13 +219,35 @@ async fn test_06_delete_document() {
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
 
-    let result = index_arc.read().await.indexed_doc_count;
+    let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 1);
 
-    //delete document
-    index_arc.delete_document(0).await;
+    // query index before delete
+    let query = "body1".into();
+    let result_list = index_arc
+        .search(
+            query,
+            QueryType::Union,
+            0,
+            10,
+            ResultType::TopkCount,
+            false,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await;
 
-    //query index
+    let result = result_list.result_count_total;
+    assert_eq!(result, 1);
+
+    // delete document
+    index_arc
+        .delete_document(result_list.results[0].doc_id as u64)
+        .await;
+
+    // query index after delete
     let query = "body1".into();
     let result_list = index_arc
         .search(
@@ -236,6 +267,6 @@ async fn test_06_delete_document() {
     let result = result_list.result_count_total;
     assert_eq!(result, 0);
 
-    let result = index_arc.read().await.current_doc_count();
+    let result = index_arc.read().await.current_doc_count().await;
     assert_eq!(result, 0);
 }

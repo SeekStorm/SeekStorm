@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2025-10-22
+
+### Improved
+
+- 4..6x faster indexing speed with sharded index.
+- 3x shorter query latency with sharded index.
+- Faster index loading.
+- Faster clear_index.
+- Benchmarks updated.
+
+### Added
+
+- index.indexed_doc_count()
+- index.committed_doc_count()
+- index.uncommitted_doc_count()
+- SchemaField has now `longest` property. This allows to annotate (manually set) the longest field in schema.  
+  Otherwise the longest field will be automatically detected in first index_document.
+  Setting/detecting the longest field ensures efficient index encoding.
+
+### Changed
+
+- The index is now organized in document paritioned shards, allowing lock-free, concurrent index_document() threads distributed over shards.
+- New create_index parameter `force_shard_number`: allows to set the number of shards. If None, then the number of physical processor cores is used.
+- Incompatible index format (INDEX_FORMAT_VERSION_MAJOR changed).
+- Errror message in console when loading index with incompatible index format at server start.
+- no re-initialization on every commit: strip0.positions_compressed = vec![0; MAX_POSITIONS_PER_TERM * 2];
+- segment.segment = AHashMap::with_capacity(500);
+- multithreading within index_document() removed.
+- Index.index_option references to parent index from shards.
+- open_index error handling refactored.
+- fn create_index() -> Index changed to async fn create_index() -> IndexArc
+- index.close_index (sync) -> index_arc.close().await (async)
+- index_arc.close() disconnects index_file_mmap from index_file, otherwise we cannot reuse the file (e.g. with open_index) when the program is still running #1?
+- unit tests fixed for multi-sharded index
+- get_document changed from sync to async.
+- clear_index() from sync to async
+- get_file changed from sync to async.
+- get_facet_value from sync to async.
+
 ## [0.14.1] - 2025-10-12
 
 ### Improved

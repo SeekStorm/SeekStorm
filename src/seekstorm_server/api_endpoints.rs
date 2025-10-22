@@ -3,7 +3,6 @@ use std::{
     env::current_exe,
     fs::{self, File},
     path::{Path, PathBuf},
-    sync::Arc,
     time::Instant,
 };
 
@@ -13,7 +12,7 @@ use std::collections::HashSet;
 use utoipa::{OpenApi, ToSchema};
 
 use seekstorm::{
-    commit::Commit,
+    commit::{Close, Commit},
     highlighter::{Highlight, highlighter},
     index::{
         AccessType, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
@@ -26,7 +25,6 @@ use seekstorm::{
     search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
 use crate::{
     VERSION,
@@ -119,7 +117,7 @@ pub struct CreateIndexRequest {
     pub index_name: String,
     #[schema(required = true, example = json!([
     {"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
-    {"field":"body","field_type":"Text","stored":true,"indexed":true},
+    {"field":"body","field_type":"Text","stored":true,"indexed":true,"longest":true},
     {"field":"url","field_type":"Text","stored":true,"indexed":false},
     {"field":"date","field_type":"Timestamp","stored":true,"indexed":false,"facet":true}]))]
     #[serde(default)]
@@ -139,6 +137,12 @@ pub struct CreateIndexRequest {
     #[schema(required = true, example = json!([{"terms":["berry","lingonberry","blueberry","gooseberry"],"multiway":false}]))]
     #[serde(default)]
     pub synonyms: Vec<Synonym>,
+    /// Set number of shards manually or automatically.
+    /// - none: number of shards is set automatically = number of physical processor cores (default)
+    /// - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
+    /// - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
+    #[serde(default)]
+    pub force_shard_number: Option<usize>,
 }
 
 fn similarity_type_api() -> SimilarityType {
@@ -217,6 +221,8 @@ pub(crate) struct IndexResponseObject {
     pub schema: HashMap<String, SchemaField>,
     /// Number of indexed documents
     pub indexed_doc_count: usize,
+    /// Number of committed documents
+    pub committed_doc_count: usize,
     /// Number of operations: index, update, delete, queries
     pub operations_count: u64,
     /// Number of queries, for quotas and billing
@@ -352,11 +358,17 @@ pub(crate) async fn open_all_indices(
         let path = result.unwrap();
         if path.path().is_dir() {
             let single_index_path = path.path();
-            let Ok(index_arc) = open_index(&single_index_path, false).await else {
-                continue;
+
+            let index_arc = match open_index(&single_index_path, false).await {
+                Ok(index_arc) => index_arc,
+                Err(err) => {
+                    println!("{} {}", err, single_index_path.display());
+                    continue;
+                }
             };
 
             let index_id = index_arc.read().await.meta.id;
+
             index_list.insert(index_id, index_arc);
         }
     }
@@ -421,7 +433,7 @@ pub(crate) async fn open_all_apikeys(
     )
 )]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn create_index_api<'a>(
+pub(crate) async fn create_index_api<'a>(
     index_path: &'a PathBuf,
     index_name: String,
     schema: Vec<SchemaField>,
@@ -432,6 +444,7 @@ pub(crate) fn create_index_api<'a>(
     frequent_words: FrequentwordType,
     ngram_indexing: u8,
     synonyms: Vec<Synonym>,
+    force_shard_number: Option<usize>,
     apikey_object: &'a mut ApikeyObject,
 ) -> u64 {
     let mut index_id: u64 = 0;
@@ -460,9 +473,18 @@ pub(crate) fn create_index_api<'a>(
         access_type: AccessType::Mmap,
     };
 
-    let index = create_index(&index_id_path, meta, &schema, true, &synonyms, 11, false).unwrap();
+    let index_arc = create_index(
+        &index_id_path,
+        meta,
+        &schema,
+        &synonyms,
+        11,
+        false,
+        force_shard_number,
+    )
+    .await
+    .unwrap();
 
-    let index_arc = Arc::new(RwLock::new(index));
     apikey_object.index_list.insert(index_id, index_arc);
 
     index_id
@@ -542,7 +564,7 @@ pub(crate) async fn delete_index_api(
 pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String> {
     let index_arc_clone = index_arc.clone();
     let index_ref = index_arc.read().await;
-    let indexed_doc_count = index_ref.indexed_doc_count;
+    let indexed_doc_count = index_ref.indexed_doc_count().await;
 
     drop(index_ref);
     index_arc_clone.commit().await;
@@ -551,10 +573,8 @@ pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String
 }
 
 pub(crate) async fn close_index_api(index_arc: &IndexArc) -> Result<u64, String> {
-    let mut index_mut = index_arc.write().await;
-    let indexed_doc_count = index_mut.indexed_doc_count;
-    index_mut.close_index();
-    drop(index_mut);
+    let indexed_doc_count = index_arc.read().await.indexed_doc_count().await;
+    index_arc.close().await;
 
     Ok(indexed_doc_count as u64)
 }
@@ -614,10 +634,11 @@ pub(crate) async fn get_index_info_api(
             schema: index_ref.schema_map.clone(),
             id: index_ref.meta.id,
             name: index_ref.meta.name.clone(),
-            indexed_doc_count: index_ref.indexed_doc_count,
+            indexed_doc_count: index_ref.indexed_doc_count().await,
+            committed_doc_count: index_ref.committed_doc_count().await,
             operations_count: 0,
             query_count: 0,
-            facets_minmax: index_ref.get_index_facets_minmax(),
+            facets_minmax: index_ref.index_facets_minmax().await,
         })
     } else {
         Err("index_id not found".to_string())
@@ -655,10 +676,11 @@ pub(crate) async fn get_apikey_indices_info_api(
             schema: index_ref.schema_map.clone(),
             id: index_ref.meta.id,
             name: index_ref.meta.name.clone(),
-            indexed_doc_count: index_ref.indexed_doc_count,
+            indexed_doc_count: index_ref.indexed_doc_count().await,
+            committed_doc_count: index_ref.committed_doc_count().await,
             operations_count: 0,
             query_count: 0,
-            facets_minmax: index_ref.get_index_facets_minmax(),
+            facets_minmax: index_ref.index_facets_minmax().await,
         });
     }
 
@@ -695,7 +717,7 @@ pub(crate) async fn index_document_api(
 ) -> Result<usize, String> {
     index_arc.index_document(document, FileType::None).await;
 
-    Ok(index_arc.read().await.indexed_doc_count)
+    Ok(index_arc.read().await.indexed_doc_count().await)
 }
 
 /// Index PDF file
@@ -734,7 +756,7 @@ pub(crate) async fn index_file_api(
         .index_pdf_bytes(file_path, file_date, document)
         .await
     {
-        Ok(_) => Ok(index_arc.read().await.indexed_doc_count),
+        Ok(_) => Ok(index_arc.read().await.indexed_doc_count().await),
         Err(e) => Err(e),
     }
 }
@@ -764,7 +786,7 @@ pub(crate) async fn index_file_api(
 )]
 pub(crate) async fn get_file_api(index_arc: &IndexArc, document_id: usize) -> Option<Vec<u8>> {
     if !index_arc.read().await.stored_field_names.is_empty() {
-        index_arc.read().await.get_file(document_id).ok()
+        index_arc.read().await.get_file(document_id).await.ok()
     } else {
         None
     }
@@ -775,7 +797,7 @@ pub(crate) async fn index_documents_api(
     document_vec: Vec<Document>,
 ) -> Result<usize, String> {
     index_arc.index_documents(document_vec).await;
-    Ok(index_arc.read().await.indexed_doc_count)
+    Ok(index_arc.read().await.indexed_doc_count().await)
 }
 
 /// Get Document
@@ -840,6 +862,7 @@ pub(crate) async fn get_document_api(
                 &HashSet::from_iter(get_document_request.fields),
                 &get_document_request.distance_fields,
             )
+            .await
             .ok()
     } else {
         None
@@ -876,7 +899,7 @@ pub(crate) async fn update_document_api(
     id_document: (u64, Document),
 ) -> Result<u64, String> {
     index_arc.update_document(id_document).await;
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 pub(crate) async fn update_documents_api(
@@ -884,7 +907,7 @@ pub(crate) async fn update_documents_api(
     id_document_vec: Vec<(u64, Document)>,
 ) -> Result<u64, String> {
     index_arc.update_documents(id_document_vec).await;
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 /// Delete Document
@@ -922,7 +945,7 @@ pub(crate) async fn delete_document_by_parameter_api(
     document_id: u64,
 ) -> Result<u64, String> {
     index_arc.delete_document(document_id).await;
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 /// Delete Document(s) by Request Object
@@ -967,7 +990,7 @@ pub(crate) async fn delete_document_by_object_api(
     document_id: u64,
 ) -> Result<u64, String> {
     index_arc.delete_document(document_id).await;
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 pub(crate) async fn delete_documents_by_object_api(
@@ -975,7 +998,7 @@ pub(crate) async fn delete_documents_by_object_api(
     document_id_vec: Vec<u64>,
 ) -> Result<u64, String> {
     index_arc.delete_documents(document_id_vec).await;
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 pub(crate) async fn delete_documents_by_query_api(
@@ -995,13 +1018,13 @@ pub(crate) async fn delete_documents_by_query_api(
         )
         .await;
 
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String> {
-    let mut index_mut = index_arc.write().await;
-    index_mut.clear_index();
-    Ok(index_arc.read().await.indexed_doc_count as u64)
+    let index_mut = index_arc.read().await;
+    index_mut.clear_index().await;
+    Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
 /// Query Index
@@ -1116,13 +1139,18 @@ pub(crate) async fn query_index_api(
         };
 
         for result in result_object.results.iter() {
-            match index_arc.read().await.get_document(
-                result.doc_id,
-                search_request.realtime,
-                &highlighter_option,
-                &return_fields_filter,
-                &search_request.distance_fields,
-            ) {
+            match index_arc
+                .read()
+                .await
+                .get_document(
+                    result.doc_id,
+                    search_request.realtime,
+                    &highlighter_option,
+                    &return_fields_filter,
+                    &search_request.distance_fields,
+                )
+                .await
+            {
                 Ok(doc) => {
                     let mut doc = doc;
                     doc.insert("_id".to_string(), result.doc_id.into());

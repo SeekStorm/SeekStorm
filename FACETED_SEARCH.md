@@ -270,7 +270,7 @@ let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_ter
 let return_fields_filter= HashSet::new();
 let index=index_arc.write().await;
 for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);

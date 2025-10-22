@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "0.14.0"
+    "version": "1.0.0"
   },
   "servers": [
     {
@@ -241,6 +241,7 @@
                         "field": "body",
                         "field_type": "Text",
                         "indexed": true,
+                        "longest": true,
                         "stored": true
                       },
                       {
@@ -294,6 +295,14 @@
                         ]
                       }
                     ]
+                  },
+                  "force_shard_number": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Set number of shards manually or automatically.\n- none: number of shards is set automatically = number of physical processor cores (default)\n- small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption\n- large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption",
+                    "minimum": 0
                   }
                 }
               }
@@ -2224,6 +2233,7 @@
           "name",
           "schema",
           "indexed_doc_count",
+          "committed_doc_count",
           "operations_count",
           "query_count",
           "version",
@@ -2285,6 +2295,11 @@
           "indexed_doc_count": {
             "type": "integer",
             "description": "Number of indexed documents",
+            "minimum": 0
+          },
+          "committed_doc_count": {
+            "type": "integer",
+            "description": "Number of committed documents",
             "minimum": 0
           },
           "operations_count": {
@@ -3328,6 +3343,10 @@
           "facet": {
             "type": "boolean",
             "description": "optional faceting for a field\nFaceting can be enabled both for string field type and numerical field types.\nboth numerical and string fields can be indexed (indexed=true) and stored (stored=true) in the json document,\nbut with field_facet=true they are additionally stored in a binary format, for fast faceting and sorting without docstore access (decompression, deserialization)"
+          },
+          "longest": {
+            "type": "boolean",
+            "description": "Indicate the longest field in schema.\nOtherwise the longest field will be automatically detected in first index_document.\nSetting/detecting the longest field ensures efficient index encoding."
           },
           "boost": {
             "type": "number",

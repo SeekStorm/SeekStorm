@@ -32,7 +32,8 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Full-text lexical search
 * True real-time search, with negligible performance impact
 * Incremental indexing
-* Multithreaded indexing & search
+* *Fast* sharded search: [6x faster](https://seekstorm.github.io/search-benchmark-game/).
+* *Fast* sharded indexing: 35K docs/sec = 3 billion docs/day on a laptop.
 * Unlimited field number, field length & index size
 * Compressed document store: ZStandard
 * Boolean queries: AND, OR, PHRASE, NOT
@@ -110,6 +111,9 @@ True real-time search, as opposed to NRT: every indexed document is immediately 
 <br>
 <br>
 <img src="assets/search_benchmark_game2.png" width="800" alt="Benchmark">
+<br>
+<br>
+<img src="assets/search_benchmark_game3.png" width="800" alt="Benchmark">
 <br>
 <br>
 <img src="assets/ranking.jpg" width="800" alt="Ranking">
@@ -260,7 +264,6 @@ cargo build --release
 ```
 cargo doc --no-deps
 ```
-
 **Access documentation locally**
 
 SeekStorm\target\doc\seekstorm\index.html  
@@ -326,7 +329,6 @@ let meta = IndexMetaObject {
     name: "test_index".to_string(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
-    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
     frequent_words:FrequentwordType::English,
     access_type: AccessType::Mmap,
@@ -400,7 +402,7 @@ let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_term
 let return_fields_filter= HashSet::new();
 let mut index=index_arc.write().await;
 for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
@@ -576,7 +578,6 @@ let meta = IndexMetaObject {
     name: "test_index".to_string(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
-    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
     frequent_words:FrequentwordType::English,
     access_type: AccessType::Mmap,
@@ -635,7 +636,7 @@ let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_ter
 let return_fields_filter= HashSet::new();
 let index=index_arc.write().await;
 for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
@@ -841,12 +842,11 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Tokenizer with Chinese word segmentation
 * Autosuggestion, spelling correction, instant search
 * Fuzzy search
-* Intra-query concurrency
 
 **Improvements**
 * ✅ Better REST API documentation: integrated OpenAPI generator
-* ✅ Faster phrase search through N-gram indexing
-* 👷 Faster indexing
+* ✅ 4..6x faster indexing via index sharding.
+* ✅ 3x shorter latency via index sharding.
 * Relevancy benchmarks: BeIR, MS MARCO
 
 **New features**
@@ -855,8 +855,9 @@ The Rust port is not yet feature complete. The following features are currently 
 * More tokenizer types (Japanese, Korean)
 * Native vector search (currently PoC)
 * Distributed search cluster (currently PoC)
-* S3 object storage compatible index: cloud-native split of storage and compute
+* 👷 S3 object storage compatible index: cloud-native split of storage and compute
 * WebAssembly (Wasm)
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
+* Client libraries/SDK in JavaScript, Python, Java, C#, C, Go, Rust for the SeekStorm server REST API
 
 

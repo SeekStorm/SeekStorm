@@ -528,17 +528,18 @@ impl IngestPdf for IndexArc {
     }
 }
 
-/// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats.  
+/// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
 /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+#[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub trait IngestJson {
-    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats.  
+    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
     /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
     async fn ingest_json(&mut self, data_path: &Path);
 }
 
 impl IngestJson for IndexArc {
-    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats.  
+    /// Ingest local data files in [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
     /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
     async fn ingest_json(&mut self, data_path: &Path) {
         match data_path.exists() {
@@ -604,9 +605,10 @@ impl IngestJson for IndexArc {
                 let date: DateTime<Utc> = DateTime::from(SystemTime::now());
 
                 println!(
-                    "{}: {}  shards (1)  ngrams {:08b}  docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
+                    "{}: {} shards {}  ngrams {:08b}  docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
                     "Indexing finished".green(),
                     date.format("%D"),
+                    index_arc_clone.read().await.shard_count().await,
                     self.read().await.meta.ngram_indexing,
                     docid.to_formatted_string(&Locale::en),
                     (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
@@ -694,6 +696,7 @@ impl IngestCsv for IndexArc {
                     for (i, element) in record.iter().enumerate() {
                         document.insert(schema_vec[i].clone(), json!(element));
                     }
+
                     index_arc_clone_clone
                         .index_document(document, FileType::None)
                         .await;

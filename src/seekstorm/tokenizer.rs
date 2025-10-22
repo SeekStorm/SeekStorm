@@ -5,7 +5,7 @@ use finl_unicode::categories::{CharacterCategories, MinorCategory};
 
 use crate::{
     index::{
-        Index, MAX_QUERY_TERM_NUMBER, NgramSet, NgramType, NonUniqueTermObject, TermObject,
+        MAX_QUERY_TERM_NUMBER, NgramSet, NgramType, NonUniqueTermObject, Shard, TermObject,
         TokenizerType, hash32, hash64,
     },
     search::QueryType,
@@ -94,8 +94,8 @@ pub fn fold_diacritics_accents_zalgo_umlaut(string: &str) -> String {
 /// Tokenizer splits text to terms
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::assigning_clones)]
-pub fn tokenizer(
-    index: &Index,
+pub(crate) fn tokenizer(
+    index: &Shard,
     text: &str,
     unique_terms: &mut AHashMap<String, TermObject>,
     non_unique_terms: &mut Vec<NonUniqueTermObject>,
@@ -182,6 +182,7 @@ pub fn tokenizer(
                             }
                             true
                         }
+
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
@@ -258,7 +259,6 @@ pub fn tokenizer(
                             }
                             true
                         }
-
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;

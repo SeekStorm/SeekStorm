@@ -2,6 +2,7 @@ use base64::{Engine, engine::general_purpose};
 use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
+    commit::Close,
     index::{FrequentwordType, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType},
     ingest::{IngestCsv, IngestJson, IngestPdf},
 };
@@ -36,6 +37,7 @@ fn ctrl_channel() -> Result<Receiver<()>, ctrlc::Error> {
 }
 
 async fn commandline(sender: crossbeam_channel::Sender<String>) {
+    #[allow(clippy::manual_flatten)]
     for line in std::io::stdin().lines() {
         if let Ok(line) = line {
             if sender.send(line.clone()).is_err() {
@@ -133,8 +135,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                 {
                     for index in apikey.1.index_list.iter_mut()
                     {
-                        let mut index_mut=index.1.write().await;
-                        index_mut.close_index();
+                        index.1.close().await;
                     }
                 }
                 drop(apikey_list_mut);
@@ -152,12 +153,13 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                 let mut dash:HashMap<String,String>=HashMap::new();
                 for (i,component) in parameter.iter().enumerate(){
-                    if let Some(key_stripped) = component.strip_prefix("-") && i+1<parameter.len() {dash.insert(key_stripped.to_string(),parameter[i+1].to_string());}
+                    if let Some(key_stripped) = component.strip_prefix("-") && i+1<parameter.len() {
+                        dash.insert(key_stripped.to_string(),parameter[i+1].to_string());
+                    }
                 }
 
                 match command
                 {
-
                     "ingest" =>
                     {
                         if !parameter.is_empty() {
@@ -225,17 +227,17 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                 let indexname_schemajson = if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME)
                                                 {("wikipedia_demo",r#"
                                                 [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
-                                                {"field":"body","field_type":"Text","stored":true,"indexed":true},
+                                                {"field":"body","field_type":"Text","stored":true,"indexed":true,"longest":true},
                                                 {"field":"url","field_type":"Text","stored":true,"indexed":false}]"#,SimilarityType::Bm25fProximity,TokenizerType::UnicodeAlphanumeric  )} 
                                                 else if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(MSMARCO_FILENAME)
                                                 {("msmarco_demo", r#"
                                                     [{"field":"url","field_type":"Text","stored":false,"indexed":false},
                                                     {"field":"title","field_type":"Text","stored":false,"indexed":false},
-                                                    {"field":"body","field_type":"Text","stored":false,"indexed":true}]"# ,SimilarityType::Bm25f,TokenizerType::UnicodeAlphanumeric )
+                                                    {"field":"body","field_type":"Text","stored":false,"indexed":true,"longest":true}]"# ,SimilarityType::Bm25f,TokenizerType::UnicodeAlphanumeric )
                                                 }
                                                 else {("pdf_demo", r#"
                                                 [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
-                                                {"field":"body","field_type":"Text","stored":true,"indexed":true},
+                                                {"field":"body","field_type":"Text","stored":true,"indexed":true,"longest":true},
                                                 {"field":"url","field_type":"Text","stored":true,"indexed":false},
                                                 {"field":"date","field_type":"Timestamp","stored":true,"indexed":false,"facet":true}]"#,SimilarityType::Bm25fProximity,TokenizerType::UnicodeAlphanumeric )};
 
@@ -250,8 +252,9 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                     FrequentwordType::English,
                                                     NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
                                                     Vec::new(),
+                                                    None,
                                                     apikey_object,
-                                                )
+                                                ).await
                                             } else {
                                                 0
                                             };
@@ -389,8 +392,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                         {
                             for index in apikey.1.index_list.iter_mut()
                             {
-                                let mut index_mut=index.1.write().await;
-                                index_mut.close_index();
+                                index.1.close().await;
                             }
                         }
                         drop(apikey_list_mut);

@@ -5,14 +5,14 @@ use num::FromPrimitive;
 use crate::{
     compress_postinglist::compress_positions,
     index::{
-        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, Index, NgramType,
-        POSTING_BUFFER_SIZE, PostingListObject0, ROARING_BLOCK_SIZE, STOP_BIT, TermObject,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, NgramType,
+        POSTING_BUFFER_SIZE, PostingListObject0, ROARING_BLOCK_SIZE, STOP_BIT, Shard, TermObject,
     },
     search::binary_search,
     utils::{block_copy_mut, read_u16, read_u32, write_u16_ref, write_u32},
 };
 
-impl Index {
+impl Shard {
     pub(crate) fn index_posting(
         &mut self,
         term: TermObject,

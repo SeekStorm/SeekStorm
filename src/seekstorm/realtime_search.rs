@@ -9,9 +9,9 @@ use smallvec::SmallVec;
 use crate::{
     add_result::{B, K, SIGMA, facet_count, is_facet_filter, read_multifield_vec},
     index::{
-        AccessType, DOCUMENT_LENGTH_COMPRESSION, DUMMY_VEC_8, Index, NgramType,
+        AccessType, DOCUMENT_LENGTH_COMPRESSION, DUMMY_VEC_8, NgramType,
         NonUniquePostingListObjectQuery, NonUniqueTermObject, PostingListObjectQuery, STOP_BIT,
-        SimilarityType, TermObject, hash32, hash64,
+        Shard, SimilarityType, TermObject, hash32, hash64,
     },
     min_heap,
     search::{FilterSparse, QueryType, ResultType, SearchResult, decode_posting_list_counts},
@@ -20,7 +20,7 @@ use crate::{
 
 #[inline(always)]
 pub(crate) fn get_next_position_uncommitted(
-    index: &Index,
+    shard: &Shard,
     plo: &mut NonUniquePostingListObjectQuery,
 ) -> u32 {
     if plo.is_embedded {
@@ -31,19 +31,19 @@ pub(crate) fn get_next_position_uncommitted(
         }];
     }
 
-    if (index.postings_buffer[plo.positions_pointer] & STOP_BIT) != 0 {
-        let position = (index.postings_buffer[plo.positions_pointer] & 0b0111_1111) as u32;
+    if (shard.postings_buffer[plo.positions_pointer] & STOP_BIT) != 0 {
+        let position = (shard.postings_buffer[plo.positions_pointer] & 0b0111_1111) as u32;
         plo.positions_pointer += 1;
         position
-    } else if (index.postings_buffer[plo.positions_pointer + 1] & STOP_BIT) != 0 {
-        let position = ((index.postings_buffer[plo.positions_pointer] as u32) << 7)
-            | (index.postings_buffer[plo.positions_pointer + 1] & 0b0111_1111) as u32;
+    } else if (shard.postings_buffer[plo.positions_pointer + 1] & STOP_BIT) != 0 {
+        let position = ((shard.postings_buffer[plo.positions_pointer] as u32) << 7)
+            | (shard.postings_buffer[plo.positions_pointer + 1] & 0b0111_1111) as u32;
         plo.positions_pointer += 2;
         position
     } else {
-        let position = ((index.postings_buffer[plo.positions_pointer] as u32) << 13)
-            | ((index.postings_buffer[plo.positions_pointer + 1] as u32) << 7)
-            | (index.postings_buffer[plo.positions_pointer + 2] & 0b0111_1111) as u32;
+        let position = ((shard.postings_buffer[plo.positions_pointer] as u32) << 13)
+            | ((shard.postings_buffer[plo.positions_pointer + 1] as u32) << 7)
+            | (shard.postings_buffer[plo.positions_pointer + 2] & 0b0111_1111) as u32;
         plo.positions_pointer += 3;
         position
     }
@@ -51,7 +51,7 @@ pub(crate) fn get_next_position_uncommitted(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn add_result_singleterm_uncommitted(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     result_count: &mut i32,
     search_result: &mut SearchResult,
@@ -63,7 +63,7 @@ pub(crate) fn add_result_singleterm_uncommitted(
     plo_single: &mut PostingListObjectQuery,
     not_query_list: &mut [PostingListObjectQuery],
 ) {
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+    if !shard.delete_hashset.is_empty() && shard.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -79,8 +79,8 @@ pub(crate) fn add_result_singleterm_uncommitted(
         {
             let mut read_pointer = plo.posting_pointer;
 
-            plo.posting_pointer = read_u32_ref(&index.postings_buffer, &mut read_pointer) as usize;
-            plo.docid = read_u16_ref(&index.postings_buffer, &mut read_pointer) as i32;
+            plo.posting_pointer = read_u32_ref(&shard.postings_buffer, &mut read_pointer) as usize;
+            plo.docid = read_u16_ref(&shard.postings_buffer, &mut read_pointer) as i32;
 
             plo.p_docid += 1;
         }
@@ -89,19 +89,19 @@ pub(crate) fn add_result_singleterm_uncommitted(
         }
     }
 
-    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+    if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
         return;
     };
 
     let filtered = !not_query_list.is_empty()
         || !field_filter_set.is_empty()
-        || !index.delete_hashset.is_empty()
+        || !shard.delete_hashset.is_empty()
         || !facet_filter.is_empty();
 
-    index.decode_positions_uncommitted(plo_single, false);
+    shard.decode_positions_uncommitted(plo_single, false);
 
     if !field_filter_set.is_empty()
-        && plo_single.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
+        && plo_single.field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len()
     {
         let mut match_flag = false;
         for field in plo_single.field_vec.iter() {
@@ -117,7 +117,7 @@ pub(crate) fn add_result_singleterm_uncommitted(
     match *result_type {
         ResultType::Count => {
             if filtered {
-                facet_count(index, search_result, docid);
+                facet_count(shard, search_result, docid);
 
                 *result_count += 1;
             }
@@ -126,14 +126,14 @@ pub(crate) fn add_result_singleterm_uncommitted(
         ResultType::Topk => {}
         ResultType::TopkCount => {
             if filtered {
-                facet_count(index, search_result, docid);
+                facet_count(shard, search_result, docid);
 
                 *result_count += 1;
             }
         }
     }
 
-    let bm25 = get_bm25f_singleterm_multifield_uncommitted(index, docid, plo_single);
+    let bm25 = get_bm25f_singleterm_multifield_uncommitted(shard, docid, plo_single);
 
     search_result.topk_candidates.add_topk(
         min_heap::Result {
@@ -147,7 +147,7 @@ pub(crate) fn add_result_singleterm_uncommitted(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn add_result_multiterm_uncommitted(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     result_count: &mut i32,
     search_result: &mut SearchResult,
@@ -160,7 +160,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
     not_query_list: &mut [PostingListObjectQuery],
     phrase_query: bool,
 ) {
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+    if !shard.delete_hashset.is_empty() && shard.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -176,8 +176,8 @@ pub(crate) fn add_result_multiterm_uncommitted(
         {
             let mut read_pointer = plo.posting_pointer;
 
-            plo.posting_pointer = read_u32_ref(&index.postings_buffer, &mut read_pointer) as usize;
-            plo.docid = read_u16_ref(&index.postings_buffer, &mut read_pointer) as i32;
+            plo.posting_pointer = read_u32_ref(&shard.postings_buffer, &mut read_pointer) as usize;
+            plo.docid = read_u16_ref(&shard.postings_buffer, &mut read_pointer) as i32;
 
             plo.p_docid += 1;
         }
@@ -186,27 +186,27 @@ pub(crate) fn add_result_multiterm_uncommitted(
         }
     }
 
-    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+    if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
         return;
     };
 
     let filtered = phrase_query
         || !field_filter_set.is_empty()
-        || !index.delete_hashset.is_empty()
+        || !shard.delete_hashset.is_empty()
         || !facet_filter.is_empty();
 
     if !filtered && result_type == &ResultType::Count {
-        facet_count(index, search_result, docid);
+        facet_count(shard, search_result, docid);
 
         *result_count += 1;
         return;
     }
 
     for plo in query_list.iter_mut() {
-        index.decode_positions_uncommitted(plo, phrase_query);
+        shard.decode_positions_uncommitted(plo, phrase_query);
 
         if !field_filter_set.is_empty()
-            && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
+            && plo.field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len()
         {
             let mut match_flag = false;
             for field in plo.field_vec.iter() {
@@ -228,7 +228,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
         }
 
         let mut phrasematch_count = 0;
-        if index.indexed_field_vec.len() == 1 {
+        if shard.indexed_field_vec.len() == 1 {
             for plo in non_unique_query_list.iter_mut() {
                 plo.p_pos = 0;
                 let item = &query_list[index_transpose[plo.term_index_unique]];
@@ -238,7 +238,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                 plo.is_embedded = item.is_embedded;
                 plo.embedded_positions = item.embedded_positions;
 
-                plo.pos = get_next_position_uncommitted(index, plo);
+                plo.pos = get_next_position_uncommitted(shard, plo);
             }
 
             non_unique_query_list
@@ -266,7 +266,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             break;
                         }
                         pos1 +=
-                            get_next_position_uncommitted(index, &mut non_unique_query_list[t1])
+                            get_next_position_uncommitted(shard, &mut non_unique_query_list[t1])
                                 + 1;
                     }
                     std::cmp::Ordering::Greater => {
@@ -277,7 +277,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             break;
                         }
                         pos2 = non_unique_query_list[t2].pos
-                            + get_next_position_uncommitted(index, &mut non_unique_query_list[t2])
+                            + get_next_position_uncommitted(shard, &mut non_unique_query_list[t2])
                             + 1;
                         non_unique_query_list[t2].pos = pos2;
                     }
@@ -308,10 +308,10 @@ pub(crate) fn add_result_multiterm_uncommitted(
                         }
 
                         pos1 +=
-                            get_next_position_uncommitted(index, &mut non_unique_query_list[t1])
+                            get_next_position_uncommitted(shard, &mut non_unique_query_list[t1])
                                 + 1;
                         pos2 = non_unique_query_list[t2].pos
-                            + get_next_position_uncommitted(index, &mut non_unique_query_list[t2])
+                            + get_next_position_uncommitted(shard, &mut non_unique_query_list[t2])
                             + 1;
                         non_unique_query_list[t2].pos = pos2;
                     }
@@ -329,12 +329,12 @@ pub(crate) fn add_result_multiterm_uncommitted(
                 plo.p_field = 0;
             }
 
-            'main: for i in 0..index.indexed_field_vec.len() as u16 {
+            'main: for i in 0..shard.indexed_field_vec.len() as u16 {
                 for plo in non_unique_query_list.iter_mut() {
                     while plo.field_vec[plo.p_field].0 < i {
                         if !plo.is_embedded {
                             for _ in plo.p_pos..plo.field_vec[plo.p_field].1 as i32 {
-                                get_next_position_uncommitted(index, plo);
+                                get_next_position_uncommitted(shard, plo);
                             }
                         }
                         if plo.p_field < plo.field_vec.len() - 1 {
@@ -352,7 +352,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                 for plo in non_unique_query_list.iter_mut() {
                     plo.p_pos = 0;
                     plo.positions_count = plo.field_vec[plo.p_field].1 as u32;
-                    plo.pos = get_next_position_uncommitted(index, plo);
+                    plo.pos = get_next_position_uncommitted(shard, plo);
                 }
 
                 if !field_filter_set.is_empty() && !field_filter_set.contains(&i) {
@@ -381,7 +381,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             if non_unique_query_list[t1].p_pos
                                 == non_unique_query_list[t1].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for item in non_unique_query_list.iter_mut().skip(1) {
                                         item.p_pos += 1
                                     }
@@ -389,7 +389,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                                 break;
                             }
                             pos1 += get_next_position_uncommitted(
-                                index,
+                                shard,
                                 &mut non_unique_query_list[t1],
                             ) + 1;
                         }
@@ -398,7 +398,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             if non_unique_query_list[t2].p_pos
                                 == non_unique_query_list[t2].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for (j, item) in non_unique_query_list.iter_mut().enumerate() {
                                         if j != t2 {
                                             item.p_pos += 1
@@ -409,7 +409,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             }
                             pos2 = non_unique_query_list[t2].pos
                                 + get_next_position_uncommitted(
-                                    index,
+                                    shard,
                                     &mut non_unique_query_list[t2],
                                 )
                                 + 1;
@@ -432,7 +432,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             if non_unique_query_list[t1].p_pos
                                 == non_unique_query_list[t1].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for item in non_unique_query_list.iter_mut().skip(1) {
                                         item.p_pos += 1
                                     }
@@ -443,7 +443,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             if non_unique_query_list[t2].p_pos
                                 == non_unique_query_list[t2].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for item in non_unique_query_list.iter_mut().skip(2) {
                                         item.p_pos += 1
                                     }
@@ -452,12 +452,12 @@ pub(crate) fn add_result_multiterm_uncommitted(
                             }
 
                             pos1 += get_next_position_uncommitted(
-                                index,
+                                shard,
                                 &mut non_unique_query_list[t1],
                             ) + 1;
                             pos2 = non_unique_query_list[t2].pos
                                 + get_next_position_uncommitted(
-                                    index,
+                                    shard,
                                     &mut non_unique_query_list[t2],
                                 )
                                 + 1;
@@ -475,20 +475,20 @@ pub(crate) fn add_result_multiterm_uncommitted(
 
     match *result_type {
         ResultType::Count => {
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
             return;
         }
         ResultType::Topk => {}
         ResultType::TopkCount => {
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
         }
     }
 
-    let bm25 = get_bm25f_multiterm_multifield_uncommitted(index, docid, query_list);
+    let bm25 = get_bm25f_multiterm_multifield_uncommitted(shard, docid, query_list);
 
     search_result.topk_candidates.add_topk(
         min_heap::Result {
@@ -501,21 +501,21 @@ pub(crate) fn add_result_multiterm_uncommitted(
 
 #[inline(always)]
 pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     plo_single: &PostingListObjectQuery,
 ) -> f32 {
     let mut bm25f = 0.0;
 
-    let document_length_normalized_average = if index.document_length_normalized_average == 0.0 {
-        index.positions_sum_normalized as f32 / index.indexed_doc_count as f32
+    let document_length_normalized_average = if shard.document_length_normalized_average == 0.0 {
+        shard.positions_sum_normalized as f32 / shard.indexed_doc_count as f32
     } else {
-        index.document_length_normalized_average
+        shard.document_length_normalized_average
     };
 
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION
-            [index.document_length_compressed_array[0][docid & 0b11111111_11111111] as usize]
+            [shard.document_length_compressed_array[0][docid & 0b11111111_11111111] as usize]
             as f32;
 
         let document_length_quotient =
@@ -565,7 +565,7 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
                 for field in plo_single.field_vec.iter() {
                     let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                         .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                         as usize] as f32;
 
@@ -584,7 +584,7 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
                 for field in plo_single.field_vec_ngram1.iter() {
                     let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                         .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                         as usize] as f32;
 
@@ -602,7 +602,7 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
                 for field in plo_single.field_vec_ngram2.iter() {
                     let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                         .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                         as usize] as f32;
 
@@ -621,7 +621,7 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
                 for field in plo_single.field_vec_ngram1.iter() {
                     let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                         .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                         as usize] as f32;
 
@@ -639,7 +639,7 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
                 for field in plo_single.field_vec_ngram2.iter() {
                     let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                         .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                         as usize] as f32;
 
@@ -657,7 +657,7 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
                 for field in plo_single.field_vec_ngram3.iter() {
                     let field_id = field.0 as usize;
 
-                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                    let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                         .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                         as usize] as f32;
 
@@ -680,19 +680,19 @@ pub(crate) fn get_bm25f_singleterm_multifield_uncommitted(
 
 #[inline(always)]
 pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     query_list: &mut [PostingListObjectQuery],
 ) -> f32 {
     let mut bm25f = 0.0;
 
-    let document_length_normalized_average = if index.document_length_normalized_average == 0.0 {
-        index.positions_sum_normalized as f32 / index.indexed_doc_count as f32
+    let document_length_normalized_average = if shard.document_length_normalized_average == 0.0 {
+        shard.positions_sum_normalized as f32 / shard.indexed_doc_count as f32
     } else {
-        index.document_length_normalized_average
+        shard.document_length_normalized_average
     };
 
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         let mut document_length_quotient = 0.0;
 
         for plo in query_list.iter() {
@@ -701,7 +701,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
             }
 
             if document_length_quotient == 0.0 {
-                let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                     .document_length_compressed_array[0][docid & 0b11111111_11111111]
                     as usize] as f32;
 
@@ -762,7 +762,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     for field in plo.field_vec.iter() {
                         let field_id = field.0 as usize;
 
-                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                             .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                             as usize]
                             as f32;
@@ -772,7 +772,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                         let tf = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf
@@ -785,7 +785,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     for field in plo.field_vec_ngram1.iter() {
                         let field_id = field.0 as usize;
 
-                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                             .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                             as usize]
                             as f32;
@@ -795,7 +795,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                         let tf_ngram1 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram1
@@ -807,7 +807,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     for field in plo.field_vec_ngram2.iter() {
                         let field_id = field.0 as usize;
 
-                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                             .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                             as usize]
                             as f32;
@@ -817,7 +817,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                         let tf_ngram2 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram2
@@ -830,7 +830,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     for field in plo.field_vec_ngram1.iter() {
                         let field_id = field.0 as usize;
 
-                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                             .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                             as usize]
                             as f32;
@@ -840,7 +840,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                         let tf_ngram1 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram1
@@ -852,7 +852,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     for field in plo.field_vec_ngram2.iter() {
                         let field_id = field.0 as usize;
 
-                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                             .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                             as usize]
                             as f32;
@@ -862,7 +862,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                         let tf_ngram2 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram2
@@ -874,7 +874,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
                     for field in plo.field_vec_ngram3.iter() {
                         let field_id = field.0 as usize;
 
-                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[index
+                        let document_length_normalized = DOCUMENT_LENGTH_COMPRESSION[shard
                             .document_length_compressed_array[field_id][docid & 0b11111111_11111111]
                             as usize]
                             as f32;
@@ -884,7 +884,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 
                         let tf_ngram3 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram3
@@ -900,10 +900,9 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
     bm25f
 }
 
-impl Index {
+impl Shard {
     pub(crate) fn get_posting_count_uncommited(&self, term_string: &str) -> usize {
         let term_bytes = term_string.as_bytes();
-
         let key0 = hash32(term_bytes) & self.segment_number_mask1;
         let key_hash = hash64(term_bytes);
 
@@ -1210,7 +1209,7 @@ impl Index {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn single_docid_uncommitted<'a>(
-        self: &Index,
+        self: &Shard,
         block_id: usize,
         non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
         query_list: &mut [PostingListObjectQuery<'a>],
@@ -1275,7 +1274,7 @@ impl Index {
         }
     }
 
-    pub(crate) fn get_next_docid_uncommitted(self: &Index, plo: &mut PostingListObjectQuery) {
+    pub(crate) fn get_next_docid_uncommitted(self: &Shard, plo: &mut PostingListObjectQuery) {
         plo.posting_pointer_previous = plo.posting_pointer;
 
         let mut read_pointer = plo.posting_pointer;
@@ -1287,7 +1286,7 @@ impl Index {
 
     #[inline(always)]
     pub(crate) fn decode_positions_uncommitted(
-        self: &Index,
+        self: &Shard,
         plo: &mut PostingListObjectQuery,
         phrase_query: bool,
     ) {
@@ -1805,7 +1804,7 @@ impl Index {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn intersection_docid_uncommitted(
-        self: &Index,
+        self: &Shard,
         non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'_>],
         query_list: &mut [PostingListObjectQuery<'_>],
         not_query_list: &mut [PostingListObjectQuery<'_>],

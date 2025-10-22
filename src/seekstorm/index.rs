@@ -1,23 +1,26 @@
 use add_result::decode_positions_commit;
 use ahash::{AHashMap, AHashSet, RandomState};
+use futures::future;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
+
 use num_format::{Locale, ToFormattedString};
+
 use rust_stemmers::{Algorithm, Stemmer};
 use search::{QueryType, Search};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs::{self, File},
+    hint,
     io::{BufRead, BufReader, Read, Seek, Write},
     path::Path,
     sync::Arc,
-    thread::available_parallelism,
     time::Instant,
 };
 use tokio::sync::{RwLock, Semaphore};
@@ -29,7 +32,10 @@ use crate::word_segmentation::WordSegmentationTM;
 use crate::{
     add_result::{self, B, K, SIGMA},
     geo_search::encode_morton_2_d,
-    search::{self, FacetFilter, Point, QueryFacet, Ranges, ResultObject, ResultSort, ResultType},
+    search::{
+        self, FacetFilter, Point, QueryFacet, Ranges, ResultObject, ResultSort, ResultType,
+        SearchShard,
+    },
     tokenizer::tokenizer,
     utils::{
         self, read_u8_ref, read_u16, read_u16_ref, read_u32_ref, read_u64, read_u64_ref, write_f32,
@@ -54,7 +60,7 @@ pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const INDEX_HEADER_SIZE: u64 = 4;
 /// Incompatible index  format change: new library can't open old format, and old library can't open new format
-pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 4;
+pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 5;
 /// Backward compatible format change: new library can open old format, but old library can't open new format
 pub const INDEX_FORMAT_VERSION_MINOR: u16 = 0;
 
@@ -71,7 +77,6 @@ pub(crate) const SORT_FLAG: bool = true;
 
 pub(crate) const POSTING_BUFFER_SIZE: usize = 400_000_000;
 pub(crate) const MAX_QUERY_TERM_NUMBER: usize = 100;
-
 pub(crate) const SEGMENT_KEY_CAPACITY: usize = 1000;
 
 /// A document is a flattened, single level of key-value pairs, where key is an arbitrary string, and value represents any valid JSON value.
@@ -250,7 +255,7 @@ pub(crate) struct PostingListObjectIndex {
     pub position_range_previous: u32,
 }
 
-#[derive(Default, Debug, Serialize, Clone)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct PostingListObject0 {
     pub pointer_first: usize,
     pub pointer_last: usize,
@@ -259,6 +264,7 @@ pub(crate) struct PostingListObject0 {
     pub max_block_score: f32,
     pub max_docid: u16,
     pub max_p_docid: u16,
+
     pub ngram_type: NgramType,
     pub term_ngram1: String,
     pub term_ngram2: String,
@@ -269,6 +275,7 @@ pub(crate) struct PostingListObject0 {
     pub posting_count_ngram_1_compressed: u8,
     pub posting_count_ngram_2_compressed: u8,
     pub posting_count_ngram_3_compressed: u8,
+
     pub position_count: usize,
     pub pointer_pivot_p_docid: u16,
     pub size_compressed_positions_key: usize,
@@ -403,6 +410,7 @@ impl Default for PostingListObjectQuery<'_> {
             field_vec_ngram1: SmallVec::new(),
             field_vec_ngram2: SmallVec::new(),
             field_vec_ngram3: SmallVec::new(),
+
             end_flag: false,
             end_flag_block: false,
             bm25_flag: true,
@@ -541,6 +549,12 @@ pub struct SchemaField {
     #[serde(skip_serializing_if = "is_default_bool")]
     #[serde(default = "default_false")]
     pub facet: bool,
+    /// Indicate the longest field in schema.  
+    /// Otherwise the longest field will be automatically detected in first index_document.
+    /// Setting/detecting the longest field ensures efficient index encoding.
+    #[serde(skip_serializing_if = "is_default_bool")]
+    #[serde(default = "default_false")]
+    pub longest: bool,
 
     /// optional custom weight factor for Bm25 ranking
     #[serde(skip_serializing_if = "is_default_f32")]
@@ -575,6 +589,7 @@ impl SchemaField {
         indexed: bool,
         field_type: FieldType,
         facet: bool,
+        longest: bool,
         boost: f32,
     ) -> Self {
         SchemaField {
@@ -583,6 +598,7 @@ impl SchemaField {
             indexed,
             field_type,
             facet,
+            longest,
             boost,
 
             indexed_field_id: 0,
@@ -614,6 +630,7 @@ pub(crate) struct IndexedField {
 
     pub is_longest_field: bool,
 }
+
 /// StopwordType defines the stopword behavior: None, English, German, French, Spanish, Custom.
 /// Stopwords are removed, both from index and query: for compact index size and faster queries.
 /// Stopword removal has drawbacks: “The Who”, “Take That”, “Let it be”, “To be or not to be”, "The The", "End of days", "What might have been" are all valid queries for bands, songs, movies, literature,
@@ -668,7 +685,6 @@ pub struct IndexMetaObject {
     /// unique index ID
     /// Only used in SeekStorm server, not by the SeekStorm library itself.
     /// In the SeekStorm server with REST API, the index ID is used to specify the index (within the API key) where you want to index and search.
-    #[serde(skip)]
     pub id: u64,
     /// index name: used informational purposes
     pub name: String,
@@ -677,7 +693,6 @@ pub struct IndexMetaObject {
     /// TokenizerType defines the tokenizer behavior: AsciiAlphabetic, UnicodeAlphanumeric, UnicodeAlphanumericFolded, UnicodeAlphanumericZH
     pub tokenizer: TokenizerType,
     /// StemmerType defines the stemming behavior: None, Arabic, Armenian, Danish, Dutch, English, French, German, Greek, Hungarian, Italian, Norwegian, Portuguese, Romanian, Russian, Spanish, Swedish, Tamil, Turkish
-    #[serde(default)]
     pub stemmer: StemmerType,
 
     /// StopwordType defines the stopword behavior: None, English, German, French, Spanish, Custom.
@@ -703,7 +718,6 @@ pub struct IndexMetaObject {
     /// NgramRFF   = 0b00010000, rare frequent frequent
     /// NgramFFR   = 0b00100000, frequent frequent rare
     /// NgramFRF   = 0b01000000, frequent rare frequent
-    ///
     /// When **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
     /// ```rust
     /// NgramSet::SingleTerm as u8
@@ -844,32 +858,40 @@ pub struct FacetField {
 /// Facet field: a vector of unique values and their count (number of times the specific value appears in the whole index).
 pub type Facet = Vec<(String, usize)>;
 
+/// Shard wrapped in Arc and RwLock for concurrent read and write access.
+pub type ShardArc = Arc<RwLock<Shard>>;
+
 /// Index wrapped in Arc and RwLock for concurrent read and write access.
 pub type IndexArc = Arc<RwLock<Index>>;
 
-/// The root object of the index. It contains all levels and all segments of the index.
+/// The shard object of the index. It contains all levels and all segments of the index.
 /// It also contains all properties that control indexing and intersection.
-pub struct Index {
+pub struct Shard {
     /// Incompatible index  format change: new library can't open old format, and old library can't open new format
     pub index_format_version_major: u16,
     /// Backward compatible format change: new library can open old format, but old library can't open new format
     pub index_format_version_minor: u16,
-    /// List of stored fields in the index: get_document and highlighter work only with stored fields
-    pub stored_field_names: Vec<String>,
 
     /// Number of indexed documents
-    pub indexed_doc_count: usize,
+    pub(crate) indexed_doc_count: usize,
     /// Number of comitted documents
-    pub committed_doc_count: usize,
+    pub(crate) committed_doc_count: usize,
+    /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents, or once commit is invoked manually.
+    pub(crate) uncommitted: bool,
+
+    /// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
+    pub schema_map: HashMap<String, SchemaField>,
+    /// List of stored fields in the index: get_document and highlighter work only with stored fields
+    pub stored_field_names: Vec<String>,
+    /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
+    pub meta: IndexMetaObject,
+
     pub(crate) is_last_level_incomplete: bool,
     pub(crate) last_level_index_file_start_pos: u64,
     pub(crate) last_level_docstore_file_start_pos: u64,
+
     /// Number of allowed parallel indexed documents (default=available_parallelism). Can be used to detect wehen all indexing processes are finished.
-    pub permits: Arc<Semaphore>,
-    /// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
-    pub schema_map: HashMap<String, SchemaField>,
-    /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
-    pub meta: IndexMetaObject,
+    pub(crate) permits: Arc<Semaphore>,
 
     pub(crate) docstore_file: File,
     pub(crate) docstore_file_mmap: Mmap,
@@ -893,8 +915,6 @@ pub struct Index {
     pub(crate) level_index: Vec<LevelIndex>,
     pub(crate) segments_index: Vec<SegmentIndex>,
     pub(crate) segments_level0: Vec<SegmentLevel0>,
-    /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents, or once commit is invoked manually.
-    pub uncommitted: bool,
 
     pub(crate) enable_fallback: bool,
     pub(crate) enable_single_term_topk: bool,
@@ -908,6 +928,7 @@ pub struct Index {
     pub(crate) indexed_field_id_bits: usize,
     pub(crate) indexed_field_id_mask: usize,
     pub(crate) longest_field_id: usize,
+    pub(crate) longest_field_auto: bool,
     pub(crate) indexed_schema_vec: Vec<SchemaField>,
 
     pub(crate) document_length_compressed_array: Vec<[u8; ROARING_BLOCK_SIZE]>,
@@ -941,6 +962,9 @@ pub struct Index {
 
     #[cfg(feature = "zh")]
     pub(crate) word_segmentation_option: Option<WordSegmentationTM>,
+
+    pub(crate) shard_number: usize,
+    pub(crate) index_option: Option<Arc<RwLock<Index>>>,
     pub(crate) stemmer: Option<Stemmer>,
 
     pub(crate) stop_words: AHashSet<String>,
@@ -949,7 +973,49 @@ pub struct Index {
     pub(crate) key_head_size: usize,
 }
 
-/// SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
+/// The root object of the index. It contains all levels and all segments of the index.
+/// It also contains all properties that control indexing and intersection.
+pub struct Index {
+    /// Incompatible index  format change: new library can't open old format, and old library can't open new format
+    pub index_format_version_major: u16,
+    /// Backward compatible format change: new library can open old format, but old library can't open new format
+    pub index_format_version_minor: u16,
+
+    /// Number of indexed documents
+    pub(crate) indexed_doc_count: usize,
+
+    /// Number of deleted documents
+    pub(crate) deleted_doc_count: usize,
+    /// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
+    pub schema_map: HashMap<String, SchemaField>,
+    /// List of stored fields in the index: get_document and highlighter work only with stored fields
+    pub stored_field_names: Vec<String>,
+    /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
+    pub meta: IndexMetaObject,
+
+    pub(crate) index_file: File,
+    pub(crate) index_path_string: String,
+
+    pub(crate) compressed_index_segment_block_buffer: Vec<u8>,
+
+    pub(crate) segment_number1: usize,
+    pub(crate) segment_number_mask1: u32,
+
+    pub(crate) indexed_field_vec: Vec<IndexedField>,
+
+    pub(crate) mute: bool,
+
+    pub(crate) facets: Vec<FacetField>,
+
+    pub(crate) synonyms_map: AHashMap<u64, SynonymItem>,
+
+    pub(crate) shard_number: usize,
+    pub(crate) shard_bits: usize,
+    pub(crate) shard_vec: Vec<Arc<RwLock<Shard>>>,
+    pub(crate) shard_queue: Arc<RwLock<VecDeque<usize>>>,
+}
+
+///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
 pub type SynonymItem = Vec<(String, (u64, u32))>;
 
 /// Get the version of the SeekStorm search library
@@ -1054,11 +1120,37 @@ pub(crate) enum NgramType {
 /// * `index_path` - index path.  
 /// * `meta` - index meta object.  
 /// * `schema` - schema.  
-/// * `serialize_schema` - serialize schema.  
 /// * `synonyms` - vector of synonyms.
 /// * `segment_number_bits1` - number of index segments: e.g. 11 bits for 2048 segments.  
 /// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
-pub fn create_index(
+/// * `force_shard_number` - set number of shards manually or automatically.
+///   - none: number of shards is set automatically = number of physical processor cores (default)
+///   - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
+///   - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
+pub async fn create_index(
+    index_path: &Path,
+    meta: IndexMetaObject,
+    schema: &Vec<SchemaField>,
+    synonyms: &Vec<Synonym>,
+    segment_number_bits1: usize,
+    mute: bool,
+    force_shard_number: Option<usize>,
+) -> Result<IndexArc, String> {
+    create_index_root(
+        index_path,
+        meta,
+        schema,
+        true,
+        synonyms,
+        segment_number_bits1,
+        mute,
+        force_shard_number,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn create_index_root(
     index_path: &Path,
     meta: IndexMetaObject,
     schema: &Vec<SchemaField>,
@@ -1066,7 +1158,8 @@ pub fn create_index(
     synonyms: &Vec<Synonym>,
     segment_number_bits1: usize,
     mute: bool,
-) -> Result<Index, String> {
+    force_shard_number: Option<usize>,
+) -> Result<IndexArc, String> {
     let segment_number1 = 1usize << segment_number_bits1;
     let segment_number_mask1 = (1u32 << segment_number_bits1) - 1;
 
@@ -1083,8 +1176,276 @@ pub fn create_index(
     let file_path = Path::new(index_path_string).join(FILE_PATH);
     if !file_path.exists() {
         if !mute {
-            println!("index directory created: {} ", index_path_string);
+            println!("index directory created: {} ", file_path.display());
         }
+        fs::create_dir_all(file_path).unwrap();
+    }
+
+    match File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(Path::new(index_path).join(INDEX_FILENAME))
+    {
+        Ok(index_file) => {
+            let mut document_length_compressed_array: Vec<[u8; ROARING_BLOCK_SIZE]> = Vec::new();
+            let mut indexed_field_vec: Vec<IndexedField> = Vec::new();
+            let mut facets_vec: Vec<FacetField> = Vec::new();
+            let mut facets_map: AHashMap<String, usize> = AHashMap::new();
+
+            let mut schema_map: HashMap<String, SchemaField> = HashMap::new();
+            let mut indexed_schema_vec: Vec<SchemaField> = Vec::new();
+            let mut stored_field_names = Vec::new();
+            let mut facets_size_sum = 0;
+            let mut longest_field_id_option: Option<usize> = None;
+            for (i, schema_field) in schema.iter().enumerate() {
+                let mut schema_field_clone = schema_field.clone();
+                schema_field_clone.indexed_field_id = indexed_field_vec.len();
+                if schema_field.longest {
+                    longest_field_id_option = Some(schema_field_clone.indexed_field_id);
+                }
+
+                schema_field_clone.field_id = i;
+                schema_map.insert(schema_field.field.clone(), schema_field_clone.clone());
+
+                if schema_field.facet {
+                    let facet_size = match schema_field.field_type {
+                        FieldType::U8 => 1,
+                        FieldType::U16 => 2,
+                        FieldType::U32 => 4,
+                        FieldType::U64 => 8,
+                        FieldType::I8 => 1,
+                        FieldType::I16 => 2,
+                        FieldType::I32 => 4,
+                        FieldType::I64 => 8,
+                        FieldType::Timestamp => 8,
+                        FieldType::F32 => 4,
+                        FieldType::F64 => 8,
+                        FieldType::String16 => 2,
+                        FieldType::String32 => 4,
+                        FieldType::StringSet16 => 2,
+                        FieldType::StringSet32 => 4,
+                        FieldType::Point => 8,
+                        _ => 1,
+                    };
+
+                    facets_map.insert(schema_field.field.clone(), facets_vec.len());
+                    facets_vec.push(FacetField {
+                        name: schema_field.field.clone(),
+                        values: IndexMap::new(),
+                        min: ValueType::None,
+                        max: ValueType::None,
+                        offset: facets_size_sum,
+                        field_type: schema_field.field_type.clone(),
+                    });
+                    facets_size_sum += facet_size;
+                }
+
+                if schema_field.indexed {
+                    indexed_field_vec.push(IndexedField {
+                        schema_field_name: schema_field.field.clone(),
+                        is_longest_field: false,
+                        field_length_sum: 0,
+                        indexed_field_id: indexed_field_vec.len(),
+                    });
+                    indexed_schema_vec.push(schema_field_clone);
+                    document_length_compressed_array.push([0; ROARING_BLOCK_SIZE]);
+                }
+
+                if schema_field.stored {
+                    stored_field_names.push(schema_field.field.clone());
+                }
+            }
+
+            if !facets_vec.is_empty()
+                && let Ok(file) = File::open(Path::new(index_path).join(FACET_VALUES_FILENAME))
+                && let Ok(facets) = serde_json::from_reader(BufReader::new(file))
+            {
+                let mut facets: Vec<FacetField> = facets;
+                if facets_vec.len() == facets.len() {
+                    for i in 0..facets.len() {
+                        facets[i].offset = facets_vec[i].offset;
+                        facets[i].field_type = facets_vec[i].field_type.clone();
+                    }
+                }
+                facets_vec = facets;
+            }
+
+            let synonyms_map = get_synonyms_map(synonyms, segment_number_mask1);
+
+            let shard_number = if let Some(shard_number) = force_shard_number {
+                shard_number
+            } else {
+                num_cpus::get_physical()
+            };
+            let shard_bits = if serialize_schema {
+                (usize::BITS - (shard_number - 1).leading_zeros()) as usize
+            } else {
+                0
+            };
+
+            let mut shard_vec: Vec<Arc<RwLock<Shard>>> = Vec::new();
+            let mut shard_queue = VecDeque::<usize>::new();
+            if serialize_schema {
+                let mut result_object_list = Vec::new();
+                let index_path_clone = Arc::new(index_path.to_path_buf());
+                for i in 0..shard_number {
+                    let index_path_clone2 = index_path_clone.clone();
+                    let meta_clone = meta.clone();
+                    let schema_clone = schema.clone();
+                    result_object_list.push(tokio::spawn(async move {
+                        let shard_path = index_path_clone2.join("shards").join(i.to_string());
+                        let mut shard_meta = meta_clone.clone();
+                        shard_meta.id = i as u64;
+                        let mut shard = create_shard(
+                            &shard_path,
+                            shard_meta,
+                            &schema_clone,
+                            serialize_schema,
+                            &Vec::new(),
+                            segment_number_bits1,
+                            mute,
+                            longest_field_id_option,
+                        )
+                        .unwrap();
+                        shard.shard_number = shard_number;
+                        let shard_arc = Arc::new(RwLock::new(shard));
+                        (shard_arc, i)
+                    }));
+                }
+                for result_object_shard in result_object_list {
+                    let ro_shard = result_object_shard.await.unwrap();
+                    shard_vec.push(ro_shard.0);
+                    shard_queue.push_back(ro_shard.1);
+                }
+            }
+
+            let shard_queue_arc = Arc::new(RwLock::new(shard_queue));
+
+            let mut index = Index {
+                index_format_version_major: INDEX_FORMAT_VERSION_MAJOR,
+                index_format_version_minor: INDEX_FORMAT_VERSION_MINOR,
+
+                index_file,
+                index_path_string: index_path_string.to_owned(),
+                stored_field_names,
+
+                compressed_index_segment_block_buffer: vec![0; 10_000_000],
+                indexed_doc_count: 0,
+                deleted_doc_count: 0,
+                segment_number1: 0,
+                segment_number_mask1: 0,
+                schema_map,
+                indexed_field_vec,
+                meta: meta.clone(),
+                mute,
+                facets: facets_vec,
+                synonyms_map,
+
+                shard_number,
+                shard_bits,
+                shard_vec,
+                shard_queue: shard_queue_arc,
+            };
+
+            let file_len = index.index_file.metadata().unwrap().len();
+            if file_len == 0 {
+                write_u16(
+                    INDEX_FORMAT_VERSION_MAJOR,
+                    &mut index.compressed_index_segment_block_buffer,
+                    0,
+                );
+                write_u16(
+                    INDEX_FORMAT_VERSION_MINOR,
+                    &mut index.compressed_index_segment_block_buffer,
+                    2,
+                );
+                let _ = index.index_file.write(
+                    &index.compressed_index_segment_block_buffer[0..INDEX_HEADER_SIZE as usize],
+                );
+            } else {
+                let _ = index.index_file.read(
+                    &mut index.compressed_index_segment_block_buffer[0..INDEX_HEADER_SIZE as usize],
+                );
+                index.index_format_version_major =
+                    read_u16(&index.compressed_index_segment_block_buffer, 0);
+                index.index_format_version_minor =
+                    read_u16(&index.compressed_index_segment_block_buffer, 2);
+
+                if INDEX_FORMAT_VERSION_MAJOR != index.index_format_version_major {
+                    return Err("incompatible index format version ".to_string()
+                        + &INDEX_FORMAT_VERSION_MAJOR.to_string()
+                        + " "
+                        + &index.index_format_version_major.to_string());
+                };
+            }
+
+            index.segment_number1 = segment_number1;
+            index.segment_number_mask1 = segment_number_mask1;
+
+            if serialize_schema {
+                serde_json::to_writer(
+                    &File::create(Path::new(index_path).join(SCHEMA_FILENAME)).unwrap(),
+                    &schema,
+                )
+                .unwrap();
+
+                if !synonyms.is_empty() {
+                    serde_json::to_writer(
+                        &File::create(Path::new(index_path).join(SYNONYMS_FILENAME)).unwrap(),
+                        &synonyms,
+                    )
+                    .unwrap();
+                }
+
+                serde_json::to_writer(
+                    &File::create(Path::new(index_path).join(META_FILENAME)).unwrap(),
+                    &index.meta,
+                )
+                .unwrap();
+            }
+
+            let index_arc = Arc::new(RwLock::new(index));
+
+            if serialize_schema {
+                for shard in index_arc.write().await.shard_vec.iter() {
+                    shard.write().await.index_option = Some(index_arc.clone());
+                }
+            }
+
+            Ok(index_arc)
+        }
+        Err(e) => {
+            println!("file opening error");
+            Err(e.to_string())
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_shard(
+    index_path: &Path,
+    meta: IndexMetaObject,
+    schema: &Vec<SchemaField>,
+    serialize_schema: bool,
+    synonyms: &Vec<Synonym>,
+    segment_number_bits1: usize,
+    mute: bool,
+    longest_field_id_option: Option<usize>,
+) -> Result<Shard, String> {
+    let segment_number1 = 1usize << segment_number_bits1;
+    let segment_number_mask1 = (1u32 << segment_number_bits1) - 1;
+
+    let index_path_buf = index_path.to_path_buf();
+    let index_path_string = index_path_buf.to_str().unwrap();
+
+    if !index_path.exists() {
+        fs::create_dir_all(index_path).unwrap();
+    }
+
+    let file_path = Path::new(index_path_string).join(FILE_PATH);
+    if !file_path.exists() {
         fs::create_dir_all(file_path).unwrap();
     }
 
@@ -1187,7 +1548,7 @@ pub fn create_index(
             }
 
             let indexed_field_id_bits =
-                (u64::BITS - (indexed_field_vec.len() - 1).leading_zeros()) as usize;
+                (usize::BITS - (indexed_field_vec.len() - 1).leading_zeros()) as usize;
 
             let index_file_mmap;
             let docstore_file_mmap = if meta.access_type == AccessType::Mmap {
@@ -1247,6 +1608,8 @@ pub fn create_index(
             } else {
                 None
             };
+
+            let shard_number = 1;
 
             let stemmer = match meta.stemmer {
                 StemmerType::Arabic => Some(Stemmer::create(Algorithm::Arabic)),
@@ -1317,7 +1680,7 @@ pub fn create_index(
                 .map(|x| hash64(x.as_bytes()))
                 .collect();
 
-            let mut index = Index {
+            let mut index = Shard {
                 index_format_version_major: INDEX_FORMAT_VERSION_MAJOR,
                 index_format_version_minor: INDEX_FORMAT_VERSION_MINOR,
                 docstore_file,
@@ -1356,7 +1719,8 @@ pub fn create_index(
                 schema_map,
                 indexed_field_id_bits,
                 indexed_field_id_mask: (1usize << indexed_field_id_bits) - 1,
-                longest_field_id: 0,
+                longest_field_id: longest_field_id_option.unwrap_or_default(),
+                longest_field_auto: longest_field_id_option.is_none(),
                 indexed_field_vec,
                 indexed_schema_vec,
                 meta: meta.clone(),
@@ -1373,7 +1737,7 @@ pub fn create_index(
                 size_compressed_positions_index: 0,
                 position_count: 0,
                 postinglist_count: 0,
-                permits: Arc::new(Semaphore::new(available_parallelism().unwrap().get())),
+                permits: Arc::new(Semaphore::new(1)),
                 mute,
                 frequentword_results: AHashMap::new(),
                 facets: facets_vec,
@@ -1386,6 +1750,9 @@ pub fn create_index(
                 synonyms_map,
                 #[cfg(feature = "zh")]
                 word_segmentation_option,
+
+                shard_number,
+                index_option: None,
                 stemmer,
                 stop_words,
                 frequent_words,
@@ -1483,7 +1850,7 @@ pub fn create_index(
 
 #[inline(always)]
 pub(crate) fn get_document_length_compressed_mmap(
-    index: &Index,
+    index: &Shard,
     field_id: usize,
     block_id: usize,
     doc_id_block: usize,
@@ -1495,7 +1862,7 @@ pub(crate) fn get_document_length_compressed_mmap(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn get_max_score(
-    index: &Index,
+    index: &Shard,
     segment: &SegmentIndex,
     posting_count_ngram_1: u32,
     posting_count_ngram_2: u32,
@@ -1758,7 +2125,7 @@ pub(crate) fn get_max_score(
     bm25f
 }
 
-pub(crate) fn update_list_max_impact_score(index: &mut Index) {
+pub(crate) fn update_list_max_impact_score(index: &mut Shard) {
     if index.meta.access_type == AccessType::Mmap {
         return;
     }
@@ -1809,27 +2176,17 @@ pub(crate) fn update_list_max_impact_score(index: &mut Index) {
 /// Loads the index from disk into RAM or MMAP.
 /// * `index_path` - index path.  
 /// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
-pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, String> {
+pub(crate) async fn open_shard(index_path: &Path, mute: bool) -> Result<ShardArc, String> {
     if !mute {
         println!("opening index ...");
     }
-
-    let start_time = Instant::now();
 
     let mut index_mmap_position = INDEX_HEADER_SIZE as usize;
     let mut docstore_mmap_position = 0;
 
     match File::open(Path::new(index_path).join(META_FILENAME)) {
         Ok(meta_file) => {
-            let mut meta: IndexMetaObject =
-                serde_json::from_reader(BufReader::new(meta_file)).unwrap();
-
-            meta.id = index_path
-                .components()
-                .next_back()
-                .and_then(|c| c.as_os_str().to_str())
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or_default();
+            let meta: IndexMetaObject = serde_json::from_reader(BufReader::new(meta_file)).unwrap();
 
             match File::open(Path::new(index_path).join(SCHEMA_FILENAME)) {
                 Ok(schema_file) => {
@@ -1843,67 +2200,68 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                         Vec::new()
                     };
 
-                    match create_index(index_path, meta, &schema, false, &synonyms, 11, false) {
-                        Ok(mut index) => {
+                    match create_shard(index_path, meta, &schema, false, &synonyms, 11, mute, None)
+                    {
+                        Ok(mut shard) => {
                             let mut block_count_sum = 0;
 
-                            let is_mmap = index.meta.access_type == AccessType::Mmap;
+                            let is_mmap = shard.meta.access_type == AccessType::Mmap;
 
                             let file_len = if is_mmap {
-                                index.index_file_mmap.len() as u64
+                                shard.index_file_mmap.len() as u64
                             } else {
-                                index.index_file.metadata().unwrap().len()
+                                shard.index_file.metadata().unwrap().len()
                             };
 
                             while if is_mmap {
                                 index_mmap_position as u64
                             } else {
-                                index.index_file.stream_position().unwrap()
+                                shard.index_file.stream_position().unwrap()
                             } < file_len
                             {
                                 let mut segment_head_vec: Vec<(u32, u32)> = Vec::new();
-                                for key0 in 0..index.segment_number1 {
+                                for key0 in 0..shard.segment_number1 {
                                     if key0 == 0 {
-                                        index.last_level_index_file_start_pos = if is_mmap {
+                                        shard.last_level_index_file_start_pos = if is_mmap {
                                             index_mmap_position as u64
                                         } else {
-                                            index.index_file.stream_position().unwrap()
+                                            shard.index_file.stream_position().unwrap()
                                         };
 
-                                        index.last_level_docstore_file_start_pos = if is_mmap {
+                                        shard.last_level_docstore_file_start_pos = if is_mmap {
                                             docstore_mmap_position as u64
                                         } else {
-                                            index.docstore_file.stream_position().unwrap()
+                                            shard.docstore_file.stream_position().unwrap()
                                         };
 
-                                        if index.level_index.is_empty() {
+                                        if shard.level_index.is_empty() {
                                             let longest_field_id = if is_mmap {
                                                 read_u16_ref(
-                                                    &index.index_file_mmap,
+                                                    &shard.index_file_mmap,
                                                     &mut index_mmap_position,
                                                 )
                                                     as usize
                                             } else {
-                                                let _ = index.index_file.read(
-                                                    &mut index
+                                                let _ = shard.index_file.read(
+                                                    &mut shard
                                                         .compressed_index_segment_block_buffer
                                                         [0..2],
                                                 );
                                                 read_u16(
-                                                    &index.compressed_index_segment_block_buffer,
+                                                    &shard.compressed_index_segment_block_buffer,
                                                     0,
                                                 )
                                                     as usize
                                             };
 
-                                            for indexed_field in index.indexed_field_vec.iter_mut()
+                                            for indexed_field in shard.indexed_field_vec.iter_mut()
                                             {
                                                 indexed_field.is_longest_field = indexed_field
                                                     .indexed_field_id
                                                     == longest_field_id;
 
                                                 if indexed_field.is_longest_field {
-                                                    index.longest_field_id = longest_field_id
+                                                    shard.longest_field_id = longest_field_id
                                                 }
                                             }
                                         }
@@ -1915,17 +2273,17 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                         let document_length_compressed_array_pointer = if is_mmap {
                                             index_mmap_position
                                         } else {
-                                            index.index_file.stream_position().unwrap() as usize
+                                            shard.index_file.stream_position().unwrap() as usize
                                         };
 
-                                        for _i in 0..index.indexed_field_vec.len() {
+                                        for _i in 0..shard.indexed_field_vec.len() {
                                             if is_mmap {
                                                 index_mmap_position += ROARING_BLOCK_SIZE;
                                             } else {
                                                 let mut document_length_compressed_array_item =
                                                     [0u8; ROARING_BLOCK_SIZE];
 
-                                                let _ = index.index_file.read(
+                                                let _ = shard.index_file.read(
                                                     &mut document_length_compressed_array_item,
                                                 );
                                                 document_length_compressed_array_vec
@@ -1936,10 +2294,10 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                         let mut docstore_pointer_docs: Vec<u8> = Vec::new();
 
                                         let mut docstore_pointer_docs_pointer = 0;
-                                        if !index.stored_field_names.is_empty() {
+                                        if !shard.stored_field_names.is_empty() {
                                             if is_mmap {
                                                 let docstore_pointer_docs_size = read_u32_ref(
-                                                    &index.docstore_file_mmap,
+                                                    &shard.docstore_file_mmap,
                                                     &mut docstore_mmap_position,
                                                 )
                                                     as usize;
@@ -1948,93 +2306,93 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                 docstore_mmap_position +=
                                                     docstore_pointer_docs_size;
                                             } else {
-                                                let _ = index.docstore_file.read(
-                                                    &mut index
+                                                let _ = shard.docstore_file.read(
+                                                    &mut shard
                                                         .compressed_index_segment_block_buffer
                                                         [0..4],
                                                 );
 
                                                 let docstore_pointer_docs_size = read_u32(
-                                                    &index.compressed_index_segment_block_buffer,
+                                                    &shard.compressed_index_segment_block_buffer,
                                                     0,
                                                 )
                                                     as usize;
 
                                                 docstore_pointer_docs_pointer =
-                                                    index.docstore_file.stream_position().unwrap()
+                                                    shard.docstore_file.stream_position().unwrap()
                                                         as usize;
                                                 docstore_pointer_docs =
                                                     vec![0; docstore_pointer_docs_size];
-                                                let _ = index
+                                                let _ = shard
                                                     .docstore_file
                                                     .read(&mut docstore_pointer_docs);
                                             }
                                         }
 
                                         if is_mmap {
-                                            index.indexed_doc_count = read_u64_ref(
-                                                &index.index_file_mmap,
+                                            shard.indexed_doc_count = read_u64_ref(
+                                                &shard.index_file_mmap,
                                                 &mut index_mmap_position,
                                             )
                                                 as usize;
-                                            index.positions_sum_normalized = read_u64_ref(
-                                                &index.index_file_mmap,
+                                            shard.positions_sum_normalized = read_u64_ref(
+                                                &shard.index_file_mmap,
                                                 &mut index_mmap_position,
                                             );
 
-                                            for _key0 in 0..index.segment_number1 {
+                                            for _key0 in 0..shard.segment_number1 {
                                                 let block_length = read_u32_ref(
-                                                    &index.index_file_mmap,
+                                                    &shard.index_file_mmap,
                                                     &mut index_mmap_position,
                                                 );
                                                 let key_count = read_u32_ref(
-                                                    &index.index_file_mmap,
+                                                    &shard.index_file_mmap,
                                                     &mut index_mmap_position,
                                                 );
 
                                                 segment_head_vec.push((block_length, key_count));
                                             }
                                         } else {
-                                            let _ = index.index_file.read(
-                                                &mut index.compressed_index_segment_block_buffer
+                                            let _ = shard.index_file.read(
+                                                &mut shard.compressed_index_segment_block_buffer
                                                     [0..16],
                                             );
 
-                                            index.indexed_doc_count = read_u64(
-                                                &index.compressed_index_segment_block_buffer,
+                                            shard.indexed_doc_count = read_u64(
+                                                &shard.compressed_index_segment_block_buffer,
                                                 0,
                                             )
                                                 as usize;
 
-                                            index.positions_sum_normalized = read_u64(
-                                                &index.compressed_index_segment_block_buffer,
+                                            shard.positions_sum_normalized = read_u64(
+                                                &shard.compressed_index_segment_block_buffer,
                                                 8,
                                             );
 
-                                            for _key0 in 0..index.segment_number1 {
-                                                let _ = index.index_file.read(
-                                                    &mut index
+                                            for _key0 in 0..shard.segment_number1 {
+                                                let _ = shard.index_file.read(
+                                                    &mut shard
                                                         .compressed_index_segment_block_buffer
                                                         [0..8],
                                                 );
 
                                                 let block_length = read_u32(
-                                                    &index.compressed_index_segment_block_buffer,
+                                                    &shard.compressed_index_segment_block_buffer,
                                                     0,
                                                 );
                                                 let key_count = read_u32(
-                                                    &index.compressed_index_segment_block_buffer,
+                                                    &shard.compressed_index_segment_block_buffer,
                                                     4,
                                                 );
                                                 segment_head_vec.push((block_length, key_count));
                                             }
                                         }
 
-                                        index.document_length_normalized_average =
-                                            index.positions_sum_normalized as f32
-                                                / index.indexed_doc_count as f32;
+                                        shard.document_length_normalized_average =
+                                            shard.positions_sum_normalized as f32
+                                                / shard.indexed_doc_count as f32;
 
-                                        index.level_index.push(LevelIndex {
+                                        shard.level_index.push(LevelIndex {
                                             document_length_compressed_array:
                                                 document_length_compressed_array_vec,
                                             docstore_pointer_docs,
@@ -2047,16 +2405,16 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     let key_count = segment_head_vec[key0].1;
 
                                     let block_id =
-                                        (block_count_sum >> index.segment_number_bits1) as u32;
+                                        (block_count_sum >> shard.segment_number_bits1) as u32;
                                     block_count_sum += 1;
 
                                     let key_body_pointer_write_start: u32 =
-                                        key_count * index.key_head_size as u32;
+                                        key_count * shard.key_head_size as u32;
 
                                     if is_mmap {
                                         index_mmap_position +=
-                                            key_count as usize * index.key_head_size;
-                                        index.segments_index[key0].byte_array_blocks_pointer.push(
+                                            key_count as usize * shard.key_head_size;
+                                        shard.segments_index[key0].byte_array_blocks_pointer.push(
                                             (
                                                 index_mmap_position,
                                                 (block_length - key_body_pointer_write_start)
@@ -2068,13 +2426,13 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                         index_mmap_position +=
                                             (block_length - key_body_pointer_write_start) as usize;
                                     } else {
-                                        let _ = index.index_file.read(
-                                            &mut index.compressed_index_segment_block_buffer
-                                                [0..(key_count as usize * index.key_head_size)],
+                                        let _ = shard.index_file.read(
+                                            &mut shard.compressed_index_segment_block_buffer
+                                                [0..(key_count as usize * shard.key_head_size)],
                                         );
-                                        let compressed_index_segment_block_buffer = &index
+                                        let compressed_index_segment_block_buffer = &shard
                                             .compressed_index_segment_block_buffer
-                                            [0..(key_count as usize * index.key_head_size)];
+                                            [0..(key_count as usize * shard.key_head_size)];
 
                                         let mut block_array: Vec<u8> = vec![
                                             0;
@@ -2082,8 +2440,8 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                 as usize
                                         ];
 
-                                        let _ = index.index_file.read(&mut block_array);
-                                        index.segments_index[key0]
+                                        let _ = shard.index_file.read(&mut block_array);
+                                        shard.segments_index[key0]
                                             .byte_array_blocks
                                             .push(block_array);
 
@@ -2117,7 +2475,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                             let mut posting_count_ngram_1 = 0;
                                             let mut posting_count_ngram_2 = 0;
                                             let mut posting_count_ngram_3 = 0;
-                                            match index.key_head_size {
+                                            match shard.key_head_size {
                                                 20 => {}
                                                 22 => {
                                                     let posting_count_ngram_1_compressed =
@@ -2183,7 +2541,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                 &mut read_pointer,
                                             );
 
-                                            if let Some(value) = index.segments_index[key0]
+                                            if let Some(value) = shard.segments_index[key0]
                                                 .segment
                                                 .get_mut(&key_hash)
                                             {
@@ -2217,17 +2575,17 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                     }],
                                                     ..Default::default()
                                                 };
-                                                index.segments_index[key0]
+                                                shard.segments_index[key0]
                                                     .segment
                                                     .insert(key_hash, value);
                                             };
 
-                                            if !index
+                                            if !shard
                                                 .indexed_doc_count
                                                 .is_multiple_of(ROARING_BLOCK_SIZE)
                                                 && block_id as usize
-                                                    == index.indexed_doc_count / ROARING_BLOCK_SIZE
-                                                && index.meta.access_type == AccessType::Ram
+                                                    == shard.indexed_doc_count / ROARING_BLOCK_SIZE
+                                                && shard.meta.access_type == AccessType::Ram
                                             {
                                                 let position_range_previous = if key_index == 0 {
                                                     0
@@ -2262,7 +2620,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                             }
                                                             CompressionType::Bitmap => 8192,
                                                             CompressionType::Rle => {
-                                                                let byte_array_docid = &index
+                                                                let byte_array_docid = &shard
                                                                     .segments_index[key0]
                                                                     .byte_array_blocks
                                                                     [block_id as usize];
@@ -2277,7 +2635,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                                             as u32
                                                 };
 
-                                                let plo = index.segments_index[key0]
+                                                let plo = shard.segments_index[key0]
                                                     .segment
                                                     .get_mut(&key_hash)
                                                     .unwrap();
@@ -2296,23 +2654,23 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                 }
                             }
 
-                            index.committed_doc_count = index.indexed_doc_count;
-                            index.is_last_level_incomplete =
-                                !(index.committed_doc_count).is_multiple_of(ROARING_BLOCK_SIZE);
+                            shard.committed_doc_count = shard.indexed_doc_count;
+                            shard.is_last_level_incomplete =
+                                !shard.committed_doc_count.is_multiple_of(ROARING_BLOCK_SIZE);
 
-                            for (i, component) in index.bm25_component_cache.iter_mut().enumerate()
+                            for (i, component) in shard.bm25_component_cache.iter_mut().enumerate()
                             {
                                 let document_length_quotient = DOCUMENT_LENGTH_COMPRESSION[i]
                                     as f32
-                                    / index.document_length_normalized_average;
+                                    / shard.document_length_normalized_average;
                                 *component = K * (1.0 - B + B * document_length_quotient);
                             }
 
-                            index.string_set_to_single_term_id();
+                            shard.string_set_to_single_term_id();
 
-                            update_list_max_impact_score(&mut index);
+                            update_list_max_impact_score(&mut shard);
 
-                            let mut reader = BufReader::with_capacity(8192, &index.delete_file);
+                            let mut reader = BufReader::with_capacity(8192, &shard.delete_file);
                             loop {
                                 let Ok(buffer) = reader.fill_buf() else { break };
 
@@ -2324,40 +2682,16 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                                 for i in (0..length).step_by(8) {
                                     let docid = read_u64(buffer, i);
-                                    index.delete_hashset.insert(docid as usize);
+                                    shard.delete_hashset.insert(docid as usize);
                                 }
 
                                 reader.consume(length);
                             }
 
-                            let elapsed_time = start_time.elapsed().as_nanos();
+                            let shard_arc = Arc::new(RwLock::new(shard));
 
-                            if !mute {
-                                println!(
-                                    "{} name {} id {} version {} {} shards (1) ngram {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
-                                    INDEX_FILENAME,
-                                    index.meta.name,
-                                    index.meta.id,
-                                    index.index_format_version_major.to_string()
-                                        + "."
-                                        + &index.index_format_version_minor.to_string(),
-                                    INDEX_FORMAT_VERSION_MAJOR.to_string()
-                                        + "."
-                                        + &INDEX_FORMAT_VERSION_MINOR.to_string(),
-                                    index.meta.ngram_indexing,
-                                    index.level_index.len(),
-                                    index.indexed_field_vec.len(),
-                                    index.schema_map.len(),
-                                    index.facets.len(),
-                                    index.indexed_doc_count.to_formatted_string(&Locale::en),
-                                    index.delete_hashset.len().to_formatted_string(&Locale::en),
-                                    index.segment_number1,
-                                    elapsed_time / 1_000_000_000
-                                );
-                            }
-                            let index_arc = Arc::new(RwLock::new(index));
-                            warmup(&index_arc).await;
-                            Ok(index_arc)
+                            warmup(&shard_arc).await;
+                            Ok(shard_arc.clone())
                         }
                         Err(err) => Err(err.to_string()),
                     }
@@ -2369,10 +2703,131 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
     }
 }
 
-pub(crate) async fn warmup(index_object_arc: &IndexArc) {
-    index_object_arc.write().await.frequentword_results.clear();
+/// Loads the index from disk into RAM or MMAP.
+/// * `index_path` - index path.  
+/// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
+pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, String> {
+    if !mute {
+        println!("opening index ...");
+    }
+
+    let start_time = Instant::now();
+
+    match File::open(Path::new(index_path).join(META_FILENAME)) {
+        Ok(meta_file) => {
+            let meta: IndexMetaObject = serde_json::from_reader(BufReader::new(meta_file)).unwrap();
+
+            match File::open(Path::new(index_path).join(SCHEMA_FILENAME)) {
+                Ok(schema_file) => {
+                    let schema = serde_json::from_reader(BufReader::new(schema_file)).unwrap();
+
+                    let synonyms = if let Ok(synonym_file) =
+                        File::open(Path::new(index_path).join(SYNONYMS_FILENAME))
+                    {
+                        serde_json::from_reader(BufReader::new(synonym_file)).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+
+                    match create_index_root(
+                        index_path, meta, &schema, false, &synonyms, 11, false, None,
+                    )
+                    .await
+                    {
+                        Ok(index_arc) => {
+                            let lock = Arc::into_inner(index_arc).unwrap();
+                            let index = RwLock::into_inner(lock);
+
+                            let index_arc = Arc::new(RwLock::new(index));
+
+                            let mut level_count = 0;
+
+                            let mut shard_vec: Vec<Arc<RwLock<Shard>>> = Vec::new();
+                            let mut shard_queue = VecDeque::<usize>::new();
+
+                            let paths: Vec<_> = fs::read_dir(index_path.join("shards"))
+                                .unwrap()
+                                .filter_map(Result::ok)
+                                .collect();
+                            let mut shard_handle_vec = Vec::new();
+                            let index_path_clone = Arc::new(index_path.to_path_buf());
+                            for i in 0..paths.len() {
+                                let index_path_clone2 = index_path_clone.clone();
+                                shard_handle_vec.push(tokio::spawn(async move {
+                                    let path = index_path_clone2.join("shards").join(i.to_string());
+
+                                    open_shard(&path, true).await.unwrap()
+                                }));
+                            }
+                            for shard_handle in shard_handle_vec {
+                                let shard_arc = shard_handle.await.unwrap();
+                                shard_arc.write().await.index_option = Some(index_arc.clone());
+                                index_arc.write().await.indexed_doc_count +=
+                                    shard_arc.read().await.indexed_doc_count;
+                                index_arc.write().await.deleted_doc_count +=
+                                    shard_arc.read().await.delete_hashset.len();
+                                level_count += shard_arc.read().await.level_index.len();
+                                let shard_id = shard_arc.read().await.meta.id;
+                                shard_queue.push_back(shard_id as usize);
+                                shard_vec.push(shard_arc);
+                            }
+
+                            index_arc.write().await.shard_number = shard_vec.len();
+                            index_arc.write().await.shard_bits =
+                                (usize::BITS - (shard_vec.len() - 1).leading_zeros()) as usize;
+
+                            for shard in shard_vec.iter() {
+                                shard.write().await.shard_number = shard_vec.len();
+                            }
+
+                            index_arc.write().await.shard_vec = shard_vec;
+                            index_arc.write().await.shard_queue =
+                                Arc::new(RwLock::new(shard_queue));
+
+                            let elapsed_time = start_time.elapsed().as_nanos();
+
+                            if !mute {
+                                let index_ref = index_arc.read().await;
+                                println!(
+                                    "{} name {} id {} version {} {} shards {} ngrams {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
+                                    INDEX_FILENAME,
+                                    index_ref.meta.name,
+                                    index_ref.meta.id,
+                                    index_ref.index_format_version_major.to_string()
+                                        + "."
+                                        + &index_ref.index_format_version_minor.to_string(),
+                                    INDEX_FORMAT_VERSION_MAJOR.to_string()
+                                        + "."
+                                        + &INDEX_FORMAT_VERSION_MINOR.to_string(),
+                                    index_ref.shard_count().await,
+                                    index_ref.meta.ngram_indexing,
+                                    level_count,
+                                    index_ref.indexed_field_vec.len(),
+                                    index_ref.schema_map.len(),
+                                    index_ref.facets.len(),
+                                    index_ref.indexed_doc_count.to_formatted_string(&Locale::en),
+                                    index_ref.deleted_doc_count.to_formatted_string(&Locale::en),
+                                    index_ref.segment_number1,
+                                    elapsed_time / 1_000_000_000
+                                );
+                            }
+
+                            Ok(index_arc.clone())
+                        }
+                        Err(err) => Err(err.to_string()),
+                    }
+                }
+                Err(err) => Err(err.to_string()),
+            }
+        }
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+pub(crate) async fn warmup(shard_object_arc: &ShardArc) {
+    shard_object_arc.write().await.frequentword_results.clear();
     let mut query_facets: Vec<QueryFacet> = Vec::new();
-    for facet in index_object_arc.read().await.facets.iter() {
+    for facet in shard_object_arc.read().await.facets.iter() {
         match facet.field_type {
             FieldType::String16 => query_facets.push(QueryFacet::String16 {
                 field: facet.name.clone(),
@@ -2398,10 +2853,10 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
         }
     }
 
-    let frequent_words = index_object_arc.read().await.frequent_words.clone();
+    let frequent_words = shard_object_arc.read().await.frequent_words.clone();
     for frequentword in frequent_words.iter() {
-        let results_list = index_object_arc
-            .search(
+        let results_list = shard_object_arc
+            .search_shard(
                 frequentword.to_owned(),
                 QueryType::Union,
                 0,
@@ -2415,7 +2870,7 @@ pub(crate) async fn warmup(index_object_arc: &IndexArc) {
             )
             .await;
 
-        let mut index_mut = index_object_arc.write().await;
+        let mut index_mut = shard_object_arc.write().await;
         index_mut
             .frequentword_results
             .insert(frequentword.to_string(), results_list);
@@ -2427,6 +2882,7 @@ pub(crate) struct TermObject {
     pub key_hash: u64,
     pub key0: u32,
     pub term: String,
+
     pub ngram_type: NgramType,
 
     pub term_ngram_2: String,
@@ -2536,136 +2992,148 @@ pub(crate) const DOCUMENT_LENGTH_COMPRESSION: [u32; 256] = {
     k2
 };
 
-impl Index {
-    /// Get number of index levels. One index level comprises 64K documents.
-    pub fn level_count(index: &Index) -> usize {
-        index.level_index.len()
-    }
-
-    /// Get number of facets defined in the index schema.
-    pub fn get_facets_count(&self) -> usize {
-        self.facets.len()
-    }
-
-    /// get_index_facets_minmax: return map of numeric facet fields, each with field name and min/max values.
-    pub fn get_index_facets_minmax(&self) -> HashMap<String, MinMaxFieldJson> {
-        let mut facets_minmax: HashMap<String, MinMaxFieldJson> = HashMap::new();
-        for facet in self.facets.iter() {
-            match (&facet.min, &facet.max) {
-                (ValueType::U8(min), ValueType::U8(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
+impl Shard {
+    pub(crate) fn string_set_to_single_term_id(&mut self) {
+        for (i, facet) in self.facets.iter().enumerate() {
+            if facet.field_type == FieldType::StringSet16
+                || facet.field_type == FieldType::StringSet32
+            {
+                for (idx, value) in facet.values.iter().enumerate() {
+                    for term in value.1.0.iter() {
+                        self.string_set_to_single_term_id_vec[i]
+                            .entry(term.to_string())
+                            .or_insert(AHashSet::from_iter(vec![idx as u32]))
+                            .insert(idx as u32);
+                    }
                 }
-                (ValueType::U16(min), ValueType::U16(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::U32(min), ValueType::U32(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::U64(min), ValueType::U64(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::I8(min), ValueType::I8(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::I16(min), ValueType::I16(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::I32(min), ValueType::I32(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::I64(min), ValueType::I64(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::Timestamp(min), ValueType::Timestamp(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::F32(min), ValueType::F32(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                (ValueType::F64(min), ValueType::F64(max)) => {
-                    facets_minmax.insert(
-                        facet.name.clone(),
-                        MinMaxFieldJson {
-                            min: (*min).into(),
-                            max: (*max).into(),
-                        },
-                    );
-                }
-                _ => {}
             }
         }
-        facets_minmax
     }
 
-    /// get_index_string_facets: list of string facet fields, each with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
-    /// values are sorted by their occurrence count within all indexed documents in descending order
-    /// * `query_facets`: Must be set if facet fields should be returned in get_index_facets. If set to Vec::new() then no facet fields are returned.
-    ///   The prefix property of a QueryFacet allows to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-    ///   The length property of a QueryFacet allows limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
-    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
-    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///   Example: query_facets = vec![16 {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String16 {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
-    pub fn get_index_string_facets(
+    /// Reset shard to empty, while maintaining schema
+    async fn clear_shard(&mut self) {
+        let permit = self.permits.clone().acquire_owned().await.unwrap();
+
+        let mut mmap_options = MmapOptions::new();
+        let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
+        self.index_file_mmap = mmap
+            .make_read_only()
+            .expect("Unable to make Mmap read-only");
+
+        let _ = self.index_file.rewind();
+        if let Err(e) = self.index_file.set_len(0) {
+            println!(
+                "Unable to index_file.set_len in clear_index {} {} {:?}",
+                self.index_path_string, self.indexed_doc_count, e
+            )
+        };
+
+        if !self.compressed_docstore_segment_block_buffer.is_empty() {
+            self.compressed_docstore_segment_block_buffer = vec![0; ROARING_BLOCK_SIZE * 4];
+        };
+
+        write_u16(
+            INDEX_FORMAT_VERSION_MAJOR,
+            &mut self.compressed_index_segment_block_buffer,
+            0,
+        );
+        write_u16(
+            INDEX_FORMAT_VERSION_MINOR,
+            &mut self.compressed_index_segment_block_buffer,
+            2,
+        );
+
+        let _ = self
+            .index_file
+            .write(&self.compressed_index_segment_block_buffer[0..INDEX_HEADER_SIZE as usize]);
+        let _ = self.index_file.flush();
+
+        self.index_file_mmap =
+            unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
+
+        self.docstore_file_mmap = unsafe {
+            MmapOptions::new()
+                .len(0)
+                .map(&self.docstore_file)
+                .expect("Unable to create Mmap")
+        };
+
+        let _ = self.docstore_file.rewind();
+        if let Err(e) = self.docstore_file.set_len(0) {
+            println!("Unable to docstore_file.set_len in clear_index {:?}", e)
+        };
+        let _ = self.docstore_file.flush();
+
+        let _ = self.delete_file.rewind();
+        if let Err(e) = self.delete_file.set_len(0) {
+            println!("Unable to delete_file.set_len in clear_index {:?}", e)
+        };
+        let _ = self.delete_file.flush();
+        self.delete_hashset.clear();
+
+        self.facets_file_mmap = unsafe {
+            MmapOptions::new()
+                .len(0)
+                .map_mut(&self.facets_file)
+                .expect("Unable to create Mmap")
+        };
+        let _ = self.facets_file.rewind();
+        if let Err(e) = self
+            .facets_file
+            .set_len((self.facets_size_sum * ROARING_BLOCK_SIZE) as u64)
+        {
+            println!("Unable to facets_file.set_len in clear_index {:?}", e)
+        };
+        let _ = self.facets_file.flush();
+
+        self.facets_file_mmap =
+            unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
+        let index_path = Path::new(&self.index_path_string);
+        let _ = fs::remove_file(index_path.join(FACET_VALUES_FILENAME));
+        for facet in self.facets.iter_mut() {
+            facet.values.clear();
+            facet.min = ValueType::None;
+            facet.max = ValueType::None;
+        }
+
+        if !self.stored_field_names.is_empty() && self.meta.access_type == AccessType::Mmap {
+            self.docstore_file_mmap =
+                unsafe { Mmap::map(&self.docstore_file).expect("Unable to create Mmap") };
+        }
+
+        self.document_length_normalized_average = 0.0;
+        self.indexed_doc_count = 0;
+        self.committed_doc_count = 0;
+        self.positions_sum_normalized = 0;
+
+        self.level_index = Vec::new();
+
+        for segment in self.segments_index.iter_mut() {
+            segment.byte_array_blocks.clear();
+            segment.byte_array_blocks_pointer.clear();
+            segment.segment.clear();
+        }
+
+        for segment in self.segments_level0.iter_mut() {
+            segment.segment.clear();
+        }
+
+        self.key_count_sum = 0;
+        self.block_id = 0;
+        self.strip_compressed_sum = 0;
+        self.postings_buffer_pointer = 0;
+        self.docid_count = 0;
+        self.size_compressed_docid_index = 0;
+        self.size_compressed_positions_index = 0;
+        self.position_count = 0;
+        self.postinglist_count = 0;
+
+        self.is_last_level_incomplete = false;
+
+        drop(permit);
+    }
+
+    pub(crate) fn get_index_string_facets_shard(
         &self,
         query_facets: Vec<QueryFacet>,
     ) -> Option<AHashMap<String, Facet>> {
@@ -2794,137 +3262,347 @@ impl Index {
 
         Some(facets)
     }
+}
 
-    pub(crate) fn string_set_to_single_term_id(&mut self) {
-        for (i, facet) in self.facets.iter().enumerate() {
-            if facet.field_type == FieldType::StringSet16
-                || facet.field_type == FieldType::StringSet32
-            {
-                for (idx, value) in facet.values.iter().enumerate() {
-                    for term in value.1.0.iter() {
-                        self.string_set_to_single_term_id_vec[i]
-                            .entry(term.to_string())
-                            .or_insert(AHashSet::from_iter(vec![idx as u32]))
-                            .insert(idx as u32);
+impl Index {
+    /// Current document count: indexed document count - deleted document count
+    pub async fn current_doc_count(&self) -> usize {
+        let mut current_doc_count = 0;
+        for shard in self.shard_vec.iter() {
+            current_doc_count +=
+                shard.read().await.indexed_doc_count - shard.read().await.delete_hashset.len();
+        }
+        current_doc_count
+    }
+
+    /// are there uncommited documents?
+    pub async fn uncommitted_doc_count(&self) -> usize {
+        let mut uncommitted_doc_count = 0;
+        for shard in self.shard_vec.iter() {
+            uncommitted_doc_count +=
+                shard.read().await.indexed_doc_count - shard.read().await.committed_doc_count;
+        }
+        uncommitted_doc_count
+    }
+
+    /// Get number of indexed documents.
+    pub async fn committed_doc_count(&self) -> usize {
+        let mut committed_doc_count = 0;
+        for shard in self.shard_vec.iter() {
+            committed_doc_count += shard.read().await.committed_doc_count;
+        }
+        committed_doc_count
+    }
+
+    /// Get number of indexed documents.
+    pub async fn indexed_doc_count(&self) -> usize {
+        let mut indexed_doc_count = 0;
+        for shard in self.shard_vec.iter() {
+            indexed_doc_count += shard.read().await.indexed_doc_count;
+        }
+        indexed_doc_count
+    }
+
+    /// Get number of index levels. One index level comprises 64K documents.
+    pub async fn level_count(&self) -> usize {
+        let mut level_count = 0;
+        for shard in self.shard_vec.iter() {
+            level_count += shard.read().await.level_index.len();
+        }
+        level_count
+    }
+
+    /// Get number of index shards.
+    pub async fn shard_count(&self) -> usize {
+        self.shard_number
+    }
+
+    /// Get number of facets defined in the index schema.
+    pub fn facets_count(&self) -> usize {
+        self.facets.len()
+    }
+
+    /// get_index_facets_minmax: return map of numeric facet fields, each with field name and min/max values.
+    pub async fn index_facets_minmax(&self) -> HashMap<String, MinMaxFieldJson> {
+        let mut facets_minmax: HashMap<String, MinMaxFieldJson> = HashMap::new();
+        for shard in self.shard_vec.iter() {
+            for facet in shard.read().await.facets.iter() {
+                match (&facet.min, &facet.max) {
+                    (ValueType::U8(min), ValueType::U8(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_u64().unwrap() as u8))).into(),
+                                max: (*max.min(&(item.max.as_u64().unwrap() as u8))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
                     }
+                    (ValueType::U16(min), ValueType::U16(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_u64().unwrap() as u16))).into(),
+                                max: (*max.min(&(item.max.as_u64().unwrap() as u16))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::U32(min), ValueType::U32(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_u64().unwrap() as u32))).into(),
+                                max: (*max.min(&(item.max.as_u64().unwrap() as u32))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::U64(min), ValueType::U64(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_u64().unwrap()))).into(),
+                                max: (*max.min(&(item.max.as_u64().unwrap()))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::I8(min), ValueType::I8(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_i64().unwrap() as i8))).into(),
+                                max: (*max.min(&(item.max.as_i64().unwrap() as i8))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::I16(min), ValueType::I16(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_i64().unwrap() as i16))).into(),
+                                max: (*max.min(&(item.max.as_i64().unwrap() as i16))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::I32(min), ValueType::I32(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_i64().unwrap() as i32))).into(),
+                                max: (*max.min(&(item.max.as_i64().unwrap() as i32))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::I64(min), ValueType::I64(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_i64().unwrap()))).into(),
+                                max: (*max.min(&(item.max.as_i64().unwrap()))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::Timestamp(min), ValueType::Timestamp(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: (*min.min(&(item.min.as_i64().unwrap()))).into(),
+                                max: (*max.min(&(item.max.as_i64().unwrap()))).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::F32(min), ValueType::F32(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: min.min(item.min.as_f64().unwrap() as f32).into(),
+                                max: max.min(item.max.as_f64().unwrap() as f32).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    (ValueType::F64(min), ValueType::F64(max)) => {
+                        if let Some(item) = facets_minmax.get_mut(&facet.name) {
+                            *item = MinMaxFieldJson {
+                                min: min.min(item.min.as_f64().unwrap()).into(),
+                                max: max.min(item.max.as_f64().unwrap()).into(),
+                            }
+                        } else {
+                            facets_minmax.insert(
+                                facet.name.clone(),
+                                MinMaxFieldJson {
+                                    min: (*min).into(),
+                                    max: (*max).into(),
+                                },
+                            );
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
+        facets_minmax
+    }
+
+    /// get_index_string_facets: list of string facet fields, each with field name and a map of unique values and their count (number of times the specific value appears in the whole index).
+    /// values are sorted by their occurrence count within all indexed documents in descending order
+    /// * `query_facets`: Must be set if facet fields should be returned in get_index_facets. If set to Vec::new() then no facet fields are returned.
+    ///   The prefix property of a QueryFacet allows to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    ///   The length property of a QueryFacet allows limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are returned.
+    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    ///   Example: query_facets = vec![QueryFacet::String16 {field: "language".to_string(),prefix: "ger".to_string(),length: 5},QueryFacet::String16 {field: "brand".to_string(),prefix: "a".to_string(),length: 5}];
+    pub async fn get_index_string_facets(
+        &self,
+        query_facets: Vec<QueryFacet>,
+    ) -> Option<AHashMap<String, Facet>> {
+        if self.facets.is_empty() {
+            return None;
+        }
+
+        let mut result: AHashMap<String, Facet> = AHashMap::new();
+
+        let mut result_facets: AHashMap<String, (AHashMap<String, usize>, u32)> = AHashMap::new();
+        for query_facet in query_facets.iter() {
+            match query_facet {
+                QueryFacet::String16 {
+                    field,
+                    prefix: _,
+                    length,
+                } => {
+                    result_facets.insert(field.into(), (AHashMap::new(), *length as u32));
+                }
+                QueryFacet::StringSet16 {
+                    field,
+                    prefix: _,
+                    length,
+                } => {
+                    result_facets.insert(field.into(), (AHashMap::new(), *length as u32));
+                }
+
+                QueryFacet::String32 {
+                    field,
+                    prefix: _,
+                    length,
+                } => {
+                    result_facets.insert(field.into(), (AHashMap::new(), *length));
+                }
+                QueryFacet::StringSet32 {
+                    field,
+                    prefix: _,
+                    length,
+                } => {
+                    result_facets.insert(field.into(), (AHashMap::new(), *length));
+                }
+
+                _ => {}
+            }
+        }
+
+        for shard_arc in self.shard_vec.iter() {
+            let shard = shard_arc.read().await;
+            if !shard.facets.is_empty() {
+                for facet in shard.facets.iter() {
+                    if let Some(existing) = result_facets.get_mut(&facet.name) {
+                        for (key, value) in facet.values.iter() {
+                            *existing.0.entry(key.clone()).or_insert(0) += value.1;
+                        }
+                    };
+                }
+            }
+        }
+
+        for (key, value) in result_facets.iter_mut() {
+            let sum = value
+                .0
+                .iter()
+                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                .map(|(a, c)| (a.clone(), *c))
+                .take(value.1 as usize)
+                .collect::<Vec<_>>();
+            result.insert(key.clone(), sum);
+        }
+
+        Some(result)
     }
 
     /// Reset index to empty, while maintaining schema
-    pub fn clear_index(&mut self) {
-        self.index_file_mmap = unsafe {
-            MmapOptions::new()
-                .len(0)
-                .map(&self.index_file)
-                .expect("Unable to create Mmap")
-        };
-
-        let _ = self.index_file.rewind();
-        if let Err(e) = self.index_file.set_len(0) {
-            println!("Unable to index_file.set_len in clear_index {:?}", e)
-        };
-
-        if !self.compressed_docstore_segment_block_buffer.is_empty() {
-            self.compressed_docstore_segment_block_buffer = vec![0; ROARING_BLOCK_SIZE * 4];
-        };
-
-        write_u16(
-            INDEX_FORMAT_VERSION_MAJOR,
-            &mut self.compressed_index_segment_block_buffer,
-            0,
-        );
-        write_u16(
-            INDEX_FORMAT_VERSION_MINOR,
-            &mut self.compressed_index_segment_block_buffer,
-            2,
-        );
-        let _ = self
-            .index_file
-            .write(&self.compressed_index_segment_block_buffer[0..INDEX_HEADER_SIZE as usize]);
-        let _ = self.index_file.flush();
-
-        self.index_file_mmap =
-            unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
-
-        self.docstore_file_mmap = unsafe {
-            MmapOptions::new()
-                .len(0)
-                .map(&self.docstore_file)
-                .expect("Unable to create Mmap")
-        };
-        let _ = self.docstore_file.rewind();
-        if let Err(e) = self.docstore_file.set_len(0) {
-            println!("Unable to docstore_file.set_len in clear_index {:?}", e)
-        };
-        let _ = self.docstore_file.flush();
-
-        let _ = self.delete_file.rewind();
-        if let Err(e) = self.delete_file.set_len(0) {
-            println!("Unable to delete_file.set_len in clear_index {:?}", e)
-        };
-        let _ = self.delete_file.flush();
-        self.delete_hashset.clear();
-
-        self.facets_file_mmap = unsafe {
-            MmapOptions::new()
-                .len(0)
-                .map_mut(&self.facets_file)
-                .expect("Unable to create Mmap")
-        };
-        let _ = self.facets_file.rewind();
-        if let Err(e) = self
-            .facets_file
-            .set_len((self.facets_size_sum * ROARING_BLOCK_SIZE) as u64)
-        {
-            println!("Unable to facets_file.set_len in clear_index {:?}", e)
-        };
-        let _ = self.facets_file.flush();
-
-        self.facets_file_mmap =
-            unsafe { MmapMut::map_mut(&self.facets_file).expect("Unable to create Mmap") };
-        let index_path = Path::new(&self.index_path_string);
-        let _ = fs::remove_file(index_path.join(FACET_VALUES_FILENAME));
-        for facet in self.facets.iter_mut() {
-            facet.values.clear();
-            facet.min = ValueType::None;
-            facet.max = ValueType::None;
+    pub async fn clear_index(&self) {
+        let mut result_object_list = Vec::new();
+        for shard in self.shard_vec.iter() {
+            let shard_clone = shard.clone();
+            result_object_list.push(tokio::spawn(async move {
+                shard_clone.write().await.clear_shard().await;
+            }));
         }
-
-        if !self.stored_field_names.is_empty() && self.meta.access_type == AccessType::Mmap {
-            self.docstore_file_mmap =
-                unsafe { Mmap::map(&self.docstore_file).expect("Unable to create Mmap") };
-        }
-
-        self.document_length_normalized_average = 0.0;
-        self.indexed_doc_count = 0;
-        self.committed_doc_count = 0;
-        self.positions_sum_normalized = 0;
-
-        self.level_index = Vec::new();
-
-        for segment in self.segments_index.iter_mut() {
-            segment.byte_array_blocks.clear();
-            segment.byte_array_blocks_pointer.clear();
-            segment.segment.clear();
-        }
-
-        for segment in self.segments_level0.iter_mut() {
-            segment.segment.clear();
-        }
-
-        self.key_count_sum = 0;
-        self.block_id = 0;
-        self.strip_compressed_sum = 0;
-        self.postings_buffer_pointer = 0;
-        self.docid_count = 0;
-        self.size_compressed_docid_index = 0;
-        self.size_compressed_positions_index = 0;
-        self.position_count = 0;
-        self.postinglist_count = 0;
-
-        self.is_last_level_incomplete = false;
+        future::join_all(result_object_list).await;
     }
 
     /// Delete index from disc and ram
@@ -2937,11 +3615,6 @@ impl Index {
         let _ = fs::remove_file(index_path.join(FACET_FILENAME));
         let _ = fs::remove_file(index_path.join(FACET_VALUES_FILENAME));
         let _ = fs::remove_dir(index_path);
-    }
-
-    /// Remove index from RAM (Reverse of open_index)
-    pub fn close_index(&mut self) {
-        self.commit(self.indexed_doc_count);
     }
 
     /// Get synonyms from index
@@ -2994,11 +3667,6 @@ impl Index {
         self.synonyms_map = get_synonyms_map(&merged_synonyms, self.segment_number_mask1);
         Ok(merged_synonyms.len())
     }
-
-    /// Current document count: indexed document count - deleted document count
-    pub fn current_doc_count(&self) -> usize {
-        self.indexed_doc_count - self.delete_hashset.len()
-    }
 }
 
 /// Delete document from index by document id
@@ -3018,15 +3686,19 @@ pub trait DeleteDocument {
 /// BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
 impl DeleteDocument for IndexArc {
     async fn delete_document(&self, docid: u64) {
-        let mut index_mut = self.write().await;
-        if docid as usize >= index_mut.indexed_doc_count {
+        let index_ref = self.read().await;
+        let shard_id = docid & ((1 << index_ref.shard_bits) - 1);
+        let doc_id = docid >> index_ref.shard_bits;
+        let mut shard_mut = index_ref.shard_vec[shard_id as usize].write().await;
+
+        if doc_id as usize >= shard_mut.indexed_doc_count {
             return;
         }
-        if index_mut.delete_hashset.insert(docid as usize) {
+        if shard_mut.delete_hashset.insert(doc_id as usize) {
             let mut buffer: [u8; 8] = [0; 8];
-            write_u64(docid, &mut buffer, 0);
-            let _ = index_mut.delete_file.write(&buffer);
-            let _ = index_mut.delete_file.flush();
+            write_u64(doc_id, &mut buffer, 0);
+            let _ = shard_mut.delete_file.write(&buffer);
+            let _ = shard_mut.delete_file.flush();
         }
     }
 }
@@ -3048,18 +3720,9 @@ pub trait DeleteDocuments {
 /// BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
 impl DeleteDocuments for IndexArc {
     async fn delete_documents(&self, docid_vec: Vec<u64>) {
-        let mut index_mut = self.write().await;
-        let mut buffer: [u8; 8] = [0; 8];
         for docid in docid_vec {
-            if docid as usize >= index_mut.indexed_doc_count {
-                continue;
-            }
-            if index_mut.delete_hashset.insert(docid as usize) {
-                write_u64(docid, &mut buffer, 0);
-                let _ = index_mut.delete_file.write(&buffer);
-            }
+            self.delete_document(docid).await;
         }
-        let _ = index_mut.delete_file.flush();
     }
 }
 
@@ -3197,158 +3860,198 @@ impl IndexDocument for IndexArc {
     /// Index document
     /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_document(&self, document: Document, file: FileType) {
+        while self.read().await.shard_queue.read().await.is_empty() {
+            hint::spin_loop();
+        }
+
         let index_arc_clone = self.clone();
+        let index_id = self
+            .read()
+            .await
+            .shard_queue
+            .write()
+            .await
+            .pop_front()
+            .unwrap();
+        let index_shard = self.read().await.shard_vec[index_id].clone();
+
+        let permit = index_shard
+            .read()
+            .await
+            .permits
+            .clone()
+            .acquire_owned()
+            .await
+            .unwrap();
+
+        tokio::spawn(async move {
+            let index_id2 = index_id;
+            index_shard.index_document_shard(document, file).await;
+
+            index_arc_clone
+                .read()
+                .await
+                .shard_queue
+                .write()
+                .await
+                .push_back(index_id2);
+            drop(permit);
+        });
+    }
+}
+
+/// Indexes a single document
+#[allow(async_fn_in_trait)]
+pub(crate) trait IndexDocumentShard {
+    /// Indexes a single document
+    /// May block, if the threshold of documents indexed in parallel is exceeded.
+    async fn index_document_shard(&self, document: Document, file: FileType);
+}
+
+impl IndexDocumentShard for ShardArc {
+    /// Index document
+    /// May block, if the threshold of documents indexed in parallel is exceeded.
+    async fn index_document_shard(&self, document: Document, file: FileType) {
+        let shard_arc_clone = self.clone();
         let index_ref = self.read().await;
         let schema = index_ref.indexed_schema_vec.clone();
         let ngram_indexing = index_ref.meta.ngram_indexing;
         let indexed_field_vec_len = index_ref.indexed_field_vec.len();
         let tokenizer_type = index_ref.meta.tokenizer;
         let segment_number_mask1 = index_ref.segment_number_mask1;
-        let index_permits = index_ref.permits.clone();
         drop(index_ref);
 
-        let permit_thread = index_permits.clone().acquire_owned().await.unwrap();
+        let token_per_field_max: u32 = u16::MAX as u32;
+        let mut unique_terms: AHashMap<String, TermObject> = AHashMap::new();
+        let mut field_vec: Vec<(usize, u8, u32, u32)> = Vec::new();
+        let shard_ref2 = shard_arc_clone.read().await;
 
-        tokio::spawn(async move {
-            let token_per_field_max: u32 = u16::MAX as u32;
-            let mut unique_terms: AHashMap<String, TermObject> = AHashMap::new();
-            let mut field_vec: Vec<(usize, u8, u32, u32)> = Vec::new();
-            let index_ref2 = index_arc_clone.read().await;
-
-            for schema_field in schema.iter() {
-                if !schema_field.indexed {
-                    continue;
-                }
-
-                let field_name = &schema_field.field;
-
-                if let Some(field_value) = document.get(field_name) {
-                    let mut non_unique_terms: Vec<NonUniqueTermObject> = Vec::new();
-                    let mut nonunique_terms_count = 0u32;
-
-                    let text = match schema_field.field_type {
-                        FieldType::Text | FieldType::String16 | FieldType::String32 => {
-                            serde_json::from_value::<String>(field_value.clone())
-                                .unwrap_or(field_value.to_string())
-                        }
-                        _ => field_value.to_string(),
-                    };
-
-                    let mut query_type_mut = QueryType::Union;
-
-                    tokenizer(
-                        &index_ref2,
-                        &text,
-                        &mut unique_terms,
-                        &mut non_unique_terms,
-                        tokenizer_type,
-                        segment_number_mask1,
-                        &mut nonunique_terms_count,
-                        token_per_field_max,
-                        MAX_POSITIONS_PER_TERM,
-                        false,
-                        &mut query_type_mut,
-                        ngram_indexing,
-                        schema_field.indexed_field_id,
-                        indexed_field_vec_len,
-                    );
-
-                    let document_length_compressed: u8 = int_to_byte4(nonunique_terms_count);
-                    let document_length_normalized: u32 =
-                        DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize];
-                    field_vec.push((
-                        schema_field.indexed_field_id,
-                        document_length_compressed,
-                        document_length_normalized,
-                        nonunique_terms_count,
-                    ));
-                }
+        for schema_field in schema.iter() {
+            if !schema_field.indexed {
+                continue;
             }
-            drop(index_ref2);
 
-            let ngrams: Vec<String> = unique_terms
-                .iter()
-                .filter(|term| term.1.ngram_type != NgramType::SingleTerm)
-                .map(|term| term.1.term.clone())
-                .collect();
+            let field_name = &schema_field.field;
 
-            for term in ngrams.iter() {
-                let ngram = unique_terms.get(term).unwrap();
+            if let Some(field_value) = document.get(field_name) {
+                let mut non_unique_terms: Vec<NonUniqueTermObject> = Vec::new();
+                let mut nonunique_terms_count = 0u32;
 
-                match ngram.ngram_type {
-                    NgramType::SingleTerm => {}
-                    NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
-                        let term_ngram1 = ngram.term_ngram_1.clone();
-                        let term_ngram2 = ngram.term_ngram_0.clone();
+                let text = match schema_field.field_type {
+                    FieldType::Text | FieldType::String16 | FieldType::String32 => {
+                        serde_json::from_value::<String>(field_value.clone())
+                            .unwrap_or(field_value.to_string())
+                    }
+                    _ => field_value.to_string(),
+                };
 
-                        for indexed_field_id in 0..indexed_field_vec_len {
-                            let positions_count_ngram1 = unique_terms[&term_ngram1]
-                                .field_positions_vec[indexed_field_id]
-                                .len();
-                            let positions_count_ngram2 = unique_terms[&term_ngram2]
-                                .field_positions_vec[indexed_field_id]
-                                .len();
-                            let ngram = unique_terms.get_mut(term).unwrap();
+                let mut query_type_mut = QueryType::Union;
 
-                            if positions_count_ngram1 > 0 {
-                                ngram
-                                    .field_vec_ngram1
-                                    .push((indexed_field_id, positions_count_ngram1 as u32));
-                            }
-                            if positions_count_ngram2 > 0 {
-                                ngram
-                                    .field_vec_ngram2
-                                    .push((indexed_field_id, positions_count_ngram2 as u32));
-                            }
+                tokenizer(
+                    &shard_ref2,
+                    &text,
+                    &mut unique_terms,
+                    &mut non_unique_terms,
+                    tokenizer_type,
+                    segment_number_mask1,
+                    &mut nonunique_terms_count,
+                    token_per_field_max,
+                    MAX_POSITIONS_PER_TERM,
+                    false,
+                    &mut query_type_mut,
+                    ngram_indexing,
+                    schema_field.indexed_field_id,
+                    indexed_field_vec_len,
+                );
+
+                let document_length_compressed: u8 = int_to_byte4(nonunique_terms_count);
+                let document_length_normalized: u32 =
+                    DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize];
+                field_vec.push((
+                    schema_field.indexed_field_id,
+                    document_length_compressed,
+                    document_length_normalized,
+                    nonunique_terms_count,
+                ));
+            }
+        }
+        drop(shard_ref2);
+
+        let ngrams: Vec<String> = unique_terms
+            .iter()
+            .filter(|term| term.1.ngram_type != NgramType::SingleTerm)
+            .map(|term| term.1.term.clone())
+            .collect();
+
+        for term in ngrams.iter() {
+            let ngram = unique_terms.get(term).unwrap();
+
+            match ngram.ngram_type {
+                NgramType::SingleTerm => {}
+                NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
+                    let term_ngram1 = ngram.term_ngram_1.clone();
+                    let term_ngram2 = ngram.term_ngram_0.clone();
+
+                    for indexed_field_id in 0..indexed_field_vec_len {
+                        let positions_count_ngram1 =
+                            unique_terms[&term_ngram1].field_positions_vec[indexed_field_id].len();
+                        let positions_count_ngram2 =
+                            unique_terms[&term_ngram2].field_positions_vec[indexed_field_id].len();
+                        let ngram = unique_terms.get_mut(term).unwrap();
+
+                        if positions_count_ngram1 > 0 {
+                            ngram
+                                .field_vec_ngram1
+                                .push((indexed_field_id, positions_count_ngram1 as u32));
+                        }
+                        if positions_count_ngram2 > 0 {
+                            ngram
+                                .field_vec_ngram2
+                                .push((indexed_field_id, positions_count_ngram2 as u32));
                         }
                     }
-                    _ => {
-                        let term_ngram1 = ngram.term_ngram_2.clone();
-                        let term_ngram2 = ngram.term_ngram_1.clone();
-                        let term_ngram3 = ngram.term_ngram_0.clone();
+                }
+                _ => {
+                    let term_ngram1 = ngram.term_ngram_2.clone();
+                    let term_ngram2 = ngram.term_ngram_1.clone();
+                    let term_ngram3 = ngram.term_ngram_0.clone();
 
-                        for indexed_field_id in 0..indexed_field_vec_len {
-                            let positions_count_ngram1 = unique_terms[&term_ngram1]
-                                .field_positions_vec[indexed_field_id]
-                                .len();
-                            let positions_count_ngram2 = unique_terms[&term_ngram2]
-                                .field_positions_vec[indexed_field_id]
-                                .len();
-                            let positions_count_ngram3 = unique_terms[&term_ngram3]
-                                .field_positions_vec[indexed_field_id]
-                                .len();
-                            let ngram = unique_terms.get_mut(term).unwrap();
+                    for indexed_field_id in 0..indexed_field_vec_len {
+                        let positions_count_ngram1 =
+                            unique_terms[&term_ngram1].field_positions_vec[indexed_field_id].len();
+                        let positions_count_ngram2 =
+                            unique_terms[&term_ngram2].field_positions_vec[indexed_field_id].len();
+                        let positions_count_ngram3 =
+                            unique_terms[&term_ngram3].field_positions_vec[indexed_field_id].len();
+                        let ngram = unique_terms.get_mut(term).unwrap();
 
-                            if positions_count_ngram1 > 0 {
-                                ngram
-                                    .field_vec_ngram1
-                                    .push((indexed_field_id, positions_count_ngram1 as u32));
-                            }
-                            if positions_count_ngram2 > 0 {
-                                ngram
-                                    .field_vec_ngram2
-                                    .push((indexed_field_id, positions_count_ngram2 as u32));
-                            }
-                            if positions_count_ngram3 > 0 {
-                                ngram
-                                    .field_vec_ngram3
-                                    .push((indexed_field_id, positions_count_ngram3 as u32));
-                            }
+                        if positions_count_ngram1 > 0 {
+                            ngram
+                                .field_vec_ngram1
+                                .push((indexed_field_id, positions_count_ngram1 as u32));
+                        }
+                        if positions_count_ngram2 > 0 {
+                            ngram
+                                .field_vec_ngram2
+                                .push((indexed_field_id, positions_count_ngram2 as u32));
+                        }
+                        if positions_count_ngram3 > 0 {
+                            ngram
+                                .field_vec_ngram3
+                                .push((indexed_field_id, positions_count_ngram3 as u32));
                         }
                     }
                 }
             }
+        }
 
-            let document_item = DocumentItem {
-                document,
-                unique_terms,
-                field_vec,
-            };
+        let document_item = DocumentItem {
+            document,
+            unique_terms,
+            field_vec,
+        };
 
-            index_arc_clone.index_document_2(document_item, file).await;
-
-            drop(permit_thread);
-        });
+        shard_arc_clone.index_document_2(document_item, file).await;
     }
 }
 
@@ -3357,24 +4060,24 @@ pub(crate) trait IndexDocument2 {
     async fn index_document_2(&self, document_item: DocumentItem, file: FileType);
 }
 
-impl IndexDocument2 for IndexArc {
+impl IndexDocument2 for ShardArc {
     async fn index_document_2(&self, document_item: DocumentItem, file: FileType) {
-        let mut index_mut = self.write().await;
+        let mut shard_mut = self.write().await;
 
-        let doc_id: usize = index_mut.indexed_doc_count;
-        index_mut.indexed_doc_count += 1;
+        let doc_id: usize = shard_mut.indexed_doc_count;
+        shard_mut.indexed_doc_count += 1;
 
-        let do_commit = index_mut.block_id != doc_id >> 16;
+        let do_commit = shard_mut.block_id != doc_id >> 16;
         if do_commit {
-            index_mut.commit(doc_id);
+            shard_mut.commit(doc_id);
 
-            index_mut.block_id = doc_id >> 16;
+            shard_mut.block_id = doc_id >> 16;
         }
 
-        if !index_mut.facets.is_empty() {
-            let facets_size_sum = index_mut.facets_size_sum;
-            for i in 0..index_mut.facets.len() {
-                let facet = &mut index_mut.facets[i];
+        if !shard_mut.facets.is_empty() {
+            let facets_size_sum = shard_mut.facets_size_sum;
+            for i in 0..shard_mut.facets.len() {
+                let facet = &mut shard_mut.facets[i];
                 if let Some(field_value) = document_item.document.get(&facet.name) {
                     let address = (facets_size_sum * doc_id) + facet.offset;
 
@@ -3396,7 +4099,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            index_mut.facets_file_mmap[address] = value
+                            shard_mut.facets_file_mmap[address] = value
                         }
                         FieldType::U16 => {
                             let value = field_value.as_u64().unwrap_or_default() as u16;
@@ -3415,7 +4118,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_u16(value, &mut index_mut.facets_file_mmap, address)
+                            write_u16(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::U32 => {
                             let value = field_value.as_u64().unwrap_or_default() as u32;
@@ -3434,7 +4137,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_u32(value, &mut index_mut.facets_file_mmap, address)
+                            write_u32(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::U64 => {
                             let value = field_value.as_u64().unwrap_or_default();
@@ -3453,7 +4156,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_u64(value, &mut index_mut.facets_file_mmap, address)
+                            write_u64(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::I8 => {
                             let value = field_value.as_i64().unwrap_or_default() as i8;
@@ -3472,7 +4175,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_i8(value, &mut index_mut.facets_file_mmap, address)
+                            write_i8(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::I16 => {
                             let value = field_value.as_i64().unwrap_or_default() as i16;
@@ -3491,7 +4194,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_i16(value, &mut index_mut.facets_file_mmap, address)
+                            write_i16(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::I32 => {
                             let value = field_value.as_i64().unwrap_or_default() as i32;
@@ -3510,7 +4213,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_i32(value, &mut index_mut.facets_file_mmap, address)
+                            write_i32(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::I64 => {
                             let value = field_value.as_i64().unwrap_or_default();
@@ -3529,7 +4232,7 @@ impl IndexDocument2 for IndexArc {
                                 }
                                 _ => {}
                             }
-                            write_i64(value, &mut index_mut.facets_file_mmap, address)
+                            write_i64(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::Timestamp => {
                             let value = field_value.as_i64().unwrap_or_default();
@@ -3549,7 +4252,7 @@ impl IndexDocument2 for IndexArc {
                                 _ => {}
                             }
 
-                            write_i64(value, &mut index_mut.facets_file_mmap, address);
+                            write_i64(value, &mut shard_mut.facets_file_mmap, address);
                         }
                         FieldType::F32 => {
                             let value = field_value.as_f64().unwrap_or_default() as f32;
@@ -3569,7 +4272,7 @@ impl IndexDocument2 for IndexArc {
                                 _ => {}
                             }
 
-                            write_f32(value, &mut index_mut.facets_file_mmap, address)
+                            write_f32(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::F64 => {
                             let value = field_value.as_f64().unwrap_or_default();
@@ -3589,13 +4292,12 @@ impl IndexDocument2 for IndexArc {
                                 _ => {}
                             }
 
-                            write_f64(value, &mut index_mut.facets_file_mmap, address)
+                            write_f64(value, &mut shard_mut.facets_file_mmap, address)
                         }
                         FieldType::String16 => {
                             if facet.values.len() < u16::MAX as usize {
                                 let key = serde_json::from_value::<String>(field_value.clone())
                                     .unwrap_or(field_value.to_string());
-
                                 let key_string = key.clone();
                                 let key = vec![key];
 
@@ -3603,7 +4305,7 @@ impl IndexDocument2 for IndexArc {
 
                                 let facet_value_id =
                                     facet.values.get_index_of(&key_string).unwrap() as u16;
-                                write_u16(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                                write_u16(facet_value_id, &mut shard_mut.facets_file_mmap, address)
                             }
                         }
 
@@ -3618,7 +4320,7 @@ impl IndexDocument2 for IndexArc {
 
                                 let facet_value_id =
                                     facet.values.get_index_of(&key_string).unwrap() as u16;
-                                write_u16(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                                write_u16(facet_value_id, &mut shard_mut.facets_file_mmap, address)
                             }
                         }
 
@@ -3634,7 +4336,7 @@ impl IndexDocument2 for IndexArc {
 
                                 let facet_value_id =
                                     facet.values.get_index_of(&key_string).unwrap() as u32;
-                                write_u32(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                                write_u32(facet_value_id, &mut shard_mut.facets_file_mmap, address)
                             }
                         }
 
@@ -3649,7 +4351,7 @@ impl IndexDocument2 for IndexArc {
 
                                 let facet_value_id =
                                     facet.values.get_index_of(&key_string).unwrap() as u32;
-                                write_u32(facet_value_id, &mut index_mut.facets_file_mmap, address)
+                                write_u32(facet_value_id, &mut shard_mut.facets_file_mmap, address)
                             }
                         }
 
@@ -3663,7 +4365,7 @@ impl IndexDocument2 for IndexArc {
                                     && point[1] <= 180.0
                                 {
                                     let morton_code = encode_morton_2_d(&point);
-                                    write_u64(morton_code, &mut index_mut.facets_file_mmap, address)
+                                    write_u64(morton_code, &mut shard_mut.facets_file_mmap, address)
                                 } else {
                                     println!(
                                         "outside valid coordinate range: {} {}",
@@ -3679,11 +4381,13 @@ impl IndexDocument2 for IndexArc {
             }
         }
 
-        if !index_mut.uncommitted {
-            for strip0 in index_mut.segments_level0.iter_mut() {
-                strip0.positions_compressed = vec![0; MAX_POSITIONS_PER_TERM * 2];
+        if !shard_mut.uncommitted {
+            if shard_mut.segments_level0[0].positions_compressed.is_empty() {
+                for strip0 in shard_mut.segments_level0.iter_mut() {
+                    strip0.positions_compressed = vec![0; MAX_POSITIONS_PER_TERM * 2];
+                }
             }
-            index_mut.uncommitted = true;
+            shard_mut.uncommitted = true;
         }
 
         let mut longest_field_id: usize = 0;
@@ -3694,31 +4398,34 @@ impl IndexDocument2 for IndexArc {
                 longest_field_length = value.3;
             }
 
-            index_mut.document_length_compressed_array[value.0][doc_id & 0b11111111_11111111] =
+            shard_mut.document_length_compressed_array[value.0][doc_id & 0b11111111_11111111] =
                 value.1;
-            index_mut.positions_sum_normalized += value.2 as u64;
-            index_mut.indexed_field_vec[value.0].field_length_sum += value.2 as usize;
+            shard_mut.positions_sum_normalized += value.2 as u64;
+            shard_mut.indexed_field_vec[value.0].field_length_sum += value.2 as usize;
         }
 
         if doc_id == 0 {
-            index_mut.longest_field_id = longest_field_id;
-            index_mut.indexed_field_vec[longest_field_id].is_longest_field = true;
-            if index_mut.indexed_field_vec.len() > 1 {
+            if !shard_mut.longest_field_auto {
+                longest_field_id = shard_mut.longest_field_id;
+            }
+            shard_mut.longest_field_id = longest_field_id;
+            shard_mut.indexed_field_vec[longest_field_id].is_longest_field = true;
+            if shard_mut.indexed_field_vec.len() > 1 {
                 println!(
                     "detect longest field id {} name {} length {}",
                     longest_field_id,
-                    index_mut.indexed_field_vec[longest_field_id].schema_field_name,
+                    shard_mut.indexed_field_vec[longest_field_id].schema_field_name,
                     longest_field_length
                 );
             }
         }
 
         let mut unique_terms = document_item.unique_terms;
-        if !index_mut.synonyms_map.is_empty() {
+        if !shard_mut.synonyms_map.is_empty() {
             let unique_terms_clone = unique_terms.clone();
             for term in unique_terms_clone.iter() {
                 if term.1.ngram_type == NgramType::SingleTerm {
-                    let synonym = index_mut.synonyms_map.get(&term.1.key_hash).cloned();
+                    let synonym = shard_mut.synonyms_map.get(&term.1.key_hash).cloned();
                     if let Some(synonym) = synonym {
                         for synonym_term in synonym {
                             let mut term_clone = term.1.clone();
@@ -3745,18 +4452,18 @@ impl IndexDocument2 for IndexArc {
         }
 
         for term in unique_terms {
-            index_mut.index_posting(term.1, doc_id, false, 0, 0, 0);
+            shard_mut.index_posting(term.1, doc_id, false, 0, 0, 0);
         }
 
         match file {
             FileType::Path(file_path) => {
-                if let Err(e) = index_mut.copy_file(&file_path, doc_id) {
+                if let Err(e) = shard_mut.copy_file(&file_path, doc_id) {
                     println!("can't copy PDF {} {}", file_path.display(), e);
                 }
             }
 
             FileType::Bytes(file_path, file_bytes) => {
-                if let Err(e) = index_mut.write_file(&file_bytes, doc_id) {
+                if let Err(e) = shard_mut.write_file(&file_bytes, doc_id) {
                     println!("can't copy PDF {} {}", file_path.display(), e);
                 }
             }
@@ -3764,12 +4471,12 @@ impl IndexDocument2 for IndexArc {
             _ => {}
         }
 
-        if !index_mut.stored_field_names.is_empty() {
-            index_mut.store_document(doc_id, document_item.document);
+        if !shard_mut.stored_field_names.is_empty() {
+            shard_mut.store_document(doc_id, document_item.document);
         }
 
         if do_commit {
-            drop(index_mut);
+            drop(shard_mut);
             warmup(self).await;
         }
     }

@@ -3,8 +3,8 @@ use crate::{
     compatible::{_blsr_u64, _mm_tzcnt_64},
     geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
-        AccessType, CompressionType, FieldType, Index, NonUniquePostingListObjectQuery,
-        PostingListObjectQuery, QueueObject, ROARING_BLOCK_SIZE,
+        AccessType, CompressionType, FieldType, NonUniquePostingListObjectQuery,
+        PostingListObjectQuery, QueueObject, ROARING_BLOCK_SIZE, Shard,
     },
     intersection::intersection_blockid,
     search::{FilterSparse, Ranges, ResultType, SearchResult},
@@ -17,6 +17,7 @@ use crate::{
 
 use ahash::AHashSet;
 use num_traits::FromPrimitive;
+
 use std::sync::Arc;
 use std::{
     cmp,
@@ -28,7 +29,7 @@ use async_recursion::async_recursion;
 /// Union for a single block
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn union_docid<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -177,7 +178,7 @@ pub(crate) async fn union_docid<'a>(
             search_result.skip_facet_count = false;
 
             single_docid(
-                index,
+                shard,
                 query_list,
                 not_query_list,
                 &query_list[single_term_index].blocks
@@ -199,7 +200,7 @@ pub(crate) async fn union_docid<'a>(
 
     if result_type == &ResultType::Count {
         union_count(
-            index,
+            shard,
             result_count,
             search_result,
             query_list,
@@ -213,7 +214,7 @@ pub(crate) async fn union_docid<'a>(
 
     if query_list.len() <= 8 {
         union_scan_8(
-            index,
+            shard,
             non_unique_query_list,
             query_list,
             not_query_list,
@@ -229,7 +230,7 @@ pub(crate) async fn union_docid<'a>(
     } else {
         let mut result_count_local = *result_count;
         union_scan_32(
-            index,
+            shard,
             non_unique_query_list,
             query_list,
             not_query_list,
@@ -245,7 +246,7 @@ pub(crate) async fn union_docid<'a>(
 
         if query_list.len() > 32 && result_type == &ResultType::TopkCount {
             union_count(
-                index,
+                shard,
                 &mut result_count_local,
                 search_result,
                 query_list,
@@ -261,7 +262,7 @@ pub(crate) async fn union_docid<'a>(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn union_blockid<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut Vec<NonUniquePostingListObjectQuery<'a>>,
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -274,10 +275,10 @@ pub(crate) async fn union_blockid<'a>(
 ) {
     let item_0 = &query_list[0];
     let enable_inter_query_threading_multi =
-        if !index.enable_search_quality_test && index.enable_inter_query_threading_auto {
+        if !shard.enable_search_quality_test && shard.enable_inter_query_threading_auto {
             item_0.posting_count / item_0.p_block_max as u32 > 10
         } else {
-            index.enable_inter_query_threading
+            shard.enable_inter_query_threading
         };
     let mut task_list = Vec::new();
 
@@ -296,42 +297,42 @@ pub(crate) async fn union_blockid<'a>(
         }
 
         if !enable_inter_query_threading_multi {
-            if index.meta.access_type == AccessType::Mmap {
+            if shard.meta.access_type == AccessType::Mmap {
                 for query_list_item_mut in query_list.iter_mut() {
-                    let segment = &index.segments_index[query_list_item_mut.key0 as usize];
+                    let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
                     query_list_item_mut.byte_array =
-                        &index.index_file_mmap[segment.byte_array_blocks_pointer[block_id_min].0
+                        &shard.index_file_mmap[segment.byte_array_blocks_pointer[block_id_min].0
                             ..segment.byte_array_blocks_pointer[block_id_min].0
                                 + segment.byte_array_blocks_pointer[block_id_min].1];
                 }
                 for nonunique_query_list_item_mut in non_unique_query_list.iter_mut() {
                     let segment =
-                        &index.segments_index[nonunique_query_list_item_mut.key0 as usize];
+                        &shard.segments_index[nonunique_query_list_item_mut.key0 as usize];
                     nonunique_query_list_item_mut.byte_array =
-                        &index.index_file_mmap[segment.byte_array_blocks_pointer[block_id_min].0
+                        &shard.index_file_mmap[segment.byte_array_blocks_pointer[block_id_min].0
                             ..segment.byte_array_blocks_pointer[block_id_min].0
                                 + segment.byte_array_blocks_pointer[block_id_min].1];
                 }
                 for not_query_list_item_mut in not_query_list.iter_mut() {
-                    let segment = &index.segments_index[not_query_list_item_mut.key0 as usize];
+                    let segment = &shard.segments_index[not_query_list_item_mut.key0 as usize];
                     not_query_list_item_mut.byte_array =
-                        &index.index_file_mmap[segment.byte_array_blocks_pointer[block_id_min].0
+                        &shard.index_file_mmap[segment.byte_array_blocks_pointer[block_id_min].0
                             ..segment.byte_array_blocks_pointer[block_id_min].0
                                 + segment.byte_array_blocks_pointer[block_id_min].1];
                 }
             } else {
                 for query_list_item_mut in query_list.iter_mut() {
-                    query_list_item_mut.byte_array = &index.segments_index
+                    query_list_item_mut.byte_array = &shard.segments_index
                         [query_list_item_mut.key0 as usize]
                         .byte_array_blocks[block_id_min];
                 }
                 for nonunique_query_list_item_mut in non_unique_query_list.iter_mut() {
-                    nonunique_query_list_item_mut.byte_array = &index.segments_index
+                    nonunique_query_list_item_mut.byte_array = &shard.segments_index
                         [nonunique_query_list_item_mut.key0 as usize]
                         .byte_array_blocks[block_id_min];
                 }
                 for not_query_list_item_mut in not_query_list.iter_mut() {
-                    not_query_list_item_mut.byte_array = &index.segments_index
+                    not_query_list_item_mut.byte_array = &shard.segments_index
                         [not_query_list_item_mut.key0 as usize]
                         .byte_array_blocks[block_id_min];
                 }
@@ -339,7 +340,7 @@ pub(crate) async fn union_blockid<'a>(
 
             let mut result_count_local = 0;
             union_docid(
-                index,
+                shard,
                 non_unique_query_list,
                 query_list,
                 not_query_list,
@@ -399,7 +400,7 @@ pub(crate) async fn union_blockid<'a>(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn union_scan_8<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
     query_list: &mut [PostingListObjectQuery<'a>],
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -564,7 +565,7 @@ pub(crate) async fn union_scan_8<'a>(
                 }
 
                 add_result_multiterm_multifield(
-                    index,
+                    shard,
                     block_id_msb | i,
                     &mut _result_count,
                     search_result,
@@ -594,7 +595,7 @@ pub(crate) async fn union_scan_8<'a>(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn union_scan_32<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
     query_list: &mut [PostingListObjectQuery<'a>],
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -771,7 +772,7 @@ pub(crate) async fn union_scan_32<'a>(
                     }
 
                     add_result_multiterm_multifield(
-                        index,
+                        shard,
                         block_id_msb | i,
                         &mut _result_count,
                         search_result,
@@ -803,7 +804,7 @@ pub(crate) async fn union_scan_32<'a>(
 }
 
 pub(crate) async fn union_count<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     result_count: &mut i32,
     search_result: &mut SearchResult<'_>,
 
@@ -970,8 +971,8 @@ pub(crate) async fn union_count<'a>(
         }
     }
 
-    if !index.delete_hashset.is_empty() {
-        for docid in index.delete_hashset.iter() {
+    if !shard.delete_hashset.is_empty() {
+        for docid in shard.delete_hashset.iter() {
             if block_id == docid >> 16 {
                 let byte_index = (docid >> 3) & 8191;
                 let bit_mask = 1 << (docid & 7);
@@ -994,20 +995,20 @@ pub(crate) async fn union_count<'a>(
 
                 let docid = ulong_pos_msb | bit_pos;
 
-                if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+                if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
                     result_count_local -= 1;
                     continue 'next;
                 }
 
-                for (i, facet) in index.facets.iter().enumerate() {
+                for (i, facet) in shard.facets.iter().enumerate() {
                     if search_result.query_facets[i].length == 0 {
                         continue;
                     }
 
                     let facet_value_id = match &search_result.query_facets[i].ranges {
                         Ranges::U8(_range_type, ranges) => {
-                            let facet_value = index.facets_file_mmap
-                                [(index.facets_size_sum * docid) + facet.offset];
+                            let facet_value = shard.facets_file_mmap
+                                [(shard.facets_size_sum * docid) + facet.offset];
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
@@ -1015,8 +1016,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::U16(_range_type, ranges) => {
                             let facet_value = read_u16(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1025,8 +1026,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::U32(_range_type, ranges) => {
                             let facet_value = read_u32(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1035,8 +1036,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::U64(_range_type, ranges) => {
                             let facet_value = read_u64(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1045,8 +1046,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::I8(_range_type, ranges) => {
                             let facet_value = read_i8(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1055,8 +1056,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::I16(_range_type, ranges) => {
                             let facet_value = read_i16(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1065,8 +1066,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::I32(_range_type, ranges) => {
                             let facet_value = read_i32(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1075,8 +1076,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::I64(_range_type, ranges) => {
                             let facet_value = read_i64(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1085,8 +1086,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::Timestamp(_range_type, ranges) => {
                             let facet_value = read_i64(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
@@ -1095,8 +1096,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::F32(_range_type, ranges) => {
                             let facet_value = read_f32(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by(|range| {
@@ -1107,8 +1108,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::F64(_range_type, ranges) => {
                             let facet_value = read_f64(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             ranges
                                 .binary_search_by(|range| {
@@ -1119,8 +1120,8 @@ pub(crate) async fn union_count<'a>(
                         }
                         Ranges::Point(_range_type, ranges, base, unit) => {
                             let facet_value = read_u64(
-                                &index.facets_file_mmap,
-                                (index.facets_size_sum * docid) + facet.offset,
+                                &shard.facets_file_mmap,
+                                (shard.facets_size_sum * docid) + facet.offset,
                             );
                             let facet_value_distance =
                                 euclidian_distance(base, &decode_morton_2_d(facet_value), unit);
@@ -1131,18 +1132,19 @@ pub(crate) async fn union_count<'a>(
                                 .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
                                 as u32
                         }
+
                         _ => {
                             if facet.field_type == FieldType::String16
                                 || facet.field_type == FieldType::StringSet16
                             {
                                 read_u16(
-                                    &index.facets_file_mmap,
-                                    (index.facets_size_sum * docid) + facet.offset,
+                                    &shard.facets_file_mmap,
+                                    (shard.facets_size_sum * docid) + facet.offset,
                                 ) as u32
                             } else {
                                 read_u32(
-                                    &index.facets_file_mmap,
-                                    (index.facets_size_sum * docid) + facet.offset,
+                                    &shard.facets_file_mmap,
+                                    (shard.facets_size_sum * docid) + facet.offset,
                                 )
                             }
                         }
@@ -1163,7 +1165,7 @@ pub(crate) async fn union_count<'a>(
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::ptr_arg)]
 pub(crate) async fn union_docid_2<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut Vec<NonUniquePostingListObjectQuery<'a>>,
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
@@ -1180,7 +1182,7 @@ pub(crate) async fn union_docid_2<'a>(
     let mut count = 0;
     if filtered {
         single_blockid(
-            index,
+            shard,
             non_unique_query_list,
             &mut query_list[0..1].to_vec(),
             not_query_list,
@@ -1195,7 +1197,7 @@ pub(crate) async fn union_docid_2<'a>(
         .await;
 
         single_blockid(
-            index,
+            shard,
             non_unique_query_list,
             &mut query_list[1..2].to_vec(),
             not_query_list,
@@ -1214,7 +1216,7 @@ pub(crate) async fn union_docid_2<'a>(
     }
 
     intersection_blockid(
-        index,
+        shard,
         non_unique_query_list,
         query_list,
         not_query_list,
@@ -1256,7 +1258,7 @@ pub(crate) async fn union_docid_2<'a>(
         }
 
         single_blockid(
-            index,
+            shard,
             non_unique_query_list,
             &mut query_list[0..1].to_vec(),
             not_query_list,
@@ -1282,7 +1284,7 @@ pub(crate) async fn union_docid_2<'a>(
         }
 
         single_blockid(
-            index,
+            shard,
             non_unique_query_list,
             &mut query_list[1..2].to_vec(),
             not_query_list,
@@ -1303,7 +1305,7 @@ pub(crate) async fn union_docid_2<'a>(
 #[allow(clippy::too_many_arguments)]
 #[async_recursion]
 pub(crate) async fn union_docid_3<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut Vec<NonUniquePostingListObjectQuery<'a>>,
     query_queue: &'a mut Vec<QueueObject<'a>>,
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
@@ -1325,7 +1327,7 @@ pub(crate) async fn union_docid_3<'a>(
     if result_type == &ResultType::Topk || result_type == &ResultType::TopkCount {
         if query_list.len() >= 3 {
             intersection_blockid(
-                index,
+                shard,
                 non_unique_query_list,
                 &mut query_list,
                 not_query_list,
@@ -1403,7 +1405,7 @@ pub(crate) async fn union_docid_3<'a>(
             }
         } else {
             union_docid_2(
-                index,
+                shard,
                 non_unique_query_list,
                 &mut query_list,
                 not_query_list,
@@ -1433,7 +1435,7 @@ pub(crate) async fn union_docid_3<'a>(
 
             if recursion_count < 200 {
                 union_docid_3(
-                    index,
+                    shard,
                     non_unique_query_list,
                     query_queue,
                     not_query_list,
@@ -1462,7 +1464,7 @@ pub(crate) async fn union_docid_3<'a>(
         result_count_arc.store(0, Ordering::Relaxed);
 
         union_blockid(
-            index,
+            shard,
             non_unique_query_list,
             &mut query_list,
             not_query_list,

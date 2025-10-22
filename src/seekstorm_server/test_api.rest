@@ -40,7 +40,8 @@ content-type: application/json
         "field": "body",
         "field_type": "Text", 
         "stored": true, 
-        "indexed": true
+        "indexed": true,
+        "longest": true
     },
     {
         "field": "url", 

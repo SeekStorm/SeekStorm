@@ -26,6 +26,7 @@ The identical index file format for both RAM and memory mapping mode, allows to 
 
 First hierarchy level: API keys  
 Second hierarchy level: Indices per API key  
+Third hierarchy level: Shards of an index
 ```
 seekstorm_index/  
 ├─ 0/  
@@ -34,7 +35,9 @@ seekstorm_index/
 │  ├─ 2  
 ├─ 1/  
 │  ├─ 0  
-│  ├─ 1  
+│  ├─ 1 ─ shards ─ ├─ 0  
+│  │               ├─ 1  
+│  │               ├─ 2 
 ```
 
 * apikey.json : contains API key hash and quotas

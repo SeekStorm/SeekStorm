@@ -5,8 +5,8 @@ use std::cmp::Ordering;
 use crate::{
     geo_search::{decode_morton_2_d, euclidian_distance},
     index::{
-        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, FieldType, Index,
-        NgramType, NonUniquePostingListObjectQuery, PostingListObjectQuery, SPEEDUP_FLAG, STOP_BIT,
+        AccessType, CompressionType, FIELD_STOP_BIT_1, FIELD_STOP_BIT_2, FieldType, NgramType,
+        NonUniquePostingListObjectQuery, PostingListObjectQuery, SPEEDUP_FLAG, STOP_BIT, Shard,
         SimilarityType, get_document_length_compressed_mmap,
     },
     min_heap,
@@ -93,7 +93,7 @@ pub(crate) fn get_next_position_multifield(plo: &mut NonUniquePostingListObjectQ
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn add_result_singleterm_multifield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     result_count: &mut i32,
     search_result: &mut SearchResult,
@@ -107,9 +107,9 @@ pub(crate) fn add_result_singleterm_multifield(
     not_query_list: &mut [PostingListObjectQuery],
     block_score: f32,
 ) {
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         add_result_singleterm_singlefield(
-            index,
+            shard,
             docid,
             result_count,
             search_result,
@@ -124,7 +124,7 @@ pub(crate) fn add_result_singleterm_multifield(
         return;
     }
 
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+    if !shard.delete_hashset.is_empty() && shard.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -190,7 +190,7 @@ pub(crate) fn add_result_singleterm_multifield(
         }
     }
 
-    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+    if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
         return;
     };
 
@@ -203,7 +203,7 @@ pub(crate) fn add_result_singleterm_multifield(
         ResultType::Count => {
             if !field_filter_set.is_empty() {
                 decode_positions_singleterm_multifield(
-                    index,
+                    shard,
                     plo_single,
                     &mut field_vec,
                     &mut field_vec_ngram1,
@@ -211,7 +211,7 @@ pub(crate) fn add_result_singleterm_multifield(
                     &mut field_vec_ngram3,
                 );
 
-                if field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
+                if field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len() {
                     let mut match_flag = false;
                     for field in field_vec.iter() {
                         if field_filter_set.contains(&field.0) {
@@ -224,7 +224,7 @@ pub(crate) fn add_result_singleterm_multifield(
                 }
             }
 
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
 
@@ -241,7 +241,7 @@ pub(crate) fn add_result_singleterm_multifield(
 
             if !field_filter_set.is_empty() {
                 decode_positions_singleterm_multifield(
-                    index,
+                    shard,
                     plo_single,
                     &mut field_vec,
                     &mut field_vec_ngram1,
@@ -249,7 +249,7 @@ pub(crate) fn add_result_singleterm_multifield(
                     &mut field_vec_ngram3,
                 );
 
-                if field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
+                if field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len() {
                     let mut match_flag = false;
                     for field in field_vec.iter() {
                         if field_filter_set.contains(&field.0) {
@@ -265,7 +265,7 @@ pub(crate) fn add_result_singleterm_multifield(
         ResultType::TopkCount => {
             if !field_filter_set.is_empty() {
                 decode_positions_singleterm_multifield(
-                    index,
+                    shard,
                     plo_single,
                     &mut field_vec,
                     &mut field_vec_ngram1,
@@ -273,7 +273,7 @@ pub(crate) fn add_result_singleterm_multifield(
                     &mut field_vec_ngram3,
                 );
 
-                if field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len() {
+                if field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len() {
                     let mut match_flag = false;
                     for field in field_vec.iter() {
                         if field_filter_set.contains(&field.0) {
@@ -286,7 +286,7 @@ pub(crate) fn add_result_singleterm_multifield(
                 }
             }
 
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
 
@@ -302,7 +302,7 @@ pub(crate) fn add_result_singleterm_multifield(
 
     if field_filter_set.is_empty() {
         decode_positions_singleterm_multifield(
-            index,
+            shard,
             plo_single,
             &mut field_vec,
             &mut field_vec_ngram1,
@@ -312,7 +312,7 @@ pub(crate) fn add_result_singleterm_multifield(
     }
 
     let bm25f = get_bm25f_singleterm_multifield(
-        index,
+        shard,
         docid,
         plo_single,
         field_vec,
@@ -331,7 +331,7 @@ pub(crate) fn add_result_singleterm_multifield(
 }
 
 #[inline]
-pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], docid: usize) -> bool {
+pub(crate) fn is_facet_filter(index: &Shard, facet_filter: &[FilterSparse], docid: usize) -> bool {
     for (i, facet) in index.facets.iter().enumerate() {
         match &facet_filter[i] {
             FilterSparse::U8(range) => {
@@ -477,9 +477,9 @@ pub(crate) fn is_facet_filter(index: &Index, facet_filter: &[FilterSparse], doci
 }
 
 #[inline]
-pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid: usize) {
+pub(crate) fn facet_count(shard: &Shard, search_result: &mut SearchResult, docid: usize) {
     if !search_result.query_facets.is_empty() && !search_result.skip_facet_count {
-        for (i, facet) in index.facets.iter().enumerate() {
+        for (i, facet) in shard.facets.iter().enumerate() {
             if search_result.query_facets[i].length == 0 {
                 continue;
             }
@@ -487,7 +487,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
             let facet_value_id = match &search_result.query_facets[i].ranges {
                 Ranges::U8(_range_type, ranges) => {
                     let facet_value =
-                        index.facets_file_mmap[(index.facets_size_sum * docid) + facet.offset];
+                        shard.facets_file_mmap[(shard.facets_size_sum * docid) + facet.offset];
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
                         .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
@@ -495,8 +495,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::U16(_range_type, ranges) => {
                     let facet_value = read_u16(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -505,8 +505,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::U32(_range_type, ranges) => {
                     let facet_value = read_u32(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -515,8 +515,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::U64(_range_type, ranges) => {
                     let facet_value = read_u64(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -525,8 +525,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::I8(_range_type, ranges) => {
                     let facet_value = read_i8(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -535,8 +535,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::I16(_range_type, ranges) => {
                     let facet_value = read_i16(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -545,8 +545,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::I32(_range_type, ranges) => {
                     let facet_value = read_i32(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -556,8 +556,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
 
                 Ranges::I64(_range_type, ranges) => {
                     let facet_value = read_i64(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -566,8 +566,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::Timestamp(_range_type, ranges) => {
                     let facet_value = read_i64(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by_key(&facet_value, |range| range.1)
@@ -576,8 +576,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::F32(_range_type, ranges) => {
                     let facet_value = read_f32(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
@@ -586,8 +586,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                 }
                 Ranges::F64(_range_type, ranges) => {
                     let facet_value = read_f64(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     ranges
                         .binary_search_by(|range| range.1.partial_cmp(&facet_value).unwrap())
@@ -597,8 +597,8 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
 
                 Ranges::Point(_range_type, ranges, base, unit) => {
                     let facet_value = read_u64(
-                        &index.facets_file_mmap,
-                        (index.facets_size_sum * docid) + facet.offset,
+                        &shard.facets_file_mmap,
+                        (shard.facets_size_sum * docid) + facet.offset,
                     );
                     let facet_value_distance =
                         euclidian_distance(base, &decode_morton_2_d(facet_value), unit);
@@ -615,13 +615,13 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
                         || facet.field_type == FieldType::StringSet16
                     {
                         read_u16(
-                            &index.facets_file_mmap,
-                            (index.facets_size_sum * docid) + facet.offset,
+                            &shard.facets_file_mmap,
+                            (shard.facets_size_sum * docid) + facet.offset,
                         ) as u32
                     } else {
                         read_u32(
-                            &index.facets_file_mmap,
-                            (index.facets_size_sum * docid) + facet.offset,
+                            &shard.facets_file_mmap,
+                            (shard.facets_size_sum * docid) + facet.offset,
                         )
                     }
                 }
@@ -638,7 +638,7 @@ pub(crate) fn facet_count(index: &Index, search_result: &mut SearchResult, docid
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn add_result_singleterm_singlefield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     result_count: &mut i32,
     search_result: &mut SearchResult,
@@ -651,7 +651,7 @@ pub(crate) fn add_result_singleterm_singlefield(
     not_query_list: &mut [PostingListObjectQuery],
     block_score: f32,
 ) {
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+    if !shard.delete_hashset.is_empty() && shard.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -717,7 +717,7 @@ pub(crate) fn add_result_singleterm_singlefield(
         }
     }
 
-    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+    if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
         return;
     };
 
@@ -738,7 +738,7 @@ pub(crate) fn add_result_singleterm_singlefield(
                     &mut positions_count,
                 );
 
-                if field_filter_set.len() < index.indexed_field_vec.len() {
+                if field_filter_set.len() < shard.indexed_field_vec.len() {
                     let mut match_flag = false;
 
                     if field_filter_set.contains(&field_id) {
@@ -750,7 +750,7 @@ pub(crate) fn add_result_singleterm_singlefield(
                     }
                 }
             }
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
 
@@ -774,7 +774,7 @@ pub(crate) fn add_result_singleterm_singlefield(
                     &mut positions_count,
                 );
 
-                if field_filter_set.len() < index.indexed_field_vec.len() {
+                if field_filter_set.len() < shard.indexed_field_vec.len() {
                     let mut match_flag = false;
                     if field_filter_set.contains(&field_id) {
                         match_flag = true;
@@ -796,7 +796,7 @@ pub(crate) fn add_result_singleterm_singlefield(
                     &mut positions_count,
                 );
 
-                if field_filter_set.len() < index.indexed_field_vec.len() {
+                if field_filter_set.len() < shard.indexed_field_vec.len() {
                     let mut match_flag = false;
                     if field_filter_set.contains(&field_id) {
                         match_flag = true;
@@ -807,7 +807,7 @@ pub(crate) fn add_result_singleterm_singlefield(
                 }
             }
 
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
 
@@ -832,7 +832,7 @@ pub(crate) fn add_result_singleterm_singlefield(
     }
 
     let bm25f = get_bm25f_singleterm_singlefield(
-        index,
+        shard,
         docid,
         plo_single,
         tf_ngram1,
@@ -852,7 +852,7 @@ pub(crate) fn add_result_singleterm_singlefield(
 
 #[inline(always)]
 pub(crate) fn get_bm25f_singleterm_multifield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     plo_single: &PostingListObjectSingle,
     field_vec: SmallVec<[(u16, usize); 2]>,
@@ -863,12 +863,12 @@ pub(crate) fn get_bm25f_singleterm_multifield(
     let mut bm25f = 0.0;
     let block_id = docid >> 16;
 
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         let bm25_component =
-            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
-                get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
+            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
             } else {
-                index.level_index[block_id].document_length_compressed_array[0]
+                shard.level_index[block_id].document_length_compressed_array[0]
                     [docid & 0b11111111_11111111]
             } as usize];
 
@@ -901,27 +901,27 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             }
         }
     } else if plo_single.ngram_type == NgramType::SingleTerm
-        || index.meta.similarity == SimilarityType::Bm25fProximity
+        || shard.meta.similarity == SimilarityType::Bm25fProximity
     {
         for field in field_vec.iter() {
             let field_id = field.0 as usize;
 
             let bm25_component =
-                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
-                        index,
+                        shard,
                         field_id,
                         block_id,
                         docid & 0b11111111_11111111,
                     )
                 } else {
-                    index.level_index[block_id].document_length_compressed_array[field_id]
+                    shard.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
                 } as usize];
 
             let tf = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight * plo_single.idf * ((tf * (K + 1.0) / (tf + bm25_component)) + SIGMA);
         }
@@ -933,21 +933,21 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
-                        index,
+                        shard,
                         field_id,
                         block_id,
                         docid & 0b11111111_11111111,
                     )
                 } else {
-                    index.level_index[block_id].document_length_compressed_array[field_id]
+                    shard.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
                 } as usize];
 
             let tf_ngram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_ngram1
@@ -958,21 +958,21 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
-                        index,
+                        shard,
                         field_id,
                         block_id,
                         docid & 0b11111111_11111111,
                     )
                 } else {
-                    index.level_index[block_id].document_length_compressed_array[field_id]
+                    shard.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
                 } as usize];
 
             let tf_ngram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_ngram2
@@ -983,21 +983,21 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
-                        index,
+                        shard,
                         field_id,
                         block_id,
                         docid & 0b11111111_11111111,
                     )
                 } else {
-                    index.level_index[block_id].document_length_compressed_array[field_id]
+                    shard.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
                 } as usize];
 
             let tf_ngram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_ngram1
@@ -1008,21 +1008,21 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
-                        index,
+                        shard,
                         field_id,
                         block_id,
                         docid & 0b11111111_11111111,
                     )
                 } else {
-                    index.level_index[block_id].document_length_compressed_array[field_id]
+                    shard.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
                 } as usize];
 
             let tf_ngram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_ngram2
@@ -1033,21 +1033,21 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
-                        index,
+                        shard,
                         field_id,
                         block_id,
                         docid & 0b11111111_11111111,
                     )
                 } else {
-                    index.level_index[block_id].document_length_compressed_array[field_id]
+                    shard.level_index[block_id].document_length_compressed_array[field_id]
                         [docid & 0b11111111_11111111]
                 } as usize];
 
             let tf_ngram3 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             bm25f += weight
                 * plo_single.idf_ngram3
@@ -1060,7 +1060,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
 
 #[inline(always)]
 pub(crate) fn get_bm25f_singleterm_singlefield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     plo_single: &PostingListObjectSingle,
     tf_ngram1: u32,
@@ -1071,12 +1071,12 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
     let bm25f;
     let block_id = docid >> 16;
 
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         let bm25_component =
-            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
-                get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
+            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
             } else {
-                index.level_index[block_id].document_length_compressed_array[0]
+                shard.level_index[block_id].document_length_compressed_array[0]
                     [docid & 0b11111111_11111111]
             } as usize];
 
@@ -1110,15 +1110,15 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
         let field_id = 0;
 
         let bm25_component =
-            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
+            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(
-                    index,
+                    shard,
                     field_id,
                     block_id,
                     docid & 0b11111111_11111111,
                 )
             } else {
-                index.level_index[block_id].document_length_compressed_array[field_id]
+                shard.level_index[block_id].document_length_compressed_array[field_id]
                     [docid & 0b11111111_11111111]
             } as usize];
 
@@ -1155,19 +1155,19 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
 
 #[inline(always)]
 pub(crate) fn get_bm25f_multiterm_multifield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     query_list: &mut [PostingListObjectQuery],
 ) -> f32 {
     let mut bm25f = 0.0;
     let block_id = docid >> 16;
 
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         let bm25_component =
-            index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
-                get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
+            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
             } else {
-                index.level_index[block_id].document_length_compressed_array[0]
+                shard.level_index[block_id].document_length_compressed_array[0]
                     [docid & 0b11111111_11111111]
             } as usize];
 
@@ -1210,7 +1210,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
         }
     } else {
         let mut bm25_component_vec: SmallVec<[f32; 2]> =
-            smallvec![0.0; index.indexed_field_vec.len()];
+            smallvec![0.0; shard.indexed_field_vec.len()];
         for plo in query_list.iter() {
             if !plo.bm25_flag {
                 continue;
@@ -1222,17 +1222,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                index.bm25_component_cache[if index.meta.access_type
+                                shard.bm25_component_cache[if shard.meta.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
-                                        index,
+                                        shard,
                                         field_id,
                                         block_id,
                                         docid & 0b11111111_11111111,
                                     )
                                 } else {
-                                    index.level_index[block_id].document_length_compressed_array
+                                    shard.level_index[block_id].document_length_compressed_array
                                         [field_id][docid & 0b11111111_11111111]
                                 }
                                     as usize];
@@ -1240,7 +1240,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                         let tf = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf
@@ -1252,17 +1252,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                index.bm25_component_cache[if index.meta.access_type
+                                shard.bm25_component_cache[if shard.meta.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
-                                        index,
+                                        shard,
                                         field_id,
                                         block_id,
                                         docid & 0b11111111_11111111,
                                     )
                                 } else {
-                                    index.level_index[block_id].document_length_compressed_array
+                                    shard.level_index[block_id].document_length_compressed_array
                                         [field_id][docid & 0b11111111_11111111]
                                 }
                                     as usize];
@@ -1270,7 +1270,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                         let tf_ngram1 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram1
@@ -1283,17 +1283,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                index.bm25_component_cache[if index.meta.access_type
+                                shard.bm25_component_cache[if shard.meta.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
-                                        index,
+                                        shard,
                                         field_id,
                                         block_id,
                                         docid & 0b11111111_11111111,
                                     )
                                 } else {
-                                    index.level_index[block_id].document_length_compressed_array
+                                    shard.level_index[block_id].document_length_compressed_array
                                         [field_id][docid & 0b11111111_11111111]
                                 }
                                     as usize];
@@ -1301,7 +1301,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                         let tf_ngram2 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram2
@@ -1315,17 +1315,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                index.bm25_component_cache[if index.meta.access_type
+                                shard.bm25_component_cache[if shard.meta.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
-                                        index,
+                                        shard,
                                         field_id,
                                         block_id,
                                         docid & 0b11111111_11111111,
                                     )
                                 } else {
-                                    index.level_index[block_id].document_length_compressed_array
+                                    shard.level_index[block_id].document_length_compressed_array
                                         [field_id][docid & 0b11111111_11111111]
                                 }
                                     as usize];
@@ -1333,7 +1333,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                         let tf_ngram1 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram1
@@ -1346,17 +1346,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                index.bm25_component_cache[if index.meta.access_type
+                                shard.bm25_component_cache[if shard.meta.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
-                                        index,
+                                        shard,
                                         field_id,
                                         block_id,
                                         docid & 0b11111111_11111111,
                                     )
                                 } else {
-                                    index.level_index[block_id].document_length_compressed_array
+                                    shard.level_index[block_id].document_length_compressed_array
                                         [field_id][docid & 0b11111111_11111111]
                                 }
                                     as usize];
@@ -1364,7 +1364,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                         let tf_ngram2 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram2
@@ -1377,17 +1377,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                index.bm25_component_cache[if index.meta.access_type
+                                shard.bm25_component_cache[if shard.meta.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
-                                        index,
+                                        shard,
                                         field_id,
                                         block_id,
                                         docid & 0b11111111_11111111,
                                     )
                                 } else {
-                                    index.level_index[block_id].document_length_compressed_array
+                                    shard.level_index[block_id].document_length_compressed_array
                                         [field_id][docid & 0b11111111_11111111]
                                 }
                                     as usize];
@@ -1395,7 +1395,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
                         let tf_ngram3 = field.1 as f32;
 
-                        let weight = index.indexed_schema_vec[field.0 as usize].boost;
+                        let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
                         bm25f += weight
                             * plo.idf_ngram3
@@ -1413,17 +1413,17 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
 #[inline(always)]
 pub(crate) fn get_bm25f_multiterm_singlefield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     query_list: &mut [PostingListObjectQuery],
 ) -> f32 {
     let mut bm25f = 0.0;
     let block_id = docid >> 16;
 
-    let bm25_component = index.bm25_component_cache[if index.meta.access_type == AccessType::Mmap {
-        get_document_length_compressed_mmap(index, 0, block_id, docid & 0b11111111_11111111)
+    let bm25_component = shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+        get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
     } else {
-        index.level_index[block_id].document_length_compressed_array[0][docid & 0b11111111_11111111]
+        shard.level_index[block_id].document_length_compressed_array[0][docid & 0b11111111_11111111]
     } as usize];
 
     for plo in query_list.iter() {
@@ -1469,7 +1469,7 @@ pub(crate) fn get_bm25f_multiterm_singlefield(
 
 #[inline(always)]
 pub(crate) fn decode_positions_multiterm_multifield(
-    index: &Index,
+    shard: &Shard,
     plo: &mut PostingListObjectQuery,
     facet_filtered: bool,
     phrase_query: bool,
@@ -1516,19 +1516,19 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 plo.field_vec_ngram1.clear();
                 plo.field_vec_ngram2.clear();
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     &mut plo.field_vec_ngram1,
                     plo.byte_array,
                     &mut positions_pointer,
                 );
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     &mut plo.field_vec_ngram2,
                     plo.byte_array,
                     &mut positions_pointer,
@@ -1539,28 +1539,28 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 plo.field_vec_ngram2.clear();
                 plo.field_vec_ngram3.clear();
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     &mut plo.field_vec_ngram1,
                     plo.byte_array,
                     &mut positions_pointer,
                 );
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     &mut plo.field_vec_ngram2,
                     plo.byte_array,
                     &mut positions_pointer,
                 );
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     &mut plo.field_vec_ngram3,
                     plo.byte_array,
                     &mut positions_pointer,
@@ -1569,10 +1569,10 @@ pub(crate) fn decode_positions_multiterm_multifield(
         }
 
         read_multifield_vec(
-            index.indexed_field_vec.len(),
-            index.indexed_field_id_bits,
-            index.indexed_field_id_mask,
-            index.longest_field_id,
+            shard.indexed_field_vec.len(),
+            shard.indexed_field_id_bits,
+            shard.indexed_field_id_mask,
+            shard.longest_field_id,
             &mut field_vec,
             plo.byte_array,
             &mut positions_pointer,
@@ -1597,7 +1597,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
 
         if plo.p_docid < plo.pointer_pivot_p_docid as usize {
             match (
-                index.indexed_field_vec.len() == 1,
+                shard.indexed_field_vec.len() == 1,
                 rank_position_pointer >> 12,
             ) {
                 (true, 0b1000..=0b1011) => {
@@ -1624,7 +1624,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                         plo.embedded_positions =
                             [rank_position_pointer & 0b00011111_11111111, 0, 0, 0];
                     };
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 1));
                 }
                 (false, 0b1110 | 0b1111) => {
@@ -1636,14 +1636,14 @@ pub(crate) fn decode_positions_multiterm_multifield(
                             0,
                         ];
                     };
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 2));
                 }
 
                 (false, 0b1000) => {
-                    let position_bits = 12 - index.indexed_field_id_bits;
+                    let position_bits = 12 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 1));
                     if phrase_query {
                         plo.embedded_positions = [
@@ -1655,9 +1655,9 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b1001) => {
-                    let position_bits = 12 - index.indexed_field_id_bits;
+                    let position_bits = 12 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 2));
                     if phrase_query {
                         let position_bits_1 = position_bits >> 1;
@@ -1672,9 +1672,9 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b1010) => {
-                    let position_bits = 12 - index.indexed_field_id_bits;
+                    let position_bits = 12 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 3));
                     if phrase_query {
                         let position_bits_1 = position_bits / 3;
@@ -1692,12 +1692,12 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
                 (false, 0b1011) => {
                     let position_bits =
-                        12 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        12 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 1)]);
                     if phrase_query {
@@ -1722,7 +1722,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
             }
         } else {
             match (
-                index.indexed_field_vec.len() == 1,
+                shard.indexed_field_vec.len() == 1,
                 (rank_position_pointer & 0b11111111_11111111_11111111) >> 19,
             ) {
                 (true, 0b10000..=0b10011) => {
@@ -1771,7 +1771,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
 
                 (false, 0b11000 | 0b11001) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 1));
                     if phrase_query {
                         plo.embedded_positions = [
@@ -1783,7 +1783,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b11010 | 0b11011) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 2));
                     if phrase_query {
                         plo.embedded_positions = [
@@ -1795,7 +1795,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b11100 | 0b11101) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 3));
                     if phrase_query {
                         plo.embedded_positions = [
@@ -1807,7 +1807,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b11110 | 0b11111) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 4));
                     if phrase_query {
                         plo.embedded_positions = [
@@ -1820,9 +1820,9 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
 
                 (false, 0b10000) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 1));
                     if phrase_query {
                         plo.embedded_positions = [
@@ -1835,9 +1835,9 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
 
                 (false, 0b10001) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 2));
                     if phrase_query {
                         let position_bits_1 = position_bits >> 1;
@@ -1852,9 +1852,9 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b10010) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 3));
                     if phrase_query {
                         let position_bits_1 = position_bits / 3;
@@ -1871,12 +1871,12 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     };
                 }
                 (false, 0b10011) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 4));
                     if phrase_query {
-                        let position_bits_1 = position_bits >> 2;
+                        let position_bits_1 = position_bits >> 2; // /4;
                         let position_bits_2 = (position_bits - position_bits_1) / 3;
                         let position_bits_3 =
                             (position_bits - position_bits_1 - position_bits_2) >> 1;
@@ -1896,12 +1896,12 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
                 (false, 0b10100) => {
                     let position_bits =
-                        19 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        19 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 1)]);
                     if phrase_query {
@@ -1918,12 +1918,12 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
                 (false, 0b10101) => {
                     let position_bits =
-                        19 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        19 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 2)]);
                     if phrase_query {
@@ -1942,12 +1942,12 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
                 (false, 0b10110) => {
                     let position_bits =
-                        19 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        19 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 2), (field_id_2, 1)]);
                     if phrase_query {
@@ -1966,19 +1966,19 @@ pub(crate) fn decode_positions_multiterm_multifield(
                 }
                 (false, 0b10111) => {
                     let position_bits = 19
-                        - index.indexed_field_id_bits
-                        - index.indexed_field_id_bits
-                        - index.indexed_field_id_bits;
+                        - shard.indexed_field_id_bits
+                        - shard.indexed_field_id_bits
+                        - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
                         >> (position_bits
-                            + index.indexed_field_id_bits
-                            + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                            + shard.indexed_field_id_bits
+                            + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 =
-                        ((rank_position_pointer >> (position_bits + index.indexed_field_id_bits))
-                            & index.indexed_field_id_mask as u32) as u16;
+                        ((rank_position_pointer >> (position_bits + shard.indexed_field_id_bits))
+                            & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_3 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 1), (field_id_3, 1)]);
 
@@ -2001,7 +2001,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                     if phrase_query {
                         println!(
                             "unsupported 3 byte pointer embedded {} {:032b}",
-                            index.indexed_field_vec.len() == 1,
+                            shard.indexed_field_vec.len() == 1,
                             (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
                         );
                         plo.embedded_positions = [0, 0, 0, 0]
@@ -2280,7 +2280,7 @@ pub(crate) fn read_multifield_vec(
 
 #[inline(always)]
 pub(crate) fn decode_positions_singleterm_multifield(
-    index: &Index,
+    shard: &Shard,
     plo: &PostingListObjectSingle,
     field_vec: &mut SmallVec<[(u16, usize); 2]>,
     field_vec_ngram1: &mut SmallVec<[(u16, usize); 2]>,
@@ -2322,19 +2322,19 @@ pub(crate) fn decode_positions_singleterm_multifield(
             NgramType::SingleTerm => {}
             NgramType::NgramFF | NgramType::NgramFR | NgramType::NgramRF => {
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     field_vec_ngram1,
                     plo.byte_array,
                     &mut positions_pointer,
                 );
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     field_vec_ngram2,
                     plo.byte_array,
                     &mut positions_pointer,
@@ -2342,28 +2342,28 @@ pub(crate) fn decode_positions_singleterm_multifield(
             }
             _ => {
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     field_vec_ngram1,
                     plo.byte_array,
                     &mut positions_pointer,
                 );
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     field_vec_ngram2,
                     plo.byte_array,
                     &mut positions_pointer,
                 );
                 read_multifield_vec(
-                    index.indexed_field_vec.len(),
-                    index.indexed_field_id_bits,
-                    index.indexed_field_id_mask,
-                    index.longest_field_id,
+                    shard.indexed_field_vec.len(),
+                    shard.indexed_field_id_bits,
+                    shard.indexed_field_id_mask,
+                    shard.longest_field_id,
                     field_vec_ngram3,
                     plo.byte_array,
                     &mut positions_pointer,
@@ -2372,10 +2372,10 @@ pub(crate) fn decode_positions_singleterm_multifield(
         }
 
         read_multifield_vec(
-            index.indexed_field_vec.len(),
-            index.indexed_field_id_bits,
-            index.indexed_field_id_mask,
-            index.longest_field_id,
+            shard.indexed_field_vec.len(),
+            shard.indexed_field_id_bits,
+            shard.indexed_field_id_mask,
+            shard.longest_field_id,
             field_vec,
             plo.byte_array,
             &mut positions_pointer,
@@ -2385,7 +2385,7 @@ pub(crate) fn decode_positions_singleterm_multifield(
 
         if plo.p_docid < plo.pointer_pivot_p_docid as i32 {
             match (
-                index.indexed_field_vec.len() == 1,
+                shard.indexed_field_vec.len() == 1,
                 rank_position_pointer >> 12,
             ) {
                 (true, 0b1000..=0b1011) => {
@@ -2396,40 +2396,40 @@ pub(crate) fn decode_positions_singleterm_multifield(
                 }
 
                 (false, 0b1100 | 0b1101) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 1));
                 }
                 (false, 0b1110 | 0b1111) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 2));
                 }
 
                 (false, 0b1000) => {
-                    let position_bits = 12 - index.indexed_field_id_bits;
+                    let position_bits = 12 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 1));
                 }
                 (false, 0b1001) => {
-                    let position_bits = 12 - index.indexed_field_id_bits;
+                    let position_bits = 12 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 2));
                 }
                 (false, 0b1010) => {
-                    let position_bits = 12 - index.indexed_field_id_bits;
+                    let position_bits = 12 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 3));
                 }
                 (false, 0b1011) => {
                     let position_bits =
-                        12 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        12 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 1)]);
                 }
@@ -2437,14 +2437,14 @@ pub(crate) fn decode_positions_singleterm_multifield(
                 (_, _) => {
                     println!(
                         "unsupported single 2 byte pointer embedded {} {:032b}",
-                        index.indexed_field_vec.len() == 1,
+                        shard.indexed_field_vec.len() == 1,
                         rank_position_pointer >> 12
                     );
                 }
             }
         } else {
             match (
-                index.indexed_field_vec.len() == 1,
+                shard.indexed_field_vec.len() == 1,
                 (rank_position_pointer & 0b11111111_11111111_11111111) >> 19,
             ) {
                 (true, 0b10000..=0b10011) => {
@@ -2461,95 +2461,95 @@ pub(crate) fn decode_positions_singleterm_multifield(
                 }
 
                 (false, 0b11000 | 0b11001) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 1));
                 }
                 (false, 0b11010 | 0b11011) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 2));
                 }
                 (false, 0b11100 | 0b11101) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 3));
                 }
                 (false, 0b11110 | 0b11111) => {
-                    field_id = index.longest_field_id as u16;
+                    field_id = shard.longest_field_id as u16;
                     field_vec.push((field_id, 4));
                 }
 
                 (false, 0b10000) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 1));
                 }
 
                 (false, 0b10001) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 2));
                 }
                 (false, 0b10010) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 3));
                 }
                 (false, 0b10011) => {
-                    let position_bits = 19 - index.indexed_field_id_bits;
+                    let position_bits = 19 - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32) as u16;
+                        & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 4));
                 }
                 (false, 0b10100) => {
                     let position_bits =
-                        19 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        19 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 1)]);
                 }
                 (false, 0b10101) => {
                     let position_bits =
-                        19 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        19 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 2)]);
                 }
                 (false, 0b10110) => {
                     let position_bits =
-                        19 - index.indexed_field_id_bits - index.indexed_field_id_bits;
+                        19 - shard.indexed_field_id_bits - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
-                        >> (position_bits + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                        >> (position_bits + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 2), (field_id_2, 1)]);
                 }
                 (false, 0b10111) => {
                     let position_bits = 19
-                        - index.indexed_field_id_bits
-                        - index.indexed_field_id_bits
-                        - index.indexed_field_id_bits;
+                        - shard.indexed_field_id_bits
+                        - shard.indexed_field_id_bits
+                        - shard.indexed_field_id_bits;
                     field_id = ((rank_position_pointer
                         >> (position_bits
-                            + index.indexed_field_id_bits
-                            + index.indexed_field_id_bits))
-                        & index.indexed_field_id_mask as u32) as u16;
+                            + shard.indexed_field_id_bits
+                            + shard.indexed_field_id_bits))
+                        & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_2 =
-                        ((rank_position_pointer >> (position_bits + index.indexed_field_id_bits))
-                            & index.indexed_field_id_mask as u32) as u16;
+                        ((rank_position_pointer >> (position_bits + shard.indexed_field_id_bits))
+                            & shard.indexed_field_id_mask as u32) as u16;
                     let field_id_3 = ((rank_position_pointer >> position_bits)
-                        & index.indexed_field_id_mask as u32)
+                        & shard.indexed_field_id_mask as u32)
                         as u16;
                     field_vec.extend([(field_id, 1), (field_id_2, 1), (field_id_3, 1)]);
                 }
@@ -2557,7 +2557,7 @@ pub(crate) fn decode_positions_singleterm_multifield(
                 (_, _) => {
                     println!(
                         "unsupported single 3 byte pointer embedded {} {:032b}",
-                        index.indexed_field_vec.len() == 1,
+                        shard.indexed_field_vec.len() == 1,
                         (rank_position_pointer & 0b11111111_11111111_11111111) >> 19
                     );
                 }
@@ -2946,7 +2946,7 @@ pub(crate) fn decode_positions_commit(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn add_result_multiterm_multifield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     result_count: &mut i32,
     search_result: &mut SearchResult,
@@ -2961,9 +2961,9 @@ pub(crate) fn add_result_multiterm_multifield(
     block_score: f32,
     all_terms_frequent: bool,
 ) {
-    if index.indexed_field_vec.len() == 1 {
+    if shard.indexed_field_vec.len() == 1 {
         add_result_multiterm_singlefield(
-            index,
+            shard,
             docid,
             result_count,
             search_result,
@@ -2981,7 +2981,7 @@ pub(crate) fn add_result_multiterm_multifield(
         return;
     }
 
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+    if !shard.delete_hashset.is_empty() && shard.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -3046,14 +3046,14 @@ pub(crate) fn add_result_multiterm_multifield(
         }
     }
 
-    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+    if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
         return;
     };
 
     match *result_type {
         ResultType::Count => {
             if !phrase_query && field_filter_set.is_empty() {
-                facet_count(index, search_result, docid);
+                facet_count(shard, search_result, docid);
 
                 *result_count += 1;
                 return;
@@ -3076,7 +3076,7 @@ pub(crate) fn add_result_multiterm_multifield(
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
-                facet_count(index, search_result, docid);
+                facet_count(shard, search_result, docid);
 
                 *result_count += 1;
                 return;
@@ -3092,20 +3092,20 @@ pub(crate) fn add_result_multiterm_multifield(
         }
 
         if decode_positions_multiterm_multifield(
-            index,
+            shard,
             plo,
             !facet_filter.is_empty(),
             phrase_query,
             all_terms_frequent && field_filter_set.is_empty(),
         ) {
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
             return;
         }
 
         if !field_filter_set.is_empty()
-            && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
+            && plo.field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len()
         {
             let mut match_flag = false;
             for field in plo.field_vec.iter() {
@@ -3120,7 +3120,7 @@ pub(crate) fn add_result_multiterm_multifield(
     }
 
     if result_type == &ResultType::Topk && phrase_query {
-        bm25 = get_bm25f_multiterm_multifield(index, docid, query_list);
+        bm25 = get_bm25f_multiterm_multifield(shard, docid, query_list);
 
         if SPEEDUP_FLAG
             && search_result.topk_candidates.result_sort.is_empty()
@@ -3139,7 +3139,7 @@ pub(crate) fn add_result_multiterm_multifield(
         }
 
         let mut phrasematch_count = 0;
-        if index.indexed_field_vec.len() == 1 {
+        if shard.indexed_field_vec.len() == 1 {
             for plo in non_unique_query_list.iter_mut() {
                 plo.p_pos = 0;
                 let item = &query_list[index_transpose[plo.term_index_unique]];
@@ -3238,7 +3238,7 @@ pub(crate) fn add_result_multiterm_multifield(
                 plo.p_field = 0;
             }
 
-            'main: for i in 0..index.indexed_field_vec.len() as u16 {
+            'main: for i in 0..shard.indexed_field_vec.len() as u16 {
                 for plo in non_unique_query_list.iter_mut() {
                     while plo.field_vec[plo.p_field].0 < i {
                         if !plo.is_embedded {
@@ -3291,7 +3291,7 @@ pub(crate) fn add_result_multiterm_multifield(
                             if non_unique_query_list[t1].p_pos
                                 == non_unique_query_list[t1].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for item in non_unique_query_list.iter_mut().skip(1) {
                                         item.p_pos += 1
                                     }
@@ -3306,7 +3306,7 @@ pub(crate) fn add_result_multiterm_multifield(
                             if non_unique_query_list[t2].p_pos
                                 == non_unique_query_list[t2].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for (j, item) in non_unique_query_list.iter_mut().enumerate() {
                                         if j != t2 {
                                             item.p_pos += 1
@@ -3337,7 +3337,7 @@ pub(crate) fn add_result_multiterm_multifield(
                             if non_unique_query_list[t1].p_pos
                                 == non_unique_query_list[t1].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for item in non_unique_query_list.iter_mut().skip(1) {
                                         item.p_pos += 1
                                     }
@@ -3348,7 +3348,7 @@ pub(crate) fn add_result_multiterm_multifield(
                             if non_unique_query_list[t2].p_pos
                                 == non_unique_query_list[t2].positions_count as i32
                             {
-                                if (i as usize) < index.indexed_field_vec.len() - 1 {
+                                if (i as usize) < shard.indexed_field_vec.len() - 1 {
                                     for item in non_unique_query_list.iter_mut().skip(2) {
                                         item.p_pos += 1
                                     }
@@ -3373,7 +3373,7 @@ pub(crate) fn add_result_multiterm_multifield(
         }
     }
 
-    facet_count(index, search_result, docid);
+    facet_count(shard, search_result, docid);
 
     *result_count += 1;
     if result_type == &ResultType::Count {
@@ -3381,7 +3381,7 @@ pub(crate) fn add_result_multiterm_multifield(
     }
 
     if result_type != &ResultType::Topk || !phrase_query {
-        bm25 = get_bm25f_multiterm_multifield(index, docid, query_list);
+        bm25 = get_bm25f_multiterm_multifield(shard, docid, query_list);
     }
 
     search_result.topk_candidates.add_topk(
@@ -3396,7 +3396,7 @@ pub(crate) fn add_result_multiterm_multifield(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn add_result_multiterm_singlefield(
-    index: &Index,
+    shard: &Shard,
     docid: usize,
     result_count: &mut i32,
     search_result: &mut SearchResult,
@@ -3412,7 +3412,7 @@ pub(crate) fn add_result_multiterm_singlefield(
     block_score: f32,
     all_terms_frequent: bool,
 ) {
-    if !index.delete_hashset.is_empty() && index.delete_hashset.contains(&docid) {
+    if !shard.delete_hashset.is_empty() && shard.delete_hashset.contains(&docid) {
         return;
     }
 
@@ -3477,14 +3477,14 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
     }
 
-    if !facet_filter.is_empty() && is_facet_filter(index, facet_filter, docid) {
+    if !facet_filter.is_empty() && is_facet_filter(shard, facet_filter, docid) {
         return;
     };
 
     match *result_type {
         ResultType::Count => {
             if !phrase_query && field_filter_set.is_empty() {
-                facet_count(index, search_result, docid);
+                facet_count(shard, search_result, docid);
 
                 *result_count += 1;
                 return;
@@ -3507,7 +3507,7 @@ pub(crate) fn add_result_multiterm_singlefield(
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
-                facet_count(index, search_result, docid);
+                facet_count(shard, search_result, docid);
 
                 *result_count += 1;
                 return;
@@ -3528,14 +3528,14 @@ pub(crate) fn add_result_multiterm_singlefield(
             phrase_query,
             all_terms_frequent && field_filter_set.is_empty(),
         ) {
-            facet_count(index, search_result, docid);
+            facet_count(shard, search_result, docid);
 
             *result_count += 1;
             return;
         }
 
         if !field_filter_set.is_empty()
-            && plo.field_vec.len() + field_filter_set.len() <= index.indexed_field_vec.len()
+            && plo.field_vec.len() + field_filter_set.len() <= shard.indexed_field_vec.len()
         {
             let mut match_flag = false;
             for field in plo.field_vec.iter() {
@@ -3550,7 +3550,7 @@ pub(crate) fn add_result_multiterm_singlefield(
     }
 
     if result_type == &ResultType::Topk && phrase_query {
-        bm25 = get_bm25f_multiterm_singlefield(index, docid, query_list);
+        bm25 = get_bm25f_multiterm_singlefield(shard, docid, query_list);
 
         if SPEEDUP_FLAG
             && search_result.topk_candidates.result_sort.is_empty()
@@ -3661,7 +3661,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         }
     }
 
-    facet_count(index, search_result, docid);
+    facet_count(shard, search_result, docid);
 
     *result_count += 1;
     if result_type == &ResultType::Count {
@@ -3669,7 +3669,7 @@ pub(crate) fn add_result_multiterm_singlefield(
     }
 
     if result_type != &ResultType::Topk || !phrase_query {
-        bm25 = get_bm25f_multiterm_singlefield(index, docid, query_list);
+        bm25 = get_bm25f_multiterm_singlefield(shard, docid, query_list);
     }
 
     search_result.topk_candidates.add_topk(

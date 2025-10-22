@@ -2,8 +2,8 @@ use crate::{
     add_result::add_result_multiterm_multifield,
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
-        AccessType, CompressionType, Index, NonUniquePostingListObjectQuery,
-        PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
+        AccessType, CompressionType, NonUniquePostingListObjectQuery, PostingListObjectQuery,
+        SORT_FLAG, SPEEDUP_FLAG, Shard,
     },
     intersection_simd::intersection_vector16,
     search::{FilterSparse, ResultType, SearchResult},
@@ -32,7 +32,7 @@ pub(crate) fn bitpacking32_get_delta(body: &[u8], bitposition: u32, rangebits: u
 pub(crate) fn intersection_bitmap_2(
     result_count: &mut i32,
     block_id: usize,
-    index: &Index,
+    shard: &Shard,
     search_result: &mut SearchResult,
     top_k: usize,
     result_type: &ResultType,
@@ -82,7 +82,7 @@ pub(crate) fn intersection_bitmap_2(
                 }
 
                 add_result_multiterm_multifield(
-                    index,
+                    shard,
                     (block_id << 16) | doc_id1,
                     result_count,
                     search_result,
@@ -109,7 +109,7 @@ pub(crate) fn intersection_bitmap_2(
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::never_loop)]
 pub(crate) async fn intersection_docid(
-    index: &Index,
+    shard: &Shard,
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'_>],
     query_list: &mut [PostingListObjectQuery<'_>],
     not_query_list: &mut [PostingListObjectQuery<'_>],
@@ -194,8 +194,7 @@ pub(crate) async fn intersection_docid(
         }
     }
 
-    let mut all_terms_frequent = index.indexed_doc_count > (top_k << 8);
-
+    let mut all_terms_frequent = shard.indexed_doc_count > (top_k << 8);
     for query_list_item_mut in query_list.iter_mut() {
         let blo = &query_list_item_mut.blocks[query_list_item_mut.p_block as usize];
 
@@ -203,7 +202,7 @@ pub(crate) async fn intersection_docid(
         query_list_item_mut.p_docid_count = blo.posting_count as usize + 1;
 
         if query_list_item_mut.bm25_flag
-            && (query_list_item_mut.posting_count as f32) / (index.indexed_doc_count as f32) < 0.5
+            && (query_list_item_mut.posting_count as f32) / (shard.indexed_doc_count as f32) < 0.5
         {
             all_terms_frequent = false;
         }
@@ -297,7 +296,7 @@ pub(crate) async fn intersection_docid(
                         query_list[1].p_docid_count,
                         result_count,
                         block_id,
-                        index,
+                        shard,
                         search_result,
                         top_k,
                         result_type,
@@ -309,6 +308,7 @@ pub(crate) async fn intersection_docid(
                         phrase_query,
                         all_terms_frequent,
                     );
+
                     break 'exit;
                 }
 
@@ -382,7 +382,7 @@ pub(crate) async fn intersection_docid(
                             }
 
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 (block_id << 16) | doc_id1 as usize,
                                 result_count,
                                 search_result,
@@ -506,7 +506,7 @@ pub(crate) async fn intersection_docid(
                             }
 
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 (block_id << 16) | doc_id1 as usize,
                                 result_count,
                                 search_result,
@@ -565,7 +565,7 @@ pub(crate) async fn intersection_docid(
                     intersection_bitmap_2(
                         result_count,
                         block_id,
-                        index,
+                        shard,
                         search_result,
                         top_k,
                         result_type,
@@ -698,7 +698,7 @@ pub(crate) async fn intersection_docid(
                             query_list[t2].p_run = ulong_pos as i32;
 
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 (block_id << 16) | doc_id1,
                                 result_count,
                                 search_result,
@@ -794,7 +794,7 @@ pub(crate) async fn intersection_docid(
 
                             query_list[t2].p_run = (doc_id1 >> 6) as i32;
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 block_id_bits | doc_id1 as usize,
                                 result_count,
                                 search_result,
@@ -882,7 +882,7 @@ pub(crate) async fn intersection_docid(
                         query_list[t2].p_run = (doc_id1 >> 6) as i32;
 
                         add_result_multiterm_multifield(
-                            index,
+                            shard,
                             (block_id << 16) | doc_id1 as usize,
                             result_count,
                             search_result,
@@ -1064,7 +1064,7 @@ pub(crate) async fn intersection_docid(
                             + query_list[t2].p_run as usize;
 
                         add_result_multiterm_multifield(
-                            index,
+                            shard,
                             (block_id << 16) | doc_id1 as usize,
                             result_count,
                             search_result,
@@ -1193,7 +1193,7 @@ pub(crate) async fn intersection_docid(
                             }
 
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 (block_id << 16) | doc_id1 as usize,
                                 result_count,
                                 search_result,
@@ -1265,7 +1265,7 @@ pub(crate) async fn intersection_docid(
                         }
 
                         add_result_multiterm_multifield(
-                            index,
+                            shard,
                             (block_id << 16) | doc_id2 as usize,
                             result_count,
                             search_result,
@@ -1494,7 +1494,7 @@ pub(crate) async fn intersection_docid(
                                 + query_list[t2].p_run as usize;
 
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 (block_id << 16) | doc_id as usize,
                                 result_count,
                                 search_result,
@@ -1671,6 +1671,7 @@ pub(crate) async fn intersection_docid(
                                         [query_list[t2].compressed_doc_id_range..],
                                     ulong_pos as usize * 8,
                                 );
+
                                 continue;
                             }
 
@@ -1710,7 +1711,7 @@ pub(crate) async fn intersection_docid(
                             query_list[t2].p_run = ulong_pos as i32;
 
                             add_result_multiterm_multifield(
-                                index,
+                                shard,
                                 (block_id << 16) | doc_id as usize,
                                 result_count,
                                 search_result,
@@ -1917,7 +1918,7 @@ pub(crate) async fn intersection_docid(
                             + query_list[t1].p_run as usize;
 
                         add_result_multiterm_multifield(
-                            index,
+                            shard,
                             (block_id << 16) | doc_id2 as usize,
                             result_count,
                             search_result,
@@ -2019,7 +2020,7 @@ pub(crate) struct BlockObject {
 /// Intersection between blocks of 64k docids of a posting list
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn intersection_blockid<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     non_unique_query_list: &mut Vec<NonUniquePostingListObjectQuery<'a>>,
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -2035,10 +2036,10 @@ pub(crate) async fn intersection_blockid<'a>(
 ) {
     let item_0 = &query_list[0];
     let enable_inter_query_threading_multi =
-        if !index.enable_search_quality_test && index.enable_inter_query_threading_auto {
+        if !shard.enable_search_quality_test && shard.enable_inter_query_threading_auto {
             item_0.posting_count / item_0.p_block_max as u32 > 10
         } else {
-            index.enable_inter_query_threading
+            shard.enable_inter_query_threading
         };
 
     let mut task_list = Vec::new();
@@ -2110,11 +2111,11 @@ pub(crate) async fn intersection_blockid<'a>(
                         || search_result.topk_candidates.current_heap_size < top_k
                         || block_score > search_result.topk_candidates._elements[0].score
                     {
-                        if index.meta.access_type == AccessType::Mmap {
+                        if shard.meta.access_type == AccessType::Mmap {
                             for query_list_item_mut in query_list.iter_mut() {
                                 let segment =
-                                    &index.segments_index[query_list_item_mut.key0 as usize];
-                                query_list_item_mut.byte_array = &index.index_file_mmap[segment
+                                    &shard.segments_index[query_list_item_mut.key0 as usize];
+                                query_list_item_mut.byte_array = &shard.index_file_mmap[segment
                                     .byte_array_blocks_pointer
                                     [block_id1 as usize]
                                     .0
@@ -2122,9 +2123,9 @@ pub(crate) async fn intersection_blockid<'a>(
                                         + segment.byte_array_blocks_pointer[block_id1 as usize].1];
                             }
                             for nonunique_query_list_item_mut in non_unique_query_list.iter_mut() {
-                                let segment = &index.segments_index
+                                let segment = &shard.segments_index
                                     [nonunique_query_list_item_mut.key0 as usize];
-                                nonunique_query_list_item_mut.byte_array = &index.index_file_mmap
+                                nonunique_query_list_item_mut.byte_array = &shard.index_file_mmap
                                     [segment.byte_array_blocks_pointer[block_id1 as usize].0
                                         ..segment.byte_array_blocks_pointer[block_id1 as usize].0
                                             + segment.byte_array_blocks_pointer
@@ -2133,8 +2134,8 @@ pub(crate) async fn intersection_blockid<'a>(
                             }
                             for not_query_list_item_mut in not_query_list.iter_mut() {
                                 let segment =
-                                    &index.segments_index[not_query_list_item_mut.key0 as usize];
-                                not_query_list_item_mut.byte_array = &index.index_file_mmap[segment
+                                    &shard.segments_index[not_query_list_item_mut.key0 as usize];
+                                not_query_list_item_mut.byte_array = &shard.index_file_mmap[segment
                                     .byte_array_blocks_pointer
                                     [block_id1 as usize]
                                     .0
@@ -2143,17 +2144,17 @@ pub(crate) async fn intersection_blockid<'a>(
                             }
                         } else {
                             for query_list_item_mut in query_list.iter_mut() {
-                                query_list_item_mut.byte_array = &index.segments_index
+                                query_list_item_mut.byte_array = &shard.segments_index
                                     [query_list_item_mut.key0 as usize]
                                     .byte_array_blocks[block_id1 as usize];
                             }
                             for nonunique_query_list_item_mut in non_unique_query_list.iter_mut() {
-                                nonunique_query_list_item_mut.byte_array = &index.segments_index
+                                nonunique_query_list_item_mut.byte_array = &shard.segments_index
                                     [nonunique_query_list_item_mut.key0 as usize]
                                     .byte_array_blocks[block_id1 as usize];
                             }
                             for not_query_list_item_mut in not_query_list.iter_mut() {
-                                not_query_list_item_mut.byte_array = &index.segments_index
+                                not_query_list_item_mut.byte_array = &shard.segments_index
                                     [not_query_list_item_mut.key0 as usize]
                                     .byte_array_blocks[block_id1 as usize];
                             }
@@ -2161,7 +2162,7 @@ pub(crate) async fn intersection_blockid<'a>(
 
                         let mut result_count_local = 0;
                         intersection_docid(
-                            index,
+                            shard,
                             non_unique_query_list,
                             query_list,
                             not_query_list,
@@ -2234,42 +2235,42 @@ pub(crate) async fn intersection_blockid<'a>(
                 item.p_block = block.p_block_vec[item.term_index_unique];
             }
 
-            if index.meta.access_type == AccessType::Mmap {
+            if shard.meta.access_type == AccessType::Mmap {
                 for query_list_item_mut in query_list.iter_mut() {
-                    let segment = &index.segments_index[query_list_item_mut.key0 as usize];
+                    let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
                     query_list_item_mut.byte_array =
-                        &index.index_file_mmap[segment.byte_array_blocks_pointer[block.block_id].0
+                        &shard.index_file_mmap[segment.byte_array_blocks_pointer[block.block_id].0
                             ..segment.byte_array_blocks_pointer[block.block_id].0
                                 + segment.byte_array_blocks_pointer[block.block_id].1];
                 }
                 for nonunique_query_list_item_mut in non_unique_query_list.iter_mut() {
                     let segment =
-                        &index.segments_index[nonunique_query_list_item_mut.key0 as usize];
+                        &shard.segments_index[nonunique_query_list_item_mut.key0 as usize];
                     nonunique_query_list_item_mut.byte_array =
-                        &index.index_file_mmap[segment.byte_array_blocks_pointer[block.block_id].0
+                        &shard.index_file_mmap[segment.byte_array_blocks_pointer[block.block_id].0
                             ..segment.byte_array_blocks_pointer[block.block_id].0
                                 + segment.byte_array_blocks_pointer[block.block_id].1];
                 }
                 for not_query_list_item_mut in not_query_list.iter_mut() {
-                    let segment = &index.segments_index[not_query_list_item_mut.key0 as usize];
+                    let segment = &shard.segments_index[not_query_list_item_mut.key0 as usize];
                     not_query_list_item_mut.byte_array =
-                        &index.index_file_mmap[segment.byte_array_blocks_pointer[block.block_id].0
+                        &shard.index_file_mmap[segment.byte_array_blocks_pointer[block.block_id].0
                             ..segment.byte_array_blocks_pointer[block.block_id].0
                                 + segment.byte_array_blocks_pointer[block.block_id].1];
                 }
             } else {
                 for query_list_item_mut in query_list.iter_mut() {
-                    query_list_item_mut.byte_array = &index.segments_index
+                    query_list_item_mut.byte_array = &shard.segments_index
                         [query_list_item_mut.key0 as usize]
                         .byte_array_blocks[block.block_id];
                 }
                 for nonunique_query_list_item_mut in non_unique_query_list.iter_mut() {
-                    nonunique_query_list_item_mut.byte_array = &index.segments_index
+                    nonunique_query_list_item_mut.byte_array = &shard.segments_index
                         [nonunique_query_list_item_mut.key0 as usize]
                         .byte_array_blocks[block.block_id];
                 }
                 for not_query_list_item_mut in not_query_list.iter_mut() {
-                    not_query_list_item_mut.byte_array = &index.segments_index
+                    not_query_list_item_mut.byte_array = &shard.segments_index
                         [not_query_list_item_mut.key0 as usize]
                         .byte_array_blocks[block.block_id];
                 }
@@ -2277,7 +2278,7 @@ pub(crate) async fn intersection_blockid<'a>(
 
             let mut result_count_local = 0;
             intersection_docid(
-                index,
+                shard,
                 non_unique_query_list,
                 query_list,
                 not_query_list,

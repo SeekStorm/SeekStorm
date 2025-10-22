@@ -36,7 +36,6 @@
 //! name: "test_index".to_string(),
 //! similarity:SimilarityType::Bm25f,
 //! tokenizer:TokenizerType::AsciiAlphabetic,
-//! stemmer: StemmerType::None,
 //! stop_words: StopwordType::None,
 //! frequent_words:FrequentwordType::English,
 //! access_type: AccessType::Mmap,
@@ -121,7 +120,7 @@
 //! let return_fields_filter= HashSet::new();
 //! let mut index=index_arc.write().await;
 //! for result in result_object.results.iter() {
-//!   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).unwrap();
+//!   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).await.unwrap();
 //!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 //! }
 //! println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
@@ -129,7 +128,7 @@
 //! ### get document
 //! ```rust
 //! let doc_id=0;
-//! let doc=index.get_document(doc_id,false,&highlighter2,&return_fields_filter,&distance_fields).unwrap();
+//! let doc=index.get_document(doc_id,false,&highlighter2,&return_fields_filter,&distance_fields).await.unwrap();
 //! ```
 //! ### index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
 //! ```rust
@@ -256,7 +255,6 @@
 //!     name: "test_index".to_string(),
 //!     similarity:SimilarityType::Bm25f,
 //!     tokenizer:TokenizerType::AsciiAlphabetic,
-//!     stemmer: StemmerType::None,
 //!     stop_words: StopwordType::None,
 //!     frequent_words:FrequentwordType::English,
 //!     access_type: AccessType::Mmap,
@@ -302,14 +300,14 @@
 //!             fragment_number: 2,
 //!             fragment_size: 160,
 //!             highlight_markup: true,
-//!             ..Default::default()
+//!            ..Default::default()
 //!         },
 //!     ];    
 //! let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_terms));
 //! let return_fields_filter= HashSet::new();
 //! let index=index_arc.write().await;
 //! for result in result_object.results.iter() {
-//!   let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).unwrap();
+//!   let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).await.unwrap();
 //!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 //! }
 //! println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);

@@ -1,3 +1,4 @@
+use futures::future;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
@@ -5,7 +6,6 @@ use std::{
     fs::File,
     io::{Seek, SeekFrom, Write},
     path::Path,
-    thread::available_parallelism,
 };
 
 use crate::{
@@ -17,16 +17,50 @@ use crate::{
     compress_postinglist::compress_postinglist,
     index::{
         AccessType, BlockObjectIndex, CompressionType, DOCUMENT_LENGTH_COMPRESSION,
-        FACET_VALUES_FILENAME, Index, IndexArc, LevelIndex, MAX_POSITIONS_PER_TERM, NgramType,
+        FACET_VALUES_FILENAME, IndexArc, LevelIndex, MAX_POSITIONS_PER_TERM, NgramType,
         NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE, PostingListObjectIndex,
-        PostingListObjectQuery, ROARING_BLOCK_SIZE, TermObject, update_list_max_impact_score,
-        warmup,
+        PostingListObjectQuery, ROARING_BLOCK_SIZE, Shard, TermObject,
+        update_list_max_impact_score, warmup,
     },
     utils::{
         block_copy, block_copy_mut, read_u8, read_u16, read_u32, read_u64, write_u16, write_u32,
         write_u64,
     },
 };
+
+/// Remove index from RAM (Reverse of open_index)
+#[allow(async_fn_in_trait)]
+pub trait Close {
+    /// Remove index from RAM (Reverse of open_index)
+    async fn close(&self);
+}
+
+/// Remove index from RAM (Reverse of open_index)
+impl Close for IndexArc {
+    /// Remove index from RAM (Reverse of open_index)
+    async fn close(&self) {
+        self.commit().await;
+
+        let mut result_object_list = Vec::new();
+        for shard in self.read().await.shard_vec.iter() {
+            let shard_clone = shard.clone();
+            result_object_list.push(tokio::spawn(async move {
+                let mut mmap_options = MmapOptions::new();
+                let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
+                shard_clone.write().await.index_file_mmap = mmap
+                    .make_read_only()
+                    .expect("Unable to make Mmap read-only");
+
+                let mut mmap_options = MmapOptions::new();
+                let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
+                shard_clone.write().await.docstore_file_mmap = mmap
+                    .make_read_only()
+                    .expect("Unable to make Mmap read-only");
+            }));
+        }
+        future::join_all(result_object_list).await;
+    }
+}
 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
@@ -108,28 +142,37 @@ impl Commit for IndexArc {
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
     async fn commit(&self) {
         let index_ref = self.read().await;
-        let index_permits = index_ref.permits.clone();
-        drop(index_ref);
-        let thread_number = available_parallelism().unwrap().get();
-        let mut permit_vec = Vec::new();
-        for _i in 0..thread_number {
-            permit_vec.push(index_permits.acquire().await.unwrap());
+        let uncommitted_doc_count = index_ref.uncommitted_doc_count().await;
+
+        for shard in index_ref.shard_vec.iter() {
+            let p = shard.read().await.permits.clone();
+            let permit = p.acquire().await.unwrap();
+
+            let indexed_doc_count = shard.read().await.indexed_doc_count;
+            shard.write().await.commit(indexed_doc_count);
+            warmup(shard).await;
+            drop(permit);
         }
 
-        let mut index_mut = self.write().await;
-        let indexed_doc_count = index_mut.indexed_doc_count;
-        index_mut.commit(indexed_doc_count);
-        drop(index_mut);
-        warmup(self).await;
+        if !index_ref.mute {
+            println!(
+                "commit index {} level {} committed documents {} {}",
+                index_ref.meta.id,
+                index_ref.level_count().await,
+                uncommitted_doc_count,
+                index_ref.indexed_doc_count().await,
+            );
+        }
+
+        drop(index_ref);
     }
 }
 
-impl Index {
+impl Shard {
     pub(crate) fn commit(&mut self, indexed_doc_count: usize) {
         if !self.uncommitted {
             return;
         }
-        let new_document_count = indexed_doc_count - self.committed_doc_count;
 
         let is_last_level_incomplete = self.is_last_level_incomplete;
         if self.is_last_level_incomplete {
@@ -146,7 +189,10 @@ impl Index {
                 .index_file
                 .set_len(self.last_level_index_file_start_pos)
             {
-                println!("Unable to index_file.set_len in commit {:?}", e)
+                println!(
+                    "Unable to index_file.set_len in clear_index {} {} {:?}",
+                    self.index_path_string, self.indexed_doc_count, e
+                )
             };
             let _ = self
                 .index_file
@@ -205,6 +251,15 @@ impl Index {
 
         for document_length_compressed_array in self.document_length_compressed_array.iter_mut() {
             let _ = self.index_file.write(document_length_compressed_array);
+        }
+
+        if !self.mute {
+            println!(
+                "commit index {} level {} indexed documents {}",
+                self.meta.id,
+                self.level_index.len(),
+                indexed_doc_count.to_formatted_string(&Locale::en),
+            );
         }
 
         write_u64(
@@ -285,6 +340,8 @@ impl Index {
         }
 
         if self.meta.access_type == AccessType::Mmap {
+            self.index_file.flush().expect("Unable to flush Mmap");
+
             self.index_file_mmap =
                 unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
         }
@@ -320,19 +377,6 @@ impl Index {
         self.committed_doc_count = indexed_doc_count;
         self.is_last_level_incomplete =
             !(self.committed_doc_count).is_multiple_of(ROARING_BLOCK_SIZE);
-        if !self.mute {
-            println!(
-                "commit level {} committed documents {} {} mode {}",
-                self.level_index.len(),
-                new_document_count.to_formatted_string(&Locale::en),
-                self.committed_doc_count.to_formatted_string(&Locale::en),
-                if is_last_level_incomplete {
-                    "merge"
-                } else {
-                    "append"
-                }
-            );
-        }
 
         self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
         self.postings_buffer = vec![0; POSTING_BUFFER_SIZE];
@@ -567,7 +611,7 @@ impl Index {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn add_docid(
-        self: &mut Index,
+        self: &mut Shard,
         plo: &mut PostingListObjectQuery,
         docid: usize,
         key_hash: u64,
@@ -728,7 +772,7 @@ impl Index {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn iterate_docid(
-        self: &mut Index,
+        self: &mut Shard,
         compression_type_pointer: u32,
         pointer_pivot_p_docid: u16,
         posting_count: u16,
@@ -866,7 +910,7 @@ impl Index {
         }
     }
 
-    pub(crate) fn merge_incomplete_index_level_to_level0(self: &mut Index) {
+    pub(crate) fn merge_incomplete_index_level_to_level0(self: &mut Shard) {
         for strip0 in self.segments_level0.iter_mut() {
             if strip0.positions_compressed.is_empty() {
                 strip0.positions_compressed = vec![0; MAX_POSITIONS_PER_TERM * 2];

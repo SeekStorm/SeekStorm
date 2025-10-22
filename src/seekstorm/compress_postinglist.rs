@@ -6,7 +6,7 @@ use crate::{
     add_result::{B, K, SIGMA, decode_positions_commit},
     compatible::_lzcnt_u32,
     index::{
-        AccessType, CompressionType, DOCUMENT_LENGTH_COMPRESSION, Index, NgramType, STOP_BIT,
+        AccessType, CompressionType, DOCUMENT_LENGTH_COMPRESSION, NgramType, STOP_BIT, Shard,
         SimilarityType, hash32, hash64, int_to_byte4,
     },
     search::decode_posting_list_count,
@@ -18,7 +18,7 @@ use crate::{
 
 /// Compress a single postinglist using roaring bitmaps compression for docid https://roaringbitmap.org/about/
 pub(crate) fn compress_postinglist(
-    index: &mut Index,
+    shard: &mut Shard,
     key_head_pointer_w: &mut usize,
     roaring_offset: &mut usize,
     key_body_offset: u32,
@@ -32,7 +32,7 @@ pub(crate) fn compress_postinglist(
     let mut posting_count_ngram_2_compressed = 0;
     let mut posting_count_ngram_3_compressed = 0;
     {
-        let plo = index.segments_level0[*key0].segment.get(key_hash).unwrap();
+        let plo = shard.segments_level0[*key0].segment.get(key_hash).unwrap();
 
         match plo.ngram_type {
             NgramType::SingleTerm => {}
@@ -41,17 +41,17 @@ pub(crate) fn compress_postinglist(
                     plo.posting_count_ngram_1_compressed
                 } else {
                     let term_bytes_1 = plo.term_ngram1.as_bytes();
-                    let key0_1 = hash32(term_bytes_1) & index.segment_number_mask1;
+                    let key0_1 = hash32(term_bytes_1) & shard.segment_number_mask1;
                     let key_hash_1 = hash64(term_bytes_1);
-                    let mut posting_count_ngram1 = if index.meta.access_type == AccessType::Mmap {
+                    let mut posting_count_ngram1 = if shard.meta.access_type == AccessType::Mmap {
                         decode_posting_list_count(
-                            &index.segments_index[key0_1 as usize],
-                            index,
+                            &shard.segments_index[key0_1 as usize],
+                            shard,
                             key_hash_1,
                             key0_1 < *key0 as u32,
                         )
                         .unwrap_or_default()
-                    } else if let Some(plo) = index.segments_index[key0_1 as usize]
+                    } else if let Some(plo) = shard.segments_index[key0_1 as usize]
                         .segment
                         .get(&key_hash_1)
                     {
@@ -60,7 +60,7 @@ pub(crate) fn compress_postinglist(
                         0
                     };
 
-                    if let Some(x) = index.segments_level0[key0_1 as usize]
+                    if let Some(x) = shard.segments_level0[key0_1 as usize]
                         .segment
                         .get(&key_hash_1)
                     {
@@ -73,18 +73,18 @@ pub(crate) fn compress_postinglist(
                     plo.posting_count_ngram_2_compressed
                 } else {
                     let term_bytes_2 = plo.term_ngram2.as_bytes();
-                    let key0_2 = hash32(term_bytes_2) & index.segment_number_mask1;
+                    let key0_2 = hash32(term_bytes_2) & shard.segment_number_mask1;
                     let key_hash_2 = hash64(term_bytes_2);
 
-                    let mut posting_count_ngram2 = if index.meta.access_type == AccessType::Mmap {
+                    let mut posting_count_ngram2 = if shard.meta.access_type == AccessType::Mmap {
                         decode_posting_list_count(
-                            &index.segments_index[key0_2 as usize],
-                            index,
+                            &shard.segments_index[key0_2 as usize],
+                            shard,
                             key_hash_2,
                             key0_2 < *key0 as u32,
                         )
                         .unwrap_or_default()
-                    } else if let Some(plo) = index.segments_index[key0_2 as usize]
+                    } else if let Some(plo) = shard.segments_index[key0_2 as usize]
                         .segment
                         .get(&key_hash_2)
                     {
@@ -93,7 +93,7 @@ pub(crate) fn compress_postinglist(
                         0
                     };
 
-                    if let Some(x) = index.segments_level0[key0_2 as usize]
+                    if let Some(x) = shard.segments_level0[key0_2 as usize]
                         .segment
                         .get(&key_hash_2)
                     {
@@ -112,17 +112,17 @@ pub(crate) fn compress_postinglist(
                     plo.posting_count_ngram_1_compressed
                 } else {
                     let term_bytes_1 = plo.term_ngram1.as_bytes();
-                    let key0_1 = hash32(term_bytes_1) & index.segment_number_mask1;
+                    let key0_1 = hash32(term_bytes_1) & shard.segment_number_mask1;
                     let key_hash_1 = hash64(term_bytes_1);
-                    let mut posting_count_ngram1 = if index.meta.access_type == AccessType::Mmap {
+                    let mut posting_count_ngram1 = if shard.meta.access_type == AccessType::Mmap {
                         decode_posting_list_count(
-                            &index.segments_index[key0_1 as usize],
-                            index,
+                            &shard.segments_index[key0_1 as usize],
+                            shard,
                             key_hash_1,
                             key0_1 < *key0 as u32,
                         )
                         .unwrap_or_default()
-                    } else if let Some(plo) = index.segments_index[key0_1 as usize]
+                    } else if let Some(plo) = shard.segments_index[key0_1 as usize]
                         .segment
                         .get(&key_hash_1)
                     {
@@ -131,7 +131,7 @@ pub(crate) fn compress_postinglist(
                         0
                     };
 
-                    if let Some(x) = index.segments_level0[key0_1 as usize]
+                    if let Some(x) = shard.segments_level0[key0_1 as usize]
                         .segment
                         .get(&key_hash_1)
                     {
@@ -144,18 +144,18 @@ pub(crate) fn compress_postinglist(
                     plo.posting_count_ngram_2_compressed
                 } else {
                     let term_bytes_2 = plo.term_ngram2.as_bytes();
-                    let key0_2 = hash32(term_bytes_2) & index.segment_number_mask1;
+                    let key0_2 = hash32(term_bytes_2) & shard.segment_number_mask1;
                     let key_hash_2 = hash64(term_bytes_2);
 
-                    let mut posting_count_ngram2 = if index.meta.access_type == AccessType::Mmap {
+                    let mut posting_count_ngram2 = if shard.meta.access_type == AccessType::Mmap {
                         decode_posting_list_count(
-                            &index.segments_index[key0_2 as usize],
-                            index,
+                            &shard.segments_index[key0_2 as usize],
+                            shard,
                             key_hash_2,
                             key0_2 < *key0 as u32,
                         )
                         .unwrap_or_default()
-                    } else if let Some(plo) = index.segments_index[key0_2 as usize]
+                    } else if let Some(plo) = shard.segments_index[key0_2 as usize]
                         .segment
                         .get(&key_hash_2)
                     {
@@ -164,7 +164,7 @@ pub(crate) fn compress_postinglist(
                         0
                     };
 
-                    if let Some(x) = index.segments_level0[key0_2 as usize]
+                    if let Some(x) = shard.segments_level0[key0_2 as usize]
                         .segment
                         .get(&key_hash_2)
                     {
@@ -177,18 +177,18 @@ pub(crate) fn compress_postinglist(
                     plo.posting_count_ngram_3_compressed
                 } else {
                     let term_bytes_3 = plo.term_ngram3.as_bytes();
-                    let key0_3 = hash32(term_bytes_3) & index.segment_number_mask1;
+                    let key0_3 = hash32(term_bytes_3) & shard.segment_number_mask1;
                     let key_hash_3 = hash64(term_bytes_3);
 
-                    let mut posting_count_ngram3 = if index.meta.access_type == AccessType::Mmap {
+                    let mut posting_count_ngram3 = if shard.meta.access_type == AccessType::Mmap {
                         decode_posting_list_count(
-                            &index.segments_index[key0_3 as usize],
-                            index,
+                            &shard.segments_index[key0_3 as usize],
+                            shard,
                             key_hash_3,
                             key0_3 < *key0 as u32,
                         )
                         .unwrap_or_default()
-                    } else if let Some(plo) = index.segments_index[key0_3 as usize]
+                    } else if let Some(plo) = shard.segments_index[key0_3 as usize]
                         .segment
                         .get(&key_hash_3)
                     {
@@ -197,7 +197,7 @@ pub(crate) fn compress_postinglist(
                         0
                     };
 
-                    if let Some(x) = index.segments_level0[key0_3 as usize]
+                    if let Some(x) = shard.segments_level0[key0_3 as usize]
                         .segment
                         .get(&key_hash_3)
                     {
@@ -216,7 +216,7 @@ pub(crate) fn compress_postinglist(
         }
     }
 
-    let plo = index.segments_level0[*key0]
+    let plo = shard.segments_level0[*key0]
         .segment
         .get_mut(key_hash)
         .unwrap();
@@ -241,9 +241,9 @@ pub(crate) fn compress_postinglist(
     let enable_bitmap_compression: bool = true;
     let enable_delta_compression: bool = false;
 
-    index.docid_count += plo.posting_count;
-    index.postinglist_count += 1;
-    index.position_count += plo.position_count;
+    shard.docid_count += plo.posting_count;
+    shard.postinglist_count += 1;
+    shard.position_count += plo.position_count;
     let mut compression_type_pointer = CompressionType::Error as u32;
 
     let mut runs_count: u16 = 0;
@@ -264,7 +264,7 @@ pub(crate) fn compress_postinglist(
                 },
             );
             compress_postinglist_rle(
-                index,
+                shard,
                 roaring_offset,
                 &mut size_compressed_docid_key,
                 *key0,
@@ -282,7 +282,7 @@ pub(crate) fn compress_postinglist(
             {
             } else {
                 compress_postinglist_array(
-                    index,
+                    shard,
                     roaring_offset,
                     &mut size_compressed_docid_key,
                     *key0,
@@ -303,7 +303,7 @@ pub(crate) fn compress_postinglist(
                 },
             );
             compress_postinglist_rle(
-                index,
+                shard,
                 roaring_offset,
                 &mut size_compressed_docid_key,
                 *key0,
@@ -319,7 +319,7 @@ pub(crate) fn compress_postinglist(
             if enable_delta_compression && (delta_compression_size_byte < 8192) {
             } else {
                 compress_postinglist_bitmap(
-                    index,
+                    shard,
                     roaring_offset,
                     &mut size_compressed_docid_key,
                     *key0,
@@ -331,66 +331,66 @@ pub(crate) fn compress_postinglist(
         }
     }
 
-    let plo = index.segments_level0[*key0]
+    let plo = shard.segments_level0[*key0]
         .segment
         .get_mut(key_hash)
         .unwrap();
 
     write_u64_ref(
         *key_hash,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_head_pointer_w,
     );
 
     write_u16_ref(
         (plo.posting_count - 1) as u16,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_head_pointer_w,
     );
 
     write_u16_ref(
         plo.max_docid,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_head_pointer_w,
     );
 
     write_u16_ref(
         plo.max_p_docid,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_head_pointer_w,
     );
 
-    match index.key_head_size {
+    match shard.key_head_size {
         20 => {}
         22 => {
             write_u8_ref(
                 posting_count_ngram_1_compressed,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_head_pointer_w,
             );
 
             write_u8_ref(
                 posting_count_ngram_2_compressed,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_head_pointer_w,
             );
         }
         _ => {
             write_u8_ref(
                 posting_count_ngram_1_compressed,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_head_pointer_w,
             );
 
             write_u8_ref(
                 posting_count_ngram_2_compressed,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_head_pointer_w,
             );
 
             write_u8_ref(
                 posting_count_ngram_3_compressed,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_head_pointer_w,
             );
         }
@@ -398,13 +398,13 @@ pub(crate) fn compress_postinglist(
 
     write_u16_ref(
         plo.pointer_pivot_p_docid,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_head_pointer_w,
     );
 
     write_u32_ref(
         compression_type_pointer,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_head_pointer_w,
     );
 
@@ -413,7 +413,7 @@ pub(crate) fn compress_postinglist(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn docid_iterator(
-    index: &mut Index,
+    shard: &mut Shard,
     posting_pointer_size: u8,
     next_pointer: &mut usize,
     key_position_pointer_w: &mut usize,
@@ -425,15 +425,15 @@ pub(crate) fn docid_iterator(
     p_docid: usize,
 ) {
     let mut read_pointer = *next_pointer;
-    *next_pointer = read_u32_ref(&index.postings_buffer, &mut read_pointer) as usize;
+    *next_pointer = read_u32_ref(&shard.postings_buffer, &mut read_pointer) as usize;
 
-    *doc_id = read_u16_ref(&index.postings_buffer, &mut read_pointer);
+    *doc_id = read_u16_ref(&shard.postings_buffer, &mut read_pointer);
 
-    let position_size_byte_temp: u16 = read_u16_ref(&index.postings_buffer, &mut read_pointer);
+    let position_size_byte_temp: u16 = read_u16_ref(&shard.postings_buffer, &mut read_pointer);
     let embed_flag = position_size_byte_temp & 0b10000000_00000000 > 0;
     let position_size_byte = (position_size_byte_temp & 0b01111111_11111111) as usize;
 
-    let plo = index.segments_level0[key0]
+    let plo = shard.segments_level0[key0]
         .segment
         .get_mut(&key_hash)
         .unwrap();
@@ -446,13 +446,13 @@ pub(crate) fn docid_iterator(
     decode_positions_commit(
         posting_pointer_size,
         embed_flag,
-        &index.postings_buffer,
+        &shard.postings_buffer,
         read_pointer,
         &plo.ngram_type,
-        index.indexed_field_vec.len(),
-        index.indexed_field_id_bits,
-        index.indexed_field_id_mask,
-        index.longest_field_id as u16,
+        shard.indexed_field_vec.len(),
+        shard.indexed_field_id_bits,
+        shard.indexed_field_id_mask,
+        shard.longest_field_id as u16,
         &mut field_vec,
         &mut field_vec_ngram1,
         &mut field_vec_ngram2,
@@ -462,9 +462,9 @@ pub(crate) fn docid_iterator(
     if posting_pointer_size == 2 {
         if embed_flag {
             block_copy(
-                &index.postings_buffer,
+                &shard.postings_buffer,
                 read_pointer,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 *key_rank_position_pointer_w,
                 position_size_byte,
             );
@@ -474,17 +474,17 @@ pub(crate) fn docid_iterator(
             *size_compressed_positions_key += position_size_byte;
             *key_position_pointer_w -= position_size_byte;
 
-            index.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
+            shard.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
                 (*size_compressed_positions_key & 255) as u8;
             *key_rank_position_pointer_w += 1;
-            index.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
+            shard.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
                 ((*size_compressed_positions_key >> 8) & 127) as u8;
             *key_rank_position_pointer_w += 1;
 
             block_copy(
-                &index.postings_buffer,
+                &shard.postings_buffer,
                 read_pointer,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 *key_position_pointer_w,
                 position_size_byte,
             );
@@ -492,9 +492,9 @@ pub(crate) fn docid_iterator(
     } else if posting_pointer_size == 3 {
         if embed_flag {
             block_copy(
-                &index.postings_buffer,
+                &shard.postings_buffer,
                 read_pointer,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 *key_rank_position_pointer_w,
                 position_size_byte,
             );
@@ -504,20 +504,20 @@ pub(crate) fn docid_iterator(
             *size_compressed_positions_key += position_size_byte;
             *key_position_pointer_w -= position_size_byte;
 
-            index.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
+            shard.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
                 (*size_compressed_positions_key & 255) as u8;
             *key_rank_position_pointer_w += 1;
-            index.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
+            shard.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
                 ((*size_compressed_positions_key >> 8) & 255) as u8;
             *key_rank_position_pointer_w += 1;
-            index.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
+            shard.compressed_index_segment_block_buffer[*key_rank_position_pointer_w] =
                 ((*size_compressed_positions_key >> 16) & 127) as u8;
             *key_rank_position_pointer_w += 1;
 
             block_copy(
-                &index.postings_buffer,
+                &shard.postings_buffer,
                 read_pointer,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 *key_position_pointer_w,
                 position_size_byte,
             );
@@ -527,21 +527,21 @@ pub(crate) fn docid_iterator(
     }
 
     if plo.ngram_type == NgramType::SingleTerm
-        || index.meta.similarity == SimilarityType::Bm25fProximity
+        || shard.meta.similarity == SimilarityType::Bm25fProximity
     {
         let mut posting_score = 0.0;
         for field in field_vec.iter() {
             let document_length_compressed =
-                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+                shard.document_length_compressed_array[field.0 as usize][*doc_id as usize];
 
             let document_length_normalized_doc =
                 DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
             let document_length_quotient_doc =
-                document_length_normalized_doc / index.document_length_normalized_average;
+                document_length_normalized_doc / shard.document_length_normalized_average;
 
             let tf = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * ((tf * (K + 1.0) / (tf + (K * (1.0 - B + (B * document_length_quotient_doc)))))
@@ -557,11 +557,11 @@ pub(crate) fn docid_iterator(
         || plo.ngram_type == NgramType::NgramRF
         || plo.ngram_type == NgramType::NgramFR
     {
-        let idf_ngram1 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_1 + 0.5)
+        let idf_ngram1 = (((shard.indexed_doc_count as f32 - plo.posting_count_ngram_1 + 0.5)
             / (plo.posting_count_ngram_1 + 0.5))
             + 1.0)
             .ln();
-        let idf_ngram2 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_2 + 0.5)
+        let idf_ngram2 = (((shard.indexed_doc_count as f32 - plo.posting_count_ngram_2 + 0.5)
             / (plo.posting_count_ngram_2 + 0.5))
             + 1.0)
             .ln();
@@ -569,15 +569,15 @@ pub(crate) fn docid_iterator(
         let mut posting_score = 0.0;
         for field in field_vec_ngram1.iter() {
             let document_length_compressed =
-                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+                shard.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
                 DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
             let document_length_quotient_doc =
-                document_length_normalized_doc / index.document_length_normalized_average;
+                document_length_normalized_doc / shard.document_length_normalized_average;
 
             let tf_ngram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_ngram1
@@ -588,15 +588,15 @@ pub(crate) fn docid_iterator(
 
         for field in field_vec_ngram2.iter() {
             let document_length_compressed =
-                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+                shard.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
                 DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
             let document_length_quotient_doc =
-                document_length_normalized_doc / index.document_length_normalized_average;
+                document_length_normalized_doc / shard.document_length_normalized_average;
 
             let tf_ngram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_ngram2
@@ -611,15 +611,15 @@ pub(crate) fn docid_iterator(
             plo.max_p_docid = p_docid as u16;
         }
     } else {
-        let idf_ngram1 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_1 + 0.5)
+        let idf_ngram1 = (((shard.indexed_doc_count as f32 - plo.posting_count_ngram_1 + 0.5)
             / (plo.posting_count_ngram_1 + 0.5))
             + 1.0)
             .ln();
-        let idf_ngram2 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_2 + 0.5)
+        let idf_ngram2 = (((shard.indexed_doc_count as f32 - plo.posting_count_ngram_2 + 0.5)
             / (plo.posting_count_ngram_2 + 0.5))
             + 1.0)
             .ln();
-        let idf_ngram3 = (((index.indexed_doc_count as f32 - plo.posting_count_ngram_3 + 0.5)
+        let idf_ngram3 = (((shard.indexed_doc_count as f32 - plo.posting_count_ngram_3 + 0.5)
             / (plo.posting_count_ngram_3 + 0.5))
             + 1.0)
             .ln();
@@ -627,15 +627,15 @@ pub(crate) fn docid_iterator(
         let mut posting_score = 0.0;
         for field in field_vec_ngram1.iter() {
             let document_length_compressed =
-                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+                shard.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
                 DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
             let document_length_quotient_doc =
-                document_length_normalized_doc / index.document_length_normalized_average;
+                document_length_normalized_doc / shard.document_length_normalized_average;
 
             let tf_ngram1 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_ngram1
@@ -646,15 +646,15 @@ pub(crate) fn docid_iterator(
 
         for field in field_vec_ngram2.iter() {
             let document_length_compressed =
-                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+                shard.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
                 DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
             let document_length_quotient_doc =
-                document_length_normalized_doc / index.document_length_normalized_average;
+                document_length_normalized_doc / shard.document_length_normalized_average;
 
             let tf_ngram2 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_ngram2
@@ -665,15 +665,15 @@ pub(crate) fn docid_iterator(
 
         for field in field_vec_ngram3.iter() {
             let document_length_compressed =
-                index.document_length_compressed_array[field.0 as usize][*doc_id as usize];
+                shard.document_length_compressed_array[field.0 as usize][*doc_id as usize];
             let document_length_normalized_doc =
                 DOCUMENT_LENGTH_COMPRESSION[document_length_compressed as usize] as f32;
             let document_length_quotient_doc =
-                document_length_normalized_doc / index.document_length_normalized_average;
+                document_length_normalized_doc / shard.document_length_normalized_average;
 
             let tf_ngram3 = field.1 as f32;
 
-            let weight = index.indexed_schema_vec[field.0 as usize].boost;
+            let weight = shard.indexed_schema_vec[field.0 as usize].boost;
 
             posting_score += weight
                 * idf_ngram3
@@ -692,7 +692,7 @@ pub(crate) fn docid_iterator(
 
 /// Compress postinglist to array
 pub(crate) fn compress_postinglist_array(
-    index: &mut Index,
+    shard: &mut Shard,
     roaring_offset: &mut usize,
     size_compressed_docid_key: &mut usize,
     key0: usize,
@@ -700,7 +700,7 @@ pub(crate) fn compress_postinglist_array(
     key_body_offset: &u32,
     compression_type_pointer: &mut u32,
 ) {
-    let plo = index.segments_level0[key0]
+    let plo = shard.segments_level0[key0]
         .segment
         .get_mut(&key_hash)
         .unwrap();
@@ -733,7 +733,7 @@ pub(crate) fn compress_postinglist_array(
         };
         let mut doc_id = 0;
         docid_iterator(
-            index,
+            shard,
             plo_posting_pointer_size,
             &mut next_pointer,
             &mut key_position_pointer_w,
@@ -747,7 +747,7 @@ pub(crate) fn compress_postinglist_array(
 
         write_u16(
             doc_id,
-            &mut index.compressed_index_segment_block_buffer,
+            &mut shard.compressed_index_segment_block_buffer,
             key_docid_pointer_w + (p_docid * 2),
         );
     }
@@ -758,7 +758,7 @@ pub(crate) fn compress_postinglist_array(
 
 /// Compress postinglist to bitmap
 pub(crate) fn compress_postinglist_bitmap(
-    index: &mut Index,
+    shard: &mut Shard,
     roaring_offset: &mut usize,
     size_compressed_docid_key: &mut usize,
     key0: usize,
@@ -766,7 +766,7 @@ pub(crate) fn compress_postinglist_bitmap(
     key_body_offset: &u32,
     compression_type_pointer: &mut u32,
 ) {
-    let plo = index.segments_level0[key0]
+    let plo = shard.segments_level0[key0]
         .segment
         .get_mut(&key_hash)
         .unwrap();
@@ -789,7 +789,7 @@ pub(crate) fn compress_postinglist_bitmap(
     plo.compression_type_pointer = key_body_offset | ((CompressionType::Bitmap as u32) << 30);
     *compression_type_pointer = plo.compression_type_pointer;
 
-    index.compressed_index_segment_block_buffer
+    shard.compressed_index_segment_block_buffer
         [key_docid_pointer_w..key_docid_pointer_w + count_byte]
         .fill(0);
 
@@ -804,7 +804,7 @@ pub(crate) fn compress_postinglist_bitmap(
 
         let mut doc_id = 0;
         docid_iterator(
-            index,
+            shard,
             plo_posting_pointer_size,
             &mut next_pointer,
             &mut key_position_pointer_w,
@@ -820,7 +820,7 @@ pub(crate) fn compress_postinglist_bitmap(
         let byte_pos = docid_pos >> 3;
         let bit_pos = docid_pos & 7;
 
-        index.compressed_index_segment_block_buffer[key_docid_pointer_w + byte_pos as usize] |=
+        shard.compressed_index_segment_block_buffer[key_docid_pointer_w + byte_pos as usize] |=
             1u8 << bit_pos;
     }
 
@@ -831,7 +831,7 @@ pub(crate) fn compress_postinglist_bitmap(
 /// Compress postinglist to RLE
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn compress_postinglist_rle(
-    index: &mut Index,
+    shard: &mut Shard,
     roaring_offset: &mut usize,
     size_compressed_docid_key: &mut usize,
     key0: usize,
@@ -841,7 +841,7 @@ pub(crate) fn compress_postinglist_rle(
     key_body_offset: &u32,
     compression_type_pointer: &mut u32,
 ) {
-    let plo = index.segments_level0[key0]
+    let plo = shard.segments_level0[key0]
         .segment
         .get_mut(&key_hash)
         .unwrap();
@@ -880,7 +880,7 @@ pub(crate) fn compress_postinglist_rle(
 
         let mut doc_id = 0;
         docid_iterator(
-            index,
+            shard,
             plo_posting_pointer_size,
             &mut next_pointer,
             &mut key_position_pointer_w,
@@ -899,12 +899,12 @@ pub(crate) fn compress_postinglist_rle(
         } else {
             write_u16(
                 run_start,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_docid_pointer_w_old + (((*runs_count << 1) as usize + 1) * 2),
             );
             write_u16(
                 run_length,
-                &mut index.compressed_index_segment_block_buffer,
+                &mut shard.compressed_index_segment_block_buffer,
                 key_docid_pointer_w_old + (((*runs_count << 1) as usize + 2) * 2),
             );
             key_docid_pointer_w += 4;
@@ -923,12 +923,12 @@ pub(crate) fn compress_postinglist_rle(
 
     write_u16(
         run_start,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_docid_pointer_w_old + (((*runs_count << 1) as usize + 1) * 2),
     );
     write_u16(
         run_length,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_docid_pointer_w_old + (((*runs_count << 1) as usize + 2) * 2),
     );
 
@@ -937,7 +937,7 @@ pub(crate) fn compress_postinglist_rle(
 
     write_u16(
         *runs_count,
-        &mut index.compressed_index_segment_block_buffer,
+        &mut shard.compressed_index_segment_block_buffer,
         key_docid_pointer_w_old,
     );
     key_docid_pointer_w += 2;

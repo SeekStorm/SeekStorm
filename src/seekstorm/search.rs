@@ -1,8 +1,9 @@
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
 use crate::index::{
-    DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet,
+    DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
+    ShardArc,
 };
-use crate::min_heap::Result;
+use crate::min_heap::{Result, result_ordering_root};
 use crate::tokenizer::tokenizer;
 use crate::union::{union_docid_2, union_docid_3};
 use crate::utils::{
@@ -21,10 +22,10 @@ use crate::{
     single::single_blockid,
     union::union_blockid,
 };
-use num::FromPrimitive;
 
 use ahash::{AHashMap, AHashSet};
 use itertools::Itertools;
+use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::mem;
@@ -346,7 +347,19 @@ impl Index {
     /// Facet fields are faster because no document loading, decompression and JSON decoding is required.  
     /// Facet fields are always memory mapped, internally always stored with fixed byte length layout, regardless of string size.
     #[inline]
-    pub fn get_facet_value(self: &Index, field: &str, doc_id: usize) -> FacetValue {
+    pub async fn get_facet_value(self: &Index, field: &str, doc_id: usize) -> FacetValue {
+        let shard_id = doc_id & ((1 << self.shard_bits) - 1);
+        let doc_id = doc_id >> self.shard_bits;
+        self.shard_vec[shard_id]
+            .read()
+            .await
+            .get_facet_value_shard(field, doc_id)
+    }
+}
+
+impl Shard {
+    #[inline]
+    pub(crate) fn get_facet_value_shard(self: &Shard, field: &str, doc_id: usize) -> FacetValue {
         if let Some(field_idx) = self.facets_map.get(field) {
             match &self.facets[*field_idx].field_type {
                 FieldType::U8 => {
@@ -693,28 +706,28 @@ pub enum FacetFilter {
         #[schema(value_type=RangeF64)]
         filter: Range<f64>,
     },
-    /// String filter
+    /// String16 filter
     String16 {
         /// field name
         field: String,
         /// filter: array of facet string values
         filter: Vec<String>,
     },
-    /// StringSet filter
+    /// StringSet16 filter
     StringSet16 {
         /// field name
         field: String,
         /// filter: array of facet string values
         filter: Vec<String>,
     },
-    /// String filter
+    /// String32 filter
     String32 {
         /// field name
         field: String,
         /// filter: array of facet string values
         filter: Vec<String>,
     },
-    /// StringSet filter
+    /// StringSet32 filter
     StringSet32 {
         /// field name
         field: String,
@@ -787,6 +800,8 @@ pub(crate) struct ResultSortIndex<'a> {
 /// longitude lon
 pub type Point = Vec<f64>;
 
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
 /// Arguments:
@@ -834,8 +849,6 @@ pub type Point = Vec<f64>;
 ///   the facet field values are set in index_document at index time,
 ///   the query_facets/facet_filter search parameters are specified at query time.
 ///   Facets are then returned in the search result object.
-#[allow(clippy::too_many_arguments)]
-#[allow(async_fn_in_trait)]
 pub trait Search {
     /// Search the index for all indexed documents, both for committed and uncommitted documents.
     /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
@@ -899,6 +912,305 @@ pub trait Search {
     ) -> ResultObject;
 }
 
+impl Search for IndexArc {
+    async fn search(
+        &self,
+        query_string: String,
+        query_type_default: QueryType,
+        offset: usize,
+        length: usize,
+        result_type: ResultType,
+        include_uncommited: bool,
+        field_filter: Vec<String>,
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
+    ) -> ResultObject {
+        let index_ref = self.read().await;
+        if index_ref.shard_vec.len() == 1 {
+            return index_ref.shard_vec[0]
+                .search_shard(
+                    query_string,
+                    query_type_default,
+                    offset,
+                    length,
+                    result_type,
+                    include_uncommited,
+                    field_filter,
+                    query_facets,
+                    facet_filter,
+                    result_sort,
+                )
+                .await;
+        }
+
+        let mut result_object_list = Vec::new();
+        let shard_bits = index_ref.shard_bits;
+        let aggregate_results = result_type != ResultType::Count;
+
+        for shard in index_ref.shard_vec.iter() {
+            let query_string_clone = query_string.clone();
+            let shard_clone = shard.clone();
+            let query_type_clone = query_type_default.clone();
+            let result_type_clone = result_type.clone();
+            let field_filter_clone = field_filter.clone();
+            let query_facets_clone = query_facets.clone();
+            let facet_filter_clone = facet_filter.clone();
+            let result_sort_clone = result_sort.clone();
+            let shard_id = shard.read().await.meta.id;
+
+            result_object_list.push(tokio::spawn(async move {
+                let mut rlo = shard_clone
+                    .search_shard(
+                        query_string_clone,
+                        query_type_clone,
+                        offset,
+                        length,
+                        result_type_clone,
+                        include_uncommited,
+                        field_filter_clone,
+                        query_facets_clone,
+                        facet_filter_clone,
+                        result_sort_clone,
+                    )
+                    .await;
+
+                if aggregate_results {
+                    for result in rlo.results.iter_mut() {
+                        result.doc_id = (result.doc_id << shard_bits) | shard_id as usize;
+                    }
+                }
+
+                rlo
+            }));
+        }
+
+        let mut result_object: ResultObject = Default::default();
+
+        let mut result_facets: AHashMap<String, (AHashMap<String, usize>, u32)> = AHashMap::new();
+        if result_type != ResultType::Topk {
+            for query_facet in query_facets.iter() {
+                match query_facet {
+                    QueryFacet::String16 {
+                        field,
+                        prefix: _,
+                        length,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), *length as u32));
+                    }
+                    QueryFacet::StringSet16 {
+                        field,
+                        prefix: _,
+                        length,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), *length as u32));
+                    }
+                    QueryFacet::String32 {
+                        field,
+                        prefix: _,
+                        length,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), *length));
+                    }
+                    QueryFacet::StringSet32 {
+                        field,
+                        prefix: _,
+                        length,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), *length));
+                    }
+                    QueryFacet::Timestamp {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+
+                    QueryFacet::U8 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::U16 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::U32 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::U64 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::I8 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::I16 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::I32 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::I64 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::F32 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::F64 {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+                    QueryFacet::Point {
+                        field,
+                        range_type: _,
+                        ranges: _,
+                        base: _,
+                        unit: _,
+                    } => {
+                        result_facets.insert(field.into(), (AHashMap::new(), u16::MAX as u32));
+                    }
+
+                    _ => {}
+                }
+            }
+        }
+
+        for result_object_shard in result_object_list {
+            let mut rlo_shard = result_object_shard.await.unwrap();
+
+            result_object.result_count_total += rlo_shard.result_count_total;
+            if aggregate_results {
+                result_object.results.append(&mut rlo_shard.results);
+            }
+
+            if result_object.query_terms.is_empty() {
+                result_object.query_terms = rlo_shard.query_terms
+            };
+
+            if !rlo_shard.facets.is_empty() {
+                for facet in rlo_shard.facets.iter() {
+                    if let Some(existing) = result_facets.get_mut(facet.0) {
+                        for (key, value) in facet.1.iter() {
+                            *existing.0.entry(key.clone()).or_insert(0) += value;
+                        }
+                    };
+                }
+            }
+        }
+
+        for (key, value) in result_facets.iter_mut() {
+            let sum = value
+                .0
+                .iter()
+                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                .map(|(a, c)| (a.clone(), *c))
+                .take(value.1 as usize)
+                .collect::<Vec<_>>();
+            result_object.facets.insert(key.clone(), sum);
+        }
+
+        // != count
+        if aggregate_results {
+            let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
+            if !result_sort.is_empty() {
+                for rs in result_sort.iter() {
+                    if let Some(idx) = index_ref.shard_vec[0]
+                        .read()
+                        .await
+                        .facets_map
+                        .get(&rs.field)
+                    {
+                        result_sort_index.push(ResultSortIndex {
+                            idx: *idx,
+                            order: rs.order.clone(),
+                            base: &rs.base,
+                        });
+                    }
+                }
+                let shard_vec =
+                    futures::future::join_all(index_ref.shard_vec.iter().map(|s| s.read())).await;
+
+                result_object.results.sort_by(|a, b| {
+                    result_ordering_root(
+                        &shard_vec,
+                        index_ref.shard_bits,
+                        &result_sort_index,
+                        *b,
+                        *a,
+                    )
+                });
+            } else {
+                result_object
+                    .results
+                    .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+            }
+
+            if result_object.results.len() > length {
+                result_object.results.truncate(length);
+            }
+
+            result_object.result_count = result_object.results.len();
+        }
+
+        result_object
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+pub(crate) trait SearchShard {
+    async fn search_shard(
+        &self,
+        query_string: String,
+        query_type_default: QueryType,
+        offset: usize,
+        length: usize,
+        result_type: ResultType,
+        include_uncommited: bool,
+        field_filter: Vec<String>,
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
+    ) -> ResultObject;
+}
+
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
 #[inline(never)]
 pub(crate) fn binary_search(
@@ -929,7 +1241,7 @@ pub(crate) fn binary_search(
 #[inline(always)]
 pub(crate) fn decode_posting_list_count(
     segment: &SegmentIndex,
-    index: &Index,
+    index: &Shard,
     key_hash1: u64,
     previous: bool,
 ) -> Option<u32> {
@@ -972,7 +1284,7 @@ pub(crate) fn decode_posting_list_count(
 #[inline(always)]
 pub(crate) fn decode_posting_list_counts(
     segment: &SegmentIndex,
-    index: &Index,
+    index: &Shard,
     key_hash1: u64,
 ) -> Option<(u32, u32, u32, u32)> {
     let mut posting_count_list = 0u32;
@@ -1061,7 +1373,7 @@ pub(crate) fn decode_posting_list_counts(
 #[inline(always)]
 pub(crate) fn decode_posting_list_object(
     segment: &SegmentIndex,
-    index: &Index,
+    shard: &Shard,
     key_hash1: u64,
     calculate_score: bool,
 ) -> Option<PostingListObjectIndex> {
@@ -1081,17 +1393,17 @@ pub(crate) fn decode_posting_list_object(
         let key_count = pointer.2 as usize;
 
         let byte_array =
-            &index.index_file_mmap[pointer.0 - (key_count * index.key_head_size)..pointer.0];
-        let key_index = binary_search(byte_array, key_count, key_hash1, index.key_head_size);
+            &shard.index_file_mmap[pointer.0 - (key_count * shard.key_head_size)..pointer.0];
+        let key_index = binary_search(byte_array, key_count, key_hash1, shard.key_head_size);
 
         if key_index >= 0 {
-            let key_address = key_index as usize * index.key_head_size;
+            let key_address = key_index as usize * shard.key_head_size;
             let posting_count = read_u16(byte_array, key_address + 8);
 
             let max_docid = read_u16(byte_array, key_address + 10);
             let max_p_docid = read_u16(byte_array, key_address + 12);
 
-            match index.key_head_size {
+            match shard.key_head_size {
                 20 => {}
                 22 => {
                     if read_flag {
@@ -1108,9 +1420,9 @@ pub(crate) fn decode_posting_list_object(
                 }
             }
 
-            let pointer_pivot_p_docid = read_u16(byte_array, key_address + index.key_head_size - 6);
+            let pointer_pivot_p_docid = read_u16(byte_array, key_address + shard.key_head_size - 6);
             let compression_type_pointer =
-                read_u32(byte_array, key_address + index.key_head_size - 4);
+                read_u32(byte_array, key_address + shard.key_head_size - 4);
 
             posting_count_list += posting_count as u32 + 1;
 
@@ -1129,7 +1441,7 @@ pub(crate) fn decode_posting_list_object(
 
     if !blocks_owned.is_empty() {
         if calculate_score {
-            match index.key_head_size {
+            match shard.key_head_size {
                 20 => {}
                 22 => {
                     if read_flag {
@@ -1156,7 +1468,7 @@ pub(crate) fn decode_posting_list_object(
 
             for block in blocks_owned.iter_mut() {
                 block.max_block_score = get_max_score(
-                    index,
+                    shard,
                     segment,
                     posting_count_ngram_1,
                     posting_count_ngram_2,
@@ -1193,54 +1505,8 @@ pub(crate) fn decode_posting_list_object(
     }
 }
 
-impl Search for IndexArc {
-    /// Search the index for all indexed documents, both for committed and uncommitted documents.
-    /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
-    /// Arguments:
-    /// * `query_string`: query string + - "" search operators are recognized.
-    /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
-    ///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
-    /// * `offset`: offset of search results to return.
-    /// * `length`: number of search results to return.
-    ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-    /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
-    /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
-    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
-    /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
-    ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
-    ///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-    ///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The prefix and length properties can be used to improve the usability in an UI.
-    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
-    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///   Examples:
-    ///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
-    ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
-    ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
-    /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
-    ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-    ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
-    ///   The facet counts depend only from the query and not which facet filters are selected.
-    ///   Examples:
-    ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
-    ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
-    ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
-    /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
-    ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
-    ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
-    ///   The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
-    ///   until the n-th field value is either not equal or the last field is reached.
-    ///   A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
-    ///   Sort is only enabled on facet fields that are defined in schema at create_index!   
-    ///   Examples:
-    ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
-    ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
-    ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
-    ///   Facets are defined in 3 different places:
-    ///   the facet fields are defined in schema at create_index,
-    ///   the facet field values are set in index_document at index time,
-    ///   the query_facets/facet_filter search parameters are specified at query time.
-    ///   Facets are then returned in the search result object.
-    async fn search(
+impl SearchShard for ShardArc {
+    async fn search_shard(
         &self,
         query_string: String,
         query_type_default: QueryType,
@@ -1253,8 +1519,14 @@ impl Search for IndexArc {
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
     ) -> ResultObject {
-        let index_ref = self.read().await;
+        let shard_ref = self.read().await;
         let mut query_type_mut = query_type_default;
+
+        let facet_cap = if shard_ref.shard_number == 1 {
+            0
+        } else {
+            u32::MAX
+        };
 
         let mut result_object: ResultObject = Default::default();
 
@@ -1266,13 +1538,13 @@ impl Search for IndexArc {
             result_type = ResultType::Count;
         }
 
-        if index_ref.segments_index.is_empty() {
+        if shard_ref.segments_index.is_empty() {
             return result_object;
         }
 
         let mut field_filter_set: AHashSet<u16> = AHashSet::new();
         for item in field_filter.iter() {
-            match index_ref.schema_map.get(item) {
+            match shard_ref.schema_map.get(item) {
                 Some(value) => {
                     if value.indexed {
                         field_filter_set.insert(value.indexed_field_id as u16);
@@ -1287,7 +1559,7 @@ impl Search for IndexArc {
         let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
         if !result_sort.is_empty() && result_type != ResultType::Count {
             for rs in result_sort.iter() {
-                if let Some(idx) = index_ref.facets_map.get(&rs.field) {
+                if let Some(idx) = shard_ref.facets_map.get(&rs.field) {
                     result_sort_index.push(ResultSortIndex {
                         idx: *idx,
                         order: rs.order.clone(),
@@ -1298,97 +1570,98 @@ impl Search for IndexArc {
         }
 
         let mut search_result = SearchResult {
-            topk_candidates: MinHeap::new(offset + length, &index_ref, &result_sort_index),
+            topk_candidates: MinHeap::new(offset + length, &shard_ref, &result_sort_index),
             query_facets: Vec::new(),
             skip_facet_count: false,
         };
 
         let mut facet_filter_sparse: Vec<FilterSparse> = Vec::new();
         if !facet_filter.is_empty() {
-            facet_filter_sparse = vec![FilterSparse::None; index_ref.facets.len()];
+            facet_filter_sparse = vec![FilterSparse::None; shard_ref.facets.len()];
             for facet_filter_item in facet_filter.iter() {
                 match &facet_filter_item {
                     FacetFilter::U8 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U8
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U8
                         {
                             facet_filter_sparse[*idx] = FilterSparse::U8(filter.clone())
                         }
                     }
                     FacetFilter::U16 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U16
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U16
                         {
                             facet_filter_sparse[*idx] = FilterSparse::U16(filter.clone())
                         }
                     }
                     FacetFilter::U32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U32
                         {
                             facet_filter_sparse[*idx] = FilterSparse::U32(filter.clone())
                         }
                     }
                     FacetFilter::U64 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U64
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U64
                         {
                             facet_filter_sparse[*idx] = FilterSparse::U64(filter.clone())
                         }
                     }
                     FacetFilter::I8 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I8
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I8
                         {
                             facet_filter_sparse[*idx] = FilterSparse::I8(filter.clone())
                         }
                     }
                     FacetFilter::I16 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I16
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I16
                         {
                             facet_filter_sparse[*idx] = FilterSparse::I16(filter.clone())
                         }
                     }
                     FacetFilter::I32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I32
                         {
                             facet_filter_sparse[*idx] = FilterSparse::I32(filter.clone())
                         }
                     }
                     FacetFilter::I64 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I64
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I64
                         {
                             facet_filter_sparse[*idx] = FilterSparse::I64(filter.clone())
                         }
                     }
                     FacetFilter::Timestamp { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::Timestamp
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::Timestamp
                         {
                             facet_filter_sparse[*idx] = FilterSparse::Timestamp(filter.clone())
                         }
                     }
                     FacetFilter::F32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::F32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::F32
                         {
                             facet_filter_sparse[*idx] = FilterSparse::F32(filter.clone())
                         }
                     }
                     FacetFilter::F64 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::F64
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::F64
                         {
                             facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
                         }
                     }
+
                     FacetFilter::String16 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            let facet = &index_ref.facets[*idx];
-                            if index_ref.facets[*idx].field_type == FieldType::String16 {
+                        if let Some(idx) = shard_ref.facets_map.get(field) {
+                            let facet = &shard_ref.facets[*idx];
+                            if shard_ref.facets[*idx].field_type == FieldType::String16 {
                                 let mut string_id_vec = Vec::new();
                                 for value in filter.iter() {
                                     let key = [value.clone()];
@@ -1403,9 +1676,9 @@ impl Search for IndexArc {
                     }
 
                     FacetFilter::StringSet16 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            let facet = &index_ref.facets[*idx];
-                            if index_ref.facets[*idx].field_type == FieldType::StringSet16 {
+                        if let Some(idx) = shard_ref.facets_map.get(field) {
+                            let facet = &shard_ref.facets[*idx];
+                            if shard_ref.facets[*idx].field_type == FieldType::StringSet16 {
                                 let mut string_id_vec = Vec::new();
                                 for value in filter.iter() {
                                     let key = [value.clone()];
@@ -1415,7 +1688,7 @@ impl Search for IndexArc {
                                         string_id_vec.push(facet_value_id as u16);
                                     }
 
-                                    if let Some(facet_value_ids) = index_ref
+                                    if let Some(facet_value_ids) = shard_ref
                                         .string_set_to_single_term_id_vec[*idx]
                                         .get(&value.clone())
                                     {
@@ -1430,10 +1703,10 @@ impl Search for IndexArc {
                     }
 
                     FacetFilter::String32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            let facet = &index_ref.facets[*idx];
+                        if let Some(idx) = shard_ref.facets_map.get(field) {
+                            let facet = &shard_ref.facets[*idx];
 
-                            if index_ref.facets[*idx].field_type == FieldType::String32 {
+                            if shard_ref.facets[*idx].field_type == FieldType::String32 {
                                 let mut string_id_vec = Vec::new();
                                 for value in filter.iter() {
                                     let key = [value.clone()];
@@ -1448,9 +1721,9 @@ impl Search for IndexArc {
                     }
 
                     FacetFilter::StringSet32 { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field) {
-                            let facet = &index_ref.facets[*idx];
-                            if index_ref.facets[*idx].field_type == FieldType::StringSet32 {
+                        if let Some(idx) = shard_ref.facets_map.get(field) {
+                            let facet = &shard_ref.facets[*idx];
+                            if shard_ref.facets[*idx].field_type == FieldType::StringSet32 {
                                 let mut string_id_vec = Vec::new();
                                 for value in filter.iter() {
                                     let key = [value.clone()];
@@ -1460,7 +1733,7 @@ impl Search for IndexArc {
                                         string_id_vec.push(facet_value_id as u32);
                                     }
 
-                                    if let Some(facet_value_ids) = index_ref
+                                    if let Some(facet_value_ids) = shard_ref
                                         .string_set_to_single_term_id_vec[*idx]
                                         .get(&value.clone())
                                     {
@@ -1475,8 +1748,8 @@ impl Search for IndexArc {
                     }
 
                     FacetFilter::Point { field, filter } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::Point
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::Point
                         {
                             facet_filter_sparse[*idx] = FilterSparse::Point(
                                 filter.0.clone(),
@@ -1492,7 +1765,7 @@ impl Search for IndexArc {
 
         let mut is_range_facet = false;
         if !query_facets.is_empty() {
-            search_result.query_facets = vec![ResultFacet::default(); index_ref.facets.len()];
+            search_result.query_facets = vec![ResultFacet::default(); shard_ref.facets.len()];
             for query_facet in query_facets.iter() {
                 match &query_facet {
                     QueryFacet::U8 {
@@ -1500,8 +1773,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U8
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U8
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1517,8 +1790,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U16
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U16
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1534,8 +1807,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U32
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1551,8 +1824,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::U64
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::U64
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1568,8 +1841,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I8
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I8
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1585,8 +1858,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I16
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I16
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1602,8 +1875,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I32
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1619,8 +1892,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::I64
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::I64
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1636,8 +1909,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::Timestamp
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::Timestamp
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1653,8 +1926,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::F32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::F32
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1670,8 +1943,8 @@ impl Search for IndexArc {
                         range_type,
                         ranges,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::F64
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::F64
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1687,8 +1960,8 @@ impl Search for IndexArc {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::String16
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::String16
                         {
                             search_result.query_facets[*idx] = ResultFacet {
                                 field: field.clone(),
@@ -1703,8 +1976,8 @@ impl Search for IndexArc {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::StringSet16
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::StringSet16
                         {
                             search_result.query_facets[*idx] = ResultFacet {
                                 field: field.clone(),
@@ -1720,8 +1993,8 @@ impl Search for IndexArc {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::String32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::String32
                         {
                             search_result.query_facets[*idx] = ResultFacet {
                                 field: field.clone(),
@@ -1736,8 +2009,8 @@ impl Search for IndexArc {
                         prefix,
                         length,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::StringSet32
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::StringSet32
                         {
                             search_result.query_facets[*idx] = ResultFacet {
                                 field: field.clone(),
@@ -1755,8 +2028,8 @@ impl Search for IndexArc {
                         base,
                         unit,
                     } => {
-                        if let Some(idx) = index_ref.facets_map.get(field)
-                            && index_ref.facets[*idx].field_type == FieldType::Point
+                        if let Some(idx) = shard_ref.facets_map.get(field)
+                            && shard_ref.facets[*idx].field_type == FieldType::Point
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -1787,24 +2060,24 @@ impl Search for IndexArc {
             let mut nonunique_terms_count = 0u32;
 
             tokenizer(
-                &index_ref,
+                &shard_ref,
                 &query_string,
                 &mut unique_terms,
                 &mut non_unique_terms,
-                index_ref.meta.tokenizer,
-                index_ref.segment_number_mask1,
+                shard_ref.meta.tokenizer,
+                shard_ref.segment_number_mask1,
                 &mut nonunique_terms_count,
                 u16::MAX as u32,
                 MAX_POSITIONS_PER_TERM,
                 true,
                 &mut query_type_mut,
-                index_ref.meta.ngram_indexing,
+                shard_ref.meta.ngram_indexing,
                 0,
                 1,
             );
 
-            if include_uncommited && index_ref.uncommitted {
-                index_ref.search_uncommitted(
+            if include_uncommited && shard_ref.uncommitted {
+                shard_ref.search_uncommitted(
                     &unique_terms,
                     &non_unique_terms,
                     &mut query_type_mut,
@@ -1852,10 +2125,10 @@ impl Search for IndexArc {
                         let max_list_score;
                         let blocks;
                         let blocks_len;
-                        let found_plo = if index_ref.meta.access_type == AccessType::Mmap {
+                        let found_plo = if shard_ref.meta.access_type == AccessType::Mmap {
                             let posting_list_object_index_option = decode_posting_list_object(
-                                &index_ref.segments_index[key0 as usize],
-                                &index_ref,
+                                &shard_ref.segments_index[key0 as usize],
+                                &shard_ref,
                                 key_hash,
                                 false,
                             );
@@ -1875,7 +2148,7 @@ impl Search for IndexArc {
                                 false
                             }
                         } else {
-                            let posting_list_object_index_option = index_ref.segments_index
+                            let posting_list_object_index_option = shard_ref.segments_index
                                 [key0 as usize]
                                 .segment
                                 .get(&key_hash);
@@ -1931,11 +2204,11 @@ impl Search for IndexArc {
                                 let max_list_score;
                                 let blocks;
                                 let blocks_len;
-                                let found_plo = if index_ref.meta.access_type == AccessType::Mmap {
+                                let found_plo = if shard_ref.meta.access_type == AccessType::Mmap {
                                     let posting_list_object_index_option =
                                         decode_posting_list_object(
-                                            &index_ref.segments_index[key0 as usize],
-                                            &index_ref,
+                                            &shard_ref.segments_index[key0 as usize],
+                                            &shard_ref,
                                             key_hash,
                                             true,
                                         );
@@ -1961,7 +2234,7 @@ impl Search for IndexArc {
                                         false
                                     }
                                 } else {
-                                    let posting_list_object_index_option = index_ref.segments_index
+                                    let posting_list_object_index_option = shard_ref.segments_index
                                         [key0 as usize]
                                         .segment
                                         .get(&key_hash);
@@ -1990,10 +2263,10 @@ impl Search for IndexArc {
                                 if found_plo {
                                     if result_type != ResultType::Count {
                                         if non_unique_term.ngram_type == NgramType::SingleTerm
-                                            || index_ref.meta.similarity
+                                            || shard_ref.meta.similarity
                                                 == SimilarityType::Bm25fProximity
                                         {
-                                            idf = (((index_ref.indexed_doc_count as f32
+                                            idf = (((shard_ref.indexed_doc_count as f32
                                                 - posting_count as f32
                                                 + 0.5)
                                                 / (posting_count as f32 + 0.5))
@@ -2003,35 +2276,35 @@ impl Search for IndexArc {
                                             || non_unique_term.ngram_type == NgramType::NgramRF
                                             || non_unique_term.ngram_type == NgramType::NgramFR
                                         {
-                                            idf_ngram1 = (((index_ref.indexed_doc_count as f32
+                                            idf_ngram1 = (((shard_ref.indexed_doc_count as f32
                                                 - posting_count_ngram_1 as f32
                                                 + 0.5)
                                                 / (posting_count_ngram_1 as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
 
-                                            idf_ngram2 = (((index_ref.indexed_doc_count as f32
+                                            idf_ngram2 = (((shard_ref.indexed_doc_count as f32
                                                 - posting_count_ngram_2 as f32
                                                 + 0.5)
                                                 / (posting_count_ngram_2 as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
                                         } else {
-                                            idf_ngram1 = (((index_ref.indexed_doc_count as f32
+                                            idf_ngram1 = (((shard_ref.indexed_doc_count as f32
                                                 - posting_count_ngram_1 as f32
                                                 + 0.5)
                                                 / (posting_count_ngram_1 as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
 
-                                            idf_ngram2 = (((index_ref.indexed_doc_count as f32
+                                            idf_ngram2 = (((shard_ref.indexed_doc_count as f32
                                                 - posting_count_ngram_2 as f32
                                                 + 0.5)
                                                 / (posting_count_ngram_2 as f32 + 0.5))
                                                 + 1.0)
                                                 .ln();
 
-                                            idf_ngram3 = (((index_ref.indexed_doc_count as f32
+                                            idf_ngram3 = (((shard_ref.indexed_doc_count as f32
                                                 - posting_count_ngram_3 as f32
                                                 + 0.5)
                                                 / (posting_count_ngram_3 as f32 + 0.5))
@@ -2124,7 +2397,6 @@ impl Search for IndexArc {
                             .push(term.term_ngram_0.to_string());
                     }
                 };
-
                 {
                     result_object.query_terms.push(term.term.to_string());
                 }
@@ -2133,7 +2405,7 @@ impl Search for IndexArc {
             not_query_list = not_query_list_map.into_values().collect();
             query_list = query_list_map.into_values().collect();
 
-            if index_ref.meta.access_type == AccessType::Mmap {
+            if shard_ref.meta.access_type == AccessType::Mmap {
                 for plo in query_list.iter_mut() {
                     plo.blocks = &blocks_vec[plo.blocks_index - 1]
                 }
@@ -2149,30 +2421,29 @@ impl Search for IndexArc {
             let query_term_count = non_unique_terms.len();
             if query_list_len == 0 {
             } else if query_list_len == 1 {
-                if !(index_ref.uncommitted && include_uncommited)
+                if !(shard_ref.uncommitted && include_uncommited)
                     && offset + length <= 1000
                     && not_query_list.is_empty()
                     && field_filter_set.is_empty()
-                    && index_ref.delete_hashset.is_empty()
+                    && shard_ref.delete_hashset.is_empty()
                     && facet_filter_sparse.is_empty()
                     && !is_range_facet
                     && result_sort_index.is_empty()
-                    && let Some(frequentword_result_object) = index_ref
+                    && let Some(stopword_result_object) = shard_ref
                         .frequentword_results
                         .get(&non_unique_terms[0].term)
                 {
-                    result_object.query = frequentword_result_object.query.clone();
+                    result_object.query = stopword_result_object.query.clone();
                     result_object
                         .query_terms
-                        .clone_from(&frequentword_result_object.query_terms);
-                    result_object.result_count = frequentword_result_object.result_count;
-                    result_object.result_count_total =
-                        frequentword_result_object.result_count_total;
+                        .clone_from(&stopword_result_object.query_terms);
+                    result_object.result_count = stopword_result_object.result_count;
+                    result_object.result_count_total = stopword_result_object.result_count_total;
 
                     if result_type != ResultType::Count {
                         result_object
                             .results
-                            .clone_from(&frequentword_result_object.results);
+                            .clone_from(&stopword_result_object.results);
                         if offset > 0 {
                             result_object.results.drain(..offset);
                         }
@@ -2185,19 +2456,19 @@ impl Search for IndexArc {
                         let mut facets: AHashMap<String, Facet> = AHashMap::new();
                         for facet in search_result.query_facets.iter() {
                             if facet.length == 0
-                                || frequentword_result_object.facets[&facet.field].is_empty()
+                                || stopword_result_object.facets[&facet.field].is_empty()
                             {
                                 continue;
                             }
 
-                            let v = frequentword_result_object.facets[&facet.field]
+                            let v = stopword_result_object.facets[&facet.field]
                                 .iter()
                                 .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
                                 .map(|(a, c)| (a.clone(), *c))
                                 .filter(|(a, _c)| {
                                     facet.prefix.is_empty() || a.starts_with(&facet.prefix)
                                 })
-                                .take(facet.length as usize)
+                                .take(facet.length.max(facet_cap) as usize)
                                 .collect::<Vec<_>>();
 
                             if !v.is_empty() {
@@ -2211,7 +2482,7 @@ impl Search for IndexArc {
                 }
 
                 single_blockid(
-                    &index_ref,
+                    &shard_ref,
                     &mut non_unique_query_list,
                     &mut query_list,
                     &mut not_query_list,
@@ -2229,7 +2500,7 @@ impl Search for IndexArc {
 
                 if result_type == ResultType::Count && query_list_len != 2 {
                     union_blockid(
-                        &index_ref,
+                        &shard_ref,
                         &mut non_unique_query_list,
                         &mut query_list,
                         &mut not_query_list,
@@ -2248,7 +2519,7 @@ impl Search for IndexArc {
                     && search_result.topk_candidates.result_sort.is_empty()
                 {
                     union_docid_2(
-                        &index_ref,
+                        &shard_ref,
                         &mut non_unique_query_list,
                         &mut query_list,
                         &mut not_query_list,
@@ -2267,7 +2538,7 @@ impl Search for IndexArc {
                     && query_list_len <= 10
                 {
                     union_docid_3(
-                        &index_ref,
+                        &shard_ref,
                         &mut non_unique_query_list,
                         &mut Vec::from([QueueObject {
                             query_list: query_list.clone(),
@@ -2288,7 +2559,7 @@ impl Search for IndexArc {
                     .await;
                 } else {
                     union_blockid(
-                        &index_ref,
+                        &shard_ref,
                         &mut non_unique_query_list,
                         &mut query_list,
                         &mut not_query_list,
@@ -2303,7 +2574,7 @@ impl Search for IndexArc {
                 }
             } else {
                 intersection_blockid(
-                    &index_ref,
+                    &shard_ref,
                     &mut non_unique_query_list,
                     &mut query_list,
                     &mut not_query_list,
@@ -2318,7 +2589,8 @@ impl Search for IndexArc {
                     query_term_count,
                 )
                 .await;
-                if index_ref.enable_fallback
+
+                if shard_ref.enable_fallback
                     && (result_count_arc.load(Ordering::Relaxed) < offset + length)
                 {
                     continue 'fallback;
@@ -2341,7 +2613,7 @@ impl Search for IndexArc {
 
             result_object
                 .results
-                .sort_by(|a, b| search_result.topk_candidates.result_ordering(*b, *a));
+                .sort_by(|a, b| search_result.topk_candidates.result_ordering_shard(*b, *a));
 
             if offset > 0 {
                 result_object.results.drain(..offset);
@@ -2353,8 +2625,8 @@ impl Search for IndexArc {
 
         if !search_result.query_facets.is_empty() {
             result_object.facets = if result_object.query_terms.is_empty() {
-                index_ref
-                    .get_index_string_facets(query_facets)
+                shard_ref
+                    .get_index_string_facets_shard(query_facets)
                     .unwrap_or_default()
             } else {
                 let mut facets: AHashMap<String, Facet> = AHashMap::new();
@@ -2364,16 +2636,16 @@ impl Search for IndexArc {
                     }
 
                     let v = if facet.ranges == Ranges::None {
-                        if index_ref.facets[i].values.is_empty() {
+                        if shard_ref.facets[i].values.is_empty() {
                             continue;
                         }
 
-                        if index_ref.facets[i].field_type == FieldType::StringSet16
-                            || index_ref.facets[i].field_type == FieldType::StringSet32
+                        if shard_ref.facets[i].field_type == FieldType::StringSet16
+                            || shard_ref.facets[i].field_type == FieldType::StringSet32
                         {
                             let mut hash_map: AHashMap<String, usize> = AHashMap::new();
                             for value in facet.values.iter() {
-                                let value2 = index_ref.facets[i]
+                                let value2 = shard_ref.facets[i]
                                     .values
                                     .get_index(*value.0 as usize)
                                     .unwrap();
@@ -2390,7 +2662,7 @@ impl Search for IndexArc {
                                 .filter(|(a, _c)| {
                                     facet.prefix.is_empty() || a.starts_with(&facet.prefix)
                                 })
-                                .take(facet.length as usize)
+                                .take(facet.length.max(facet_cap) as usize)
                                 .collect::<Vec<_>>()
                         } else {
                             facet
@@ -2399,7 +2671,7 @@ impl Search for IndexArc {
                                 .sorted_unstable_by(|a, b| b.1.cmp(a.1))
                                 .map(|(a, c)| {
                                     (
-                                        index_ref.facets[i]
+                                        shard_ref.facets[i]
                                             .values
                                             .get_index(*a as usize)
                                             .unwrap()
@@ -2411,7 +2683,7 @@ impl Search for IndexArc {
                                 .filter(|(a, _c)| {
                                     facet.prefix.is_empty() || a.starts_with(&facet.prefix)
                                 })
-                                .take(facet.length as usize)
+                                .take(facet.length.max(facet_cap) as usize)
                                 .collect::<Vec<_>>()
                         }
                     } else {
@@ -2510,7 +2782,6 @@ impl Search for IndexArc {
                             .filter(|(a, _c)| {
                                 facet.prefix.is_empty() || a.starts_with(&facet.prefix)
                             })
-                            .take(facet.length as usize)
                             .collect::<Vec<_>>()
                     };
 

@@ -360,8 +360,10 @@ pub(crate) async fn http_request_handler(
                 create_index_request_object.frequent_words,
                 create_index_request_object.ngram_indexing,
                 create_index_request_object.synonyms,
+                create_index_request_object.force_shard_number,
                 apikey_object,
-            );
+            )
+            .await;
             drop(apikey_list_mut);
             Ok(Response::new(BoxBody::new(Full::new(
                 index_id.to_string().into(),

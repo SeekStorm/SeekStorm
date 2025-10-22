@@ -1,4 +1,4 @@
-use crate::index::{Document, FieldType, Index, IndexArc, hash64};
+use crate::index::{Document, FieldType, IndexArc, Shard, hash64};
 use crate::min_heap::{self, MinHeap};
 use aho_corasick::{AhoCorasick, MatchKind};
 use serde::{Deserialize, Serialize};
@@ -75,6 +75,7 @@ pub async fn highlighter(
         let mut query_terms_vec_mut = query_terms_vec.clone();
         for query_term in query_terms_vec.iter() {
             let term_hash = hash64(query_term.to_lowercase().as_bytes());
+
             if let Some(synonyms) = index_ref.synonyms_map.get(&term_hash) {
                 for synonym in synonyms.iter() {
                     query_terms_vec_mut.push(synonym.0.clone());
@@ -208,7 +209,7 @@ pub(crate) struct Fragment<'a> {
 /// If the fragment length exceeds the specified fragment_size, then the fragment is truncated at the right or left side, so that the query term higlight positions are kept within the remaining fragment window.
 /// Selecting the right fragment and the right fragment window is fundamental for the users perceived relevancy of the search results.
 pub(crate) fn top_fragments_from_field(
-    index: &Index,
+    shard: &Shard,
     document: &Document,
     query_terms_ac: &AhoCorasick,
     highlight: &Highlight,
@@ -225,9 +226,9 @@ pub(crate) fn top_fragments_from_field(
                 highlight.fragment_number
             };
             let result_sort = Vec::new();
-            let mut topk_candidates = MinHeap::new(fragment_number, index, &result_sort);
+            let mut topk_candidates = MinHeap::new(fragment_number, shard, &result_sort);
 
-            if let Some(schema_field) = index.schema_map.get(&highlight.field) {
+            if let Some(schema_field) = shard.schema_map.get(&highlight.field) {
                 let text = match schema_field.field_type {
                     FieldType::Text | FieldType::String16 | FieldType::String32 => {
                         serde_json::from_value::<String>(value.clone()).unwrap_or(value.to_string())

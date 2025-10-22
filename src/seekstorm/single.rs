@@ -7,8 +7,8 @@ use crate::{
     add_result::{PostingListObjectSingle, add_result_singleterm_multifield},
     compatible::{_blsr_u64, _mm_tzcnt_64},
     index::{
-        AccessType, BlockObjectIndex, CompressionType, Index, NonUniquePostingListObjectQuery,
-        PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG,
+        AccessType, BlockObjectIndex, CompressionType, NonUniquePostingListObjectQuery,
+        PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG, Shard,
     },
     intersection::{BlockObject, bitpacking32_get_delta},
     search::{FilterSparse, ResultType, SearchResult},
@@ -22,7 +22,7 @@ use num_traits::FromPrimitive;
 #[allow(clippy::ptr_arg)]
 #[allow(non_snake_case)]
 pub(crate) async fn single_docid<'a>(
-    index: &'a Index,
+    shard: &'a Shard,
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     blo: &BlockObjectIndex,
@@ -84,14 +84,14 @@ pub(crate) async fn single_docid<'a>(
         query_list_item_mut.compressed_doc_id_range =
             query_list_item_mut.rank_position_pointer_range as usize + posting_pointer_size_sum;
 
-        if index.meta.access_type == AccessType::Mmap {
-            let segment = &index.segments_index[query_list_item_mut.key0 as usize];
+        if shard.meta.access_type == AccessType::Mmap {
+            let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
             query_list_item_mut.byte_array =
-                &index.index_file_mmap[segment.byte_array_blocks_pointer[blo.block_id as usize].0
+                &shard.index_file_mmap[segment.byte_array_blocks_pointer[blo.block_id as usize].0
                     ..segment.byte_array_blocks_pointer[blo.block_id as usize].0
                         + segment.byte_array_blocks_pointer[blo.block_id as usize].1];
         } else {
-            query_list_item_mut.byte_array = &index.segments_index
+            query_list_item_mut.byte_array = &shard.segments_index
                 [query_list_item_mut.key0 as usize]
                 .byte_array_blocks[blo.block_id as usize];
         }
@@ -139,13 +139,13 @@ pub(crate) async fn single_docid<'a>(
 
     let query_list_item_mut = &mut query_list[term_index];
 
-    let byte_array = if index.meta.access_type == AccessType::Mmap {
-        let segment = &index.segments_index[query_list_item_mut.key0 as usize];
-        &index.index_file_mmap[segment.byte_array_blocks_pointer[blo.block_id as usize].0
+    let byte_array = if shard.meta.access_type == AccessType::Mmap {
+        let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
+        &shard.index_file_mmap[segment.byte_array_blocks_pointer[blo.block_id as usize].0
             ..segment.byte_array_blocks_pointer[blo.block_id as usize].0
                 + segment.byte_array_blocks_pointer[blo.block_id as usize].1]
     } else {
-        &index.segments_index[query_list_item_mut.key0 as usize].byte_array_blocks
+        &shard.segments_index[query_list_item_mut.key0 as usize].byte_array_blocks
             [blo.block_id as usize]
     };
 
@@ -167,7 +167,7 @@ pub(crate) async fn single_docid<'a>(
                 plo.p_docid = i as i32;
 
                 add_result_singleterm_multifield(
-                    index,
+                    shard,
                     ((blo.block_id as usize) << 16)
                         | read_u16(
                             byte_array,
@@ -203,7 +203,7 @@ pub(crate) async fn single_docid<'a>(
                 docid_old = doc_id as i32;
 
                 add_result_singleterm_multifield(
-                    index,
+                    shard,
                     ((blo.block_id as usize) << 16) | doc_id as usize,
                     result_count,
                     search_result,
@@ -234,7 +234,7 @@ pub(crate) async fn single_docid<'a>(
 
                 for j in 0..=runlength {
                     add_result_singleterm_multifield(
-                        index,
+                        shard,
                         ((blo.block_id as usize) << 16) | (startdocid + j) as usize,
                         result_count,
                         search_result,
@@ -268,7 +268,7 @@ pub(crate) async fn single_docid<'a>(
                     intersect = unsafe { _blsr_u64(intersect) };
 
                     add_result_singleterm_multifield(
-                        index,
+                        shard,
                         block_id_msb | ((ulong_pos << 6) + bit_pos) as usize,
                         result_count,
                         search_result,
@@ -292,7 +292,7 @@ pub(crate) async fn single_docid<'a>(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn single_blockid<'a>(
-    index: &'a Index,
+    index: &'a Shard,
     non_unique_query_list: &mut [NonUniquePostingListObjectQuery<'a>],
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],

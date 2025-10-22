@@ -1,9 +1,11 @@
+use tokio::sync::RwLockReadGuard;
+
 use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     geo_search::morton_ordering,
-    index::{FieldType, Index},
+    index::{FieldType, Shard},
     search::{FacetValue, ResultSortIndex, SortOrder},
     utils::{
         read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32, read_u64,
@@ -24,15 +26,474 @@ pub(crate) struct MinHeap<'a> {
     pub current_heap_size: usize,
     pub docid_hashset: AHashMap<usize, f32>,
 
-    pub index: &'a Index,
+    pub index: &'a Shard,
     pub result_sort: &'a Vec<ResultSortIndex<'a>>,
+}
+
+#[inline]
+pub(crate) fn result_ordering_root(
+    shard_vec: &[RwLockReadGuard<'_, Shard>],
+    shard_bits: usize,
+    result_sort: &Vec<ResultSortIndex<'_>>,
+    result1: Result,
+    result2: Result,
+) -> core::cmp::Ordering {
+    let shard_id1 = result1.doc_id & ((1 << shard_bits) - 1);
+    let doc_id1 = result1.doc_id >> shard_bits;
+    let shard1 = &shard_vec[shard_id1];
+
+    let shard_id2 = result2.doc_id & ((1 << shard_bits) - 1);
+    let doc_id2 = result2.doc_id >> shard_bits;
+    let shard2 = &shard_vec[shard_id2];
+
+    for field in result_sort.iter() {
+        match shard1.facets[field.idx].field_type {
+            FieldType::U8 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 =
+                    &shard1.facets_file_mmap[(shard1.facets_size_sum * doc_id1) + offset];
+
+                let facet_value_2 =
+                    &shard2.facets_file_mmap[(shard2.facets_size_sum * doc_id2) + offset];
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(facet_value_2)
+                } else {
+                    facet_value_2.cmp(facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::U16 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_u16(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_u16(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+            FieldType::U32 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_u32(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_u32(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+            FieldType::U64 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_u64(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_u64(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::I8 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_i8(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_i8(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::I16 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_i16(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_i16(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+            FieldType::I32 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_i32(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_i32(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+            FieldType::I64 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_i64(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_i64(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::Timestamp => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_i64(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_i64(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::F32 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_f32(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_f32(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1
+                        .partial_cmp(&facet_value_2)
+                        .unwrap_or(core::cmp::Ordering::Equal)
+                } else {
+                    facet_value_2
+                        .partial_cmp(&facet_value_1)
+                        .unwrap_or(core::cmp::Ordering::Equal)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::F64 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_value_1 = read_f64(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_value_2 = read_f64(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1
+                        .partial_cmp(&facet_value_2)
+                        .unwrap_or(core::cmp::Ordering::Equal)
+                } else {
+                    facet_value_2
+                        .partial_cmp(&facet_value_1)
+                        .unwrap_or(core::cmp::Ordering::Equal)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::String16 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_id_1 = read_u16(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_id_2 = read_u16(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let facet_value_1 = shard1.facets[field.idx]
+                    .values
+                    .get_index((facet_id_1).into())
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let facet_value_2 = shard2.facets[field.idx]
+                    .values
+                    .get_index((facet_id_2).into())
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::StringSet16 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_id_1 = read_u16(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_id_2 = read_u16(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let facet_value_1 = shard1.facets[field.idx]
+                    .values
+                    .get_index((facet_id_1).into())
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let facet_value_2 = shard2.facets[field.idx]
+                    .values
+                    .get_index((facet_id_2).into())
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::String32 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_id_1 = read_u32(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_id_2 = read_u32(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let facet_value_1 = shard1.facets[field.idx]
+                    .values
+                    .get_index(facet_id_1 as usize)
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let facet_value_2 = shard2.facets[field.idx]
+                    .values
+                    .get_index(facet_id_2 as usize)
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::StringSet32 => {
+                let offset = shard1.facets[field.idx].offset;
+
+                let facet_id_1 = read_u32(
+                    &shard1.facets_file_mmap,
+                    (shard1.facets_size_sum * doc_id1) + offset,
+                );
+                let facet_id_2 = read_u32(
+                    &shard2.facets_file_mmap,
+                    (shard2.facets_size_sum * doc_id2) + offset,
+                );
+
+                let facet_value_1 = shard1.facets[field.idx]
+                    .values
+                    .get_index(facet_id_1 as usize)
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let facet_value_2 = shard2.facets[field.idx]
+                    .values
+                    .get_index(facet_id_2 as usize)
+                    .unwrap()
+                    .1
+                    .0[0]
+                    .clone();
+
+                let order = if field.order == SortOrder::Descending {
+                    facet_value_1.cmp(&facet_value_2)
+                } else {
+                    facet_value_2.cmp(&facet_value_1)
+                };
+
+                if order != core::cmp::Ordering::Equal {
+                    return order;
+                };
+            }
+
+            FieldType::Point => {
+                if let FacetValue::Point(base) = &field.base {
+                    let offset = shard1.facets[field.idx].offset;
+
+                    let facet_value_1 = read_u64(
+                        &shard1.facets_file_mmap,
+                        (shard1.facets_size_sum * doc_id1) + offset,
+                    );
+                    let facet_value_2 = read_u64(
+                        &shard2.facets_file_mmap,
+                        (shard2.facets_size_sum * doc_id2) + offset,
+                    );
+
+                    let order = morton_ordering(facet_value_1, facet_value_2, base, &field.order);
+
+                    if order != core::cmp::Ordering::Equal {
+                        return order;
+                    };
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    result1
+        .score
+        .partial_cmp(&result2.score)
+        .unwrap_or(core::cmp::Ordering::Equal)
 }
 
 impl<'a> MinHeap<'a> {
     #[inline(always)]
     pub(crate) fn new(
         size: usize,
-        index: &'a Index,
+        index: &'a Shard,
         result_sort: &'a Vec<ResultSortIndex>,
     ) -> MinHeap<'a> {
         MinHeap {
@@ -51,7 +512,11 @@ impl<'a> MinHeap<'a> {
     }
 
     #[inline]
-    pub fn result_ordering(&self, result1: Result, result2: Result) -> core::cmp::Ordering {
+    pub(crate) fn result_ordering_shard(
+        &self,
+        result1: Result,
+        result2: Result,
+    ) -> core::cmp::Ordering {
         for field in self.result_sort.iter() {
             match self.index.facets[field.idx].field_type {
                 FieldType::U8 => {
@@ -571,7 +1036,7 @@ impl<'a> MinHeap<'a> {
         let mut index = self.current_heap_size - 1;
         while !Self::is_root(index)
             && self
-                .result_ordering(self._elements[index], *Self::get_parent(self, index))
+                .result_ordering_shard(self._elements[index], *Self::get_parent(self, index))
                 .is_lt()
         {
             let parent_index = Self::get_parent_index(index);
@@ -587,13 +1052,16 @@ impl<'a> MinHeap<'a> {
             let mut smaller_index = Self::get_left_child_index(index);
             if self.has_right_child(index)
                 && self
-                    .result_ordering(*self.get_right_child(index), *self.get_left_child(index))
+                    .result_ordering_shard(
+                        *self.get_right_child(index),
+                        *self.get_left_child(index),
+                    )
                     .is_lt()
             {
                 smaller_index = Self::get_right_child_index(index);
             }
             if self
-                .result_ordering(self._elements[smaller_index], self._elements[index])
+                .result_ordering_shard(self._elements[smaller_index], self._elements[index])
                 .is_ge()
             {
                 break;
@@ -611,14 +1079,17 @@ impl<'a> MinHeap<'a> {
             let mut smaller_index = Self::get_left_child_index(index);
             if self.has_right_child(index)
                 && self
-                    .result_ordering(*self.get_right_child(index), *self.get_left_child(index))
+                    .result_ordering_shard(
+                        *self.get_right_child(index),
+                        *self.get_left_child(index),
+                    )
                     .is_lt()
             {
                 smaller_index = Self::get_right_child_index(index);
             }
 
             if self
-                .result_ordering(self._elements[smaller_index], self._elements[index])
+                .result_ordering_shard(self._elements[smaller_index], self._elements[index])
                 .is_ge()
             {
                 break;
@@ -631,14 +1102,20 @@ impl<'a> MinHeap<'a> {
 
     #[inline(always)]
     pub(crate) fn add_topk(&mut self, result: Result, top_k: usize) -> bool {
-        if self.current_heap_size > top_k && self.result_ordering(self._elements[0], result).is_ge()
+        if self.current_heap_size > top_k
+            && self
+                .result_ordering_shard(self._elements[0], result)
+                .is_ge()
         {
             return false;
         }
 
         if !self.docid_hashset.is_empty() && self.docid_hashset.contains_key(&result.doc_id) {
             if self._elements[0].doc_id == result.doc_id {
-                if self.result_ordering(result, self._elements[0]).is_gt() {
+                if self
+                    .result_ordering_shard(result, self._elements[0])
+                    .is_gt()
+                {
                     self._elements[0].score = result.score;
                     self.heapify_down();
                     return true;
@@ -647,7 +1124,7 @@ impl<'a> MinHeap<'a> {
                 }
             } else {
                 if self
-                    .result_ordering(
+                    .result_ordering_shard(
                         Result {
                             doc_id: result.doc_id,
                             score: self.docid_hashset[&result.doc_id],
@@ -677,7 +1154,10 @@ impl<'a> MinHeap<'a> {
         if self.current_heap_size < top_k {
             self.add(&result);
             true
-        } else if self.result_ordering(result, self._elements[0]).is_gt() {
+        } else if self
+            .result_ordering_shard(result, self._elements[0])
+            .is_gt()
+        {
             self.pop_add(result.score, result.doc_id);
             true
         } else {
