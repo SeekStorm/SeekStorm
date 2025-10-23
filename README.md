@@ -32,7 +32,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Full-text lexical search
 * True real-time search, with negligible performance impact
 * Incremental indexing
-* *Fast* sharded search: [6x faster query latency, 10x faster tail latency (P99)](#benchmarks).
+* *Fast* sharded search: [7x faster query latency, 17x faster tail latency (P99)](#benchmarks).
 * *Fast* sharded indexing: 35K docs/sec = 3 billion docs/day on a laptop.
 * Unlimited field number, field length & index size
 * Compressed document store: ZStandard
