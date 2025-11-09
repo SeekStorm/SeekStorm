@@ -855,7 +855,9 @@ The Rust port is not yet feature complete. The following features are currently 
 * More tokenizer types (Japanese, Korean)
 * Native vector search (currently PoC)
 * Distributed search cluster (currently PoC)
-* 👷 S3 object storage compatible index: cloud-native split of storage and compute
+* 👷 Split of storage and compute
+  * Use S3 object storage as index backend
+  * Use Distributed Key-Value store as index backend
 * WebAssembly (Wasm)
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
 * Client libraries/SDK in JavaScript, Python, Java, C#, C, Go, Rust for the SeekStorm server REST API
