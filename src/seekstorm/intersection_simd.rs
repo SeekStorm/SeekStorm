@@ -1,18 +1,15 @@
 #[cfg(target_arch = "x86_64")]
 use std::{
     arch::x86_64::{
-        __m128i, _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS, _blsr_u32, _mm_cmpestrm,
-        _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128, _mm_loadu_si128, _mm_shuffle_epi8,
-        _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
+        __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
+        _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
+        _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
     },
     mem::size_of,
 };
 
 #[cfg(target_arch = "aarch64")]
-use std::{
-    arch::aarch64::{uint16x8_t, vceqq_u16, vld1q_dup_u16, vld1q_u16, vst1q_u16},
-    mem::{self},
-};
+use std::arch::aarch64::{uint16x8_t, vceqq_u16, vld1q_dup_u16, vld1q_u16, vst1q_u16};
 
 use ahash::AHashSet;
 
@@ -461,7 +458,7 @@ pub(crate) fn intersection_vector16(
     unsafe {
         let mut i_a = 0;
         let mut i_b = 0;
-        let vectorlength = mem::size_of::<uint16x8_t>() / mem::size_of::<u16>();
+        let vectorlength = size_of::<uint16x8_t>() / size_of::<u16>();
         let st_b = (s_b / vectorlength) * vectorlength;
         while i_a < s_a && i_b < st_b {
             if read_u16(&a[..], i_a * 2) < read_u16(&b[..], i_b * 2) {
