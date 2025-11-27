@@ -115,11 +115,11 @@
 //! **before** building the seekstorm_server (html/css/js are embedded ressources).
 
 use colored::Colorize;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::str;
+use std::sync::LazyLock;
 #[cfg(target_os = "windows")]
 use winapi::um::{
     processthreadsapi::{GetCurrentProcess, SetPriorityClass},
@@ -128,10 +128,10 @@ use winapi::um::{
 
 use crate::server::initialize;
 
-lazy_static! {
-    #[doc(hidden)]
-    pub(crate) static ref MASTER_KEY_SECRET: String = env::var("MASTER_KEY_SECRET").unwrap_or("1234".to_string());
-}
+/// &#x26A0; **WARNING**: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
+#[doc(hidden)]
+pub static MASTER_KEY_SECRET: LazyLock<String> =
+    LazyLock::new(|| env::var("MASTER_KEY_SECRET").unwrap_or("1234".to_string()));
 
 #[doc(hidden)]
 mod api_endpoints;

@@ -16,10 +16,10 @@ use crate::{
     compatible::{_blsr_u64, _mm_tzcnt_64},
     compress_postinglist::compress_postinglist,
     index::{
-        AccessType, BlockObjectIndex, CompressionType, DOCUMENT_LENGTH_COMPRESSION,
-        FACET_VALUES_FILENAME, IndexArc, LevelIndex, MAX_POSITIONS_PER_TERM, NgramType,
-        NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE, PostingListObjectIndex,
-        PostingListObjectQuery, ROARING_BLOCK_SIZE, Shard, TermObject,
+        AccessType, BlockObjectIndex, CompressionType, DICTIONARY_FILENAME,
+        DOCUMENT_LENGTH_COMPRESSION, FACET_VALUES_FILENAME, IndexArc, LevelIndex,
+        MAX_POSITIONS_PER_TERM, NgramType, NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE,
+        PostingListObjectIndex, PostingListObjectQuery, ROARING_BLOCK_SIZE, Shard, TermObject,
         update_list_max_impact_score, warmup,
     },
     utils::{
@@ -40,6 +40,12 @@ impl Close for IndexArc {
     /// Remove index from RAM (Reverse of open_index)
     async fn close(&self) {
         self.commit().await;
+
+        if let Some(symspell) = &mut self.read().await.symspell_option.as_ref() {
+            let dictionary_path =
+                Path::new(&self.read().await.index_path_string).join(DICTIONARY_FILENAME);
+            let _ = symspell.read().await.save_dictionary(&dictionary_path, " ");
+        }
 
         let mut result_object_list = Vec::new();
         for shard in self.read().await.shard_vec.iter() {
@@ -149,7 +155,7 @@ impl Commit for IndexArc {
             let permit = p.acquire().await.unwrap();
 
             let indexed_doc_count = shard.read().await.indexed_doc_count;
-            shard.write().await.commit(indexed_doc_count);
+            shard.write().await.commit(indexed_doc_count).await;
             warmup(shard).await;
             drop(permit);
         }
@@ -169,7 +175,7 @@ impl Commit for IndexArc {
 }
 
 impl Shard {
-    pub(crate) fn commit(&mut self, indexed_doc_count: usize) {
+    pub(crate) async fn commit(&mut self, indexed_doc_count: usize) {
         if !self.uncommitted {
             return;
         }
@@ -374,9 +380,35 @@ impl Shard {
 
         update_list_max_impact_score(self);
 
+        let delta_doc_count = indexed_doc_count.saturating_sub(self.committed_doc_count);
         self.committed_doc_count = indexed_doc_count;
         self.is_last_level_incomplete =
             !(self.committed_doc_count).is_multiple_of(ROARING_BLOCK_SIZE);
+
+        if let Some(root_index_arc) = &self.index_option {
+            let root_index = root_index_arc.read().await;
+            if let Some(symspell) = root_index.symspell_option.as_ref() {
+                let threshold = delta_doc_count >> 13;
+
+                for key0 in 0..self.segment_number1 {
+                    for key in self.segments_level0[key0].segment.keys() {
+                        let plo = self.segments_level0[key0].segment.get(key).unwrap();
+
+                        if self.meta.spelling_correction.is_some()
+                            && key & 7 == 0
+                            && plo.posting_count > threshold
+                            && let Some(term) = self.level_terms.get(&((key >> 32) as u32))
+                        {
+                            let mut symspell = symspell.write().await;
+                            symspell.create_dictionary_entry(term.clone(), plo.posting_count);
+                            drop(symspell);
+                        };
+                    }
+                }
+            };
+        };
+
+        self.level_terms.clear();
 
         self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
         self.postings_buffer = vec![0; POSTING_BUFFER_SIZE];

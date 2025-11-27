@@ -1,9 +1,8 @@
 use add_result::decode_positions_commit;
-use ahash::{AHashMap, AHashSet, RandomState};
+use ahash::{AHashMap, AHashSet};
 use futures::future;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
@@ -23,6 +22,7 @@ use std::{
     sync::Arc,
     time::Instant,
 };
+use symspell_rs::SymSpell;
 use tokio::sync::{RwLock, Semaphore};
 use utils::{read_u32, write_u16};
 use utoipa::ToSchema;
@@ -33,8 +33,8 @@ use crate::{
     add_result::{self, B, K, SIGMA},
     geo_search::encode_morton_2_d,
     search::{
-        self, FacetFilter, Point, QueryFacet, Ranges, ResultObject, ResultSort, ResultType,
-        SearchShard,
+        self, FacetFilter, Point, QueryFacet, QueryRewriting, Ranges, ResultObject, ResultSort,
+        ResultType, SearchShard,
     },
     tokenizer::tokenizer,
     utils::{
@@ -55,6 +55,8 @@ pub(crate) const SYNONYMS_FILENAME: &str = "synonyms.json";
 pub(crate) const META_FILENAME: &str = "index.json";
 pub(crate) const FACET_FILENAME: &str = "facet.bin";
 pub(crate) const FACET_VALUES_FILENAME: &str = "facet.json";
+
+pub(crate) const DICTIONARY_FILENAME: &str = "dictionary.csv";
 
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -149,13 +151,13 @@ pub enum SimilarityType {
 /// - Requires feature #[cfg(feature = "zh")]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default, ToSchema)]
 pub enum TokenizerType {
-    /// Only ASCII alphabetic chars are recognized as token. Token are converted to lowercase. Mainly for benchmark compatibility.
+    /// Only ASCII alphabetic chars are recognized as token. Mainly for benchmark compatibility.
     #[default]
     AsciiAlphabetic = 0,
-    /// All Unicode alphanumeric chars are recognized as token. Token are converted to lowercase.
+    /// All Unicode alphanumeric chars are recognized as token.
     /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     UnicodeAlphanumeric = 1,
-    /// All Unicode alphanumeric chars are recognized as token. Token are converted to lowercase.
+    /// All Unicode alphanumeric chars are recognized as token.
     /// Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
     /// Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
     /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
@@ -574,12 +576,16 @@ pub struct SchemaField {
 /// - indexed: only indexed fields can be searched
 /// - field_type: type of a field: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, point
 /// - facet: enable faceting for a field: for sorting results by field values, for range filtering, for result count per field value or range
+/// - `longest`: This allows to annotate (manually set) the longest field in schema.  
+///   Otherwise the longest field will be automatically detected in first index_document.
+///   Setting/detecting the longest field ensures efficient index encoding.
 /// - boost: optional custom weight factor for Bm25 ranking
 /// # Returns
 /// - SchemaField
 /// # Example
 /// ```rust
-/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String16, false, 1.0);
+/// use seekstorm::index::{SchemaField, FieldType};
+/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String16, false, false, 1.0);
 /// ```
 impl SchemaField {
     /// Creates a new SchemaField.
@@ -679,6 +685,18 @@ pub enum FrequentwordType {
     },
 }
 
+/// Defines spelling correction (fuzzy search) settings for an index.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SpellingCorrection {
+    /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
+    pub max_dictionary_edit_distance: usize,
+    /// Term length thresholds for each edit distance.
+    ///   None:    max_dictionary_edit_distance for all terms lengths
+    ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
+    ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+    pub term_length_threshold: Option<Vec<usize>>,
+}
+
 /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IndexMetaObject {
@@ -718,23 +736,34 @@ pub struct IndexMetaObject {
     /// NgramRFF   = 0b00010000, rare frequent frequent
     /// NgramFFR   = 0b00100000, frequent frequent rare
     /// NgramFRF   = 0b01000000, frequent rare frequent
+    ///
     /// When **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:  
-    /// ```rust
-    /// NgramSet::SingleTerm as u8
-    /// ```
+    /// `NgramSet::SingleTerm as u8`
+    ///
     /// For a **good balance of latency and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams** (default):  
-    /// ```rust
-    /// NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF
-    /// ```
+    /// `NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF`
+    ///
     /// When **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**:
-    /// ```rust
-    /// NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF | NgramSet::NgramFFF
-    /// ```
+    /// `NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF | NgramSet::NgramFFF`
     #[serde(default = "ngram_indexing_default")]
     pub ngram_indexing: u8,
 
     /// AccessType defines where the index resides during search: Ram or Mmap
     pub access_type: AccessType,
+    /// Enable spelling correction for search queries using the SymSpell algorithm.
+    /// SymSpell enables finding those spelling suggestions in a dictionary very fast with minimum Damerau-Levenshtein edit distance and maximum word occurrence frequency.
+    /// When enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.
+    /// The spelling correction is not based on a generic dictionary, but on a domain specific one derived from your indexed documents (only indexed fields).
+    /// This makes it language independent and prevents any discrepancy between corrected word and indexed content.
+    /// The creation of an individual dictionary derived from the indexed documents improves the correction quality compared to a generic dictionary.
+    /// An dictionary per index improves the privacy compared to a global dictionary derived from all indices.
+    /// The dictionary is deleted when delete_index or clear_index is called.
+    /// Note: enabling spelling correction increases the index size, indexing time and query latency.
+    /// Default: None. Enable by setting CreateDictionary with values for max_dictionary_edit_distance (1..2 recommended) and optionally a term length thresholds for each edit distance.
+    /// The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
+    /// ⚠️ In addition to the create_index parameter `meta.spelling_correction` you also need to set the parameter `query_rewriting` in the search method to enable it per query.
+    #[serde(default)]
+    pub spelling_correction: Option<SpellingCorrection>,
 }
 
 fn ngram_indexing_default() -> u8 {
@@ -971,6 +1000,7 @@ pub struct Shard {
     pub(crate) frequent_words: Vec<String>,
     pub(crate) frequent_hashset: AHashSet<u64>,
     pub(crate) key_head_size: usize,
+    pub(crate) level_terms: AHashMap<u32, String>,
 }
 
 /// The root object of the index. It contains all levels and all segments of the index.
@@ -986,6 +1016,7 @@ pub struct Index {
 
     /// Number of deleted documents
     pub(crate) deleted_doc_count: usize,
+
     /// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
     pub schema_map: HashMap<String, SchemaField>,
     /// List of stored fields in the index: get_document and highlighter work only with stored fields
@@ -1013,6 +1044,8 @@ pub struct Index {
     pub(crate) shard_bits: usize,
     pub(crate) shard_vec: Vec<Arc<RwLock<Shard>>>,
     pub(crate) shard_queue: Arc<RwLock<VecDeque<usize>>>,
+
+    pub(crate) symspell_option: Option<Arc<RwLock<SymSpell>>>,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -1300,7 +1333,7 @@ pub(crate) async fn create_index_root(
                         shard_meta.id = i as u64;
                         let mut shard = create_shard(
                             &shard_path,
-                            shard_meta,
+                            &shard_meta,
                             &schema_clone,
                             serialize_schema,
                             &Vec::new(),
@@ -1347,6 +1380,17 @@ pub(crate) async fn create_index_root(
                 shard_bits,
                 shard_vec,
                 shard_queue: shard_queue_arc,
+
+                symspell_option: if let Some(spelling_correction) = meta.spelling_correction {
+                    Some(Arc::new(RwLock::new(SymSpell::new(
+                        spelling_correction.max_dictionary_edit_distance,
+                        spelling_correction.term_length_threshold,
+                        7,
+                        1,
+                    ))))
+                } else {
+                    None
+                },
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -1426,7 +1470,7 @@ pub(crate) async fn create_index_root(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn create_shard(
     index_path: &Path,
-    meta: IndexMetaObject,
+    meta: &IndexMetaObject,
     schema: &Vec<SchemaField>,
     serialize_schema: bool,
     synonyms: &Vec<Synonym>,
@@ -1764,6 +1808,7 @@ pub(crate) fn create_shard(
                 } else {
                     23
                 },
+                level_terms: AHashMap::new(),
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -2200,7 +2245,7 @@ pub(crate) async fn open_shard(index_path: &Path, mute: bool) -> Result<ShardArc
                         Vec::new()
                     };
 
-                    match create_shard(index_path, meta, &schema, false, &synonyms, 11, mute, None)
+                    match create_shard(index_path, &meta, &schema, false, &synonyms, 11, mute, None)
                     {
                         Ok(mut shard) => {
                             let mut block_count_sum = 0;
@@ -2740,6 +2785,20 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
 
                             let index_arc = Arc::new(RwLock::new(index));
 
+                            if let Some(symspell) =
+                                &mut index_arc.read().await.symspell_option.as_ref()
+                            {
+                                let dictionary_path =
+                                    Path::new(&index_arc.read().await.index_path_string)
+                                        .join(DICTIONARY_FILENAME);
+                                let _ = symspell.write().await.load_dictionary(
+                                    &dictionary_path,
+                                    0,
+                                    1,
+                                    " ",
+                                );
+                            }
+
                             let mut level_count = 0;
 
                             let mut shard_vec: Vec<Arc<RwLock<Shard>>> = Vec::new();
@@ -2906,12 +2965,18 @@ pub(crate) struct NonUniqueTermObject {
     pub op: QueryType,
 }
 
-lazy_static! {
-    pub(crate) static ref HASHER_32: RandomState =
-        RandomState::with_seeds(805272099, 242851902, 646123436, 591410655);
-    pub(crate) static ref HASHER_64: RandomState =
-        RandomState::with_seeds(808259318, 750368348, 84901999, 789810389);
-}
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+use ahash::RandomState;
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+use std::sync::LazyLock;
+
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+pub static HASHER_32: LazyLock<RandomState> =
+    LazyLock::new(|| RandomState::with_seeds(805272099, 242851902, 646123436, 591410655));
+
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+pub static HASHER_64: LazyLock<RandomState> =
+    LazyLock::new(|| RandomState::with_seeds(808259318, 750368348, 84901999, 789810389));
 
 #[inline]
 #[cfg(all(target_feature = "aes", target_feature = "sse2"))]
@@ -3013,6 +3078,8 @@ impl Shard {
     /// Reset shard to empty, while maintaining schema
     async fn clear_shard(&mut self) {
         let permit = self.permits.clone().acquire_owned().await.unwrap();
+
+        self.level_terms.clear();
 
         let mut mmap_options = MmapOptions::new();
         let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
@@ -3594,7 +3661,18 @@ impl Index {
     }
 
     /// Reset index to empty, while maintaining schema
-    pub async fn clear_index(&self) {
+    pub async fn clear_index(&mut self) {
+        let index_path = Path::new(&self.index_path_string);
+        let _ = fs::remove_file(index_path.join(DICTIONARY_FILENAME));
+        if let Some(spelling_correction) = self.meta.spelling_correction.as_ref() {
+            self.symspell_option = Some(Arc::new(RwLock::new(SymSpell::new(
+                spelling_correction.max_dictionary_edit_distance,
+                spelling_correction.term_length_threshold.clone(),
+                7,
+                1,
+            ))));
+        }
+
         let mut result_object_list = Vec::new();
         for shard in self.shard_vec.iter() {
             let shard_clone = shard.clone();
@@ -3608,6 +3686,9 @@ impl Index {
     /// Delete index from disc and ram
     pub fn delete_index(&mut self) {
         let index_path = Path::new(&self.index_path_string);
+
+        let _ = fs::remove_file(index_path.join(DICTIONARY_FILENAME));
+
         let _ = fs::remove_file(index_path.join(INDEX_FILENAME));
         let _ = fs::remove_file(index_path.join(SCHEMA_FILENAME));
         let _ = fs::remove_file(index_path.join(META_FILENAME));
@@ -3775,6 +3856,7 @@ impl DeleteDocumentsByQuery for IndexArc {
                 Vec::new(),
                 facet_filter,
                 result_sort,
+                QueryRewriting::SearchOnly,
             )
             .await;
 
@@ -4069,7 +4151,7 @@ impl IndexDocument2 for ShardArc {
 
         let do_commit = shard_mut.block_id != doc_id >> 16;
         if do_commit {
-            shard_mut.commit(doc_id);
+            shard_mut.commit(doc_id).await;
 
             shard_mut.block_id = doc_id >> 16;
         }
@@ -4298,6 +4380,7 @@ impl IndexDocument2 for ShardArc {
                             if facet.values.len() < u16::MAX as usize {
                                 let key = serde_json::from_value::<String>(field_value.clone())
                                     .unwrap_or(field_value.to_string());
+
                                 let key_string = key.clone();
                                 let key = vec![key];
 

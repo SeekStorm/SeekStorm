@@ -182,7 +182,6 @@ pub(crate) fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {

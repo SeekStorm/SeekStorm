@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-11-22
+
+### Added
+
+- Added query spelling correction / typo-tolerant search / fuzzy queries by integrating [SymSpell](https://github.com/wolfgarbe/symspell_rs), both to SeekStorm library and SeekStorm server REST API.
+  - New `create_index`, `IndexMetaObject` parameter property: `spelling_correction: Option<SpellingCorrection>`: 
+    - enables automatic incremental creation of the Symspell dictionary during the indexing of documents.
+  - New `search` parameter: `query_rewriting: QueryRewriting`: Enables query rewriting features such as spelling correction and suggestions.
+    - `SearchOnly`: Query rewriting disabled, returs query results for query as-is, returns no suggestions for misspelled query terms.
+    - `SearchSuggest`: Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+    - `SearchCorrect`: Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+    - `SuggestOnly`: Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+  - The spelling correction of multi-term query strings handles three cases:
+    1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`
+    2. mistakenly omitted space between two correct terms led to one incorrect combined term: `modernart` -> `modern art`
+    3. multiple independent input terms with/without spelling errors: `cinese indastrialication` -> `chinese industrialization`
+
+### Changed
+
+- lazy_static! replaced with LazyLock.
+- Improvements regarding issue #15 (library documentation):
+  - Documentation tests (doctest) enabled and code examples fixed.
+  - README.md and FACETED_SEARCH.md included in documentation tests (doctest) to ensure that code examples are always correct and up-to-date.
+
+### Fixed
+
+- PR #52 fixes compile on macOS.
+
 ## [1.0.0] - 2025-10-22
 
 ### Improved
@@ -36,11 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Index.index_option references to parent index from shards.
 - open_index error handling refactored.
 - fn create_index() -> Index changed to async fn create_index() -> IndexArc
-- index.close_index (sync) -> index_arc.close().await (async)
-- index_arc.close() disconnects index_file_mmap from index_file, otherwise we cannot reuse the file (e.g. with open_index) when the program is still running
-- unit tests fixed for multi-sharded index
+- index.close_index (sync) -> index_arc.close().await (async).
+- index_arc.close() disconnects index_file_mmap from index_file, otherwise we cannot reuse the file (e.g. with open_index) when the program is still running.
+- unit tests fixed for multi-sharded index.
 - get_document changed from sync to async.
-- clear_index() from sync to async
+- clear_index() from sync to async.
 - get_file changed from sync to async.
 - get_facet_value from sync to async.
 

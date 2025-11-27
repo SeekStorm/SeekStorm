@@ -101,11 +101,11 @@ Facet fields allow counting, filtering, and sorting of indexed documents matchin
 
 **Create index**: Facet fields are defined in the **schema** parameter of **create_index** by setting the **field_type** to one of the following types: 
 
-```rust
+```text
 u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, String
 ```
 and set
-```rust
+```text
 "facet":true
 ```
 in the schema (see code below).
@@ -115,30 +115,41 @@ Both numerical, string and text fields can be indexed (indexed=true) and stored 
 but with field_facet=true a numerical or string field is additionally stored in a binary format, for fast faceting and sorting without document store access (decompression, deserialization).
 Setting a numerical field to "facet":true is also the precondition for sorting the search result by this fields value ('score' is treated as a special field to allow sorting by relevancy).
 
-```rust
-let index_path=Path::new("C:/index/");
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use std::sync::{Arc, RwLock};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,create_index};
+
+let index_path=Path::new("C:/index/");//x
 
 let schema_json = r#"
 [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 {"field":"body","field_type":"Text","stored":true,"indexed":true},
 {"field":"url","field_type":"Text","stored":true,"indexed":false},
 {"field":"town","field_type":"String16","stored":false,"indexed":false,"facet":true}]"#;
-
 let schema=serde_json::from_str(schema_json).unwrap();
+
 let meta = IndexMetaObject {
     id: 0,
     name: "test_index".into(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
+    stemmer:StemmerType::None,
     stop_words: StopwordType::None,
     frequent_words:FrequentwordType::English,
+    ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
+    spelling_correction: None,
 };
-let serialize_schema=true;
-let segment_number_bits1=11;
 
-let index=create_index(index_path,meta,&schema,serialize_schema,&Vec::new(),segment_number_bits1,false).unwrap();
-let mut index_arc = Arc::new(RwLock::new(index));
+let synonyms=Vec::new();
+
+let segment_number_bits1=11;
+let index_arc=create_index(index_path,meta,&schema,&synonyms,segment_number_bits1,false,None).await.unwrap();
+
+# });
 ```
 
 #### [Index document(s)](https://docs.rs/seekstorm/latest/seekstorm/#index-documents)
@@ -148,14 +159,29 @@ is defined and indexed with **index document**.
 
 **Index document request object**: Each facet field can be assigned a single string values or numerical value per document:<br>
 
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{IndexDocuments,open_index};
+use seekstorm::commit::Commit;
+
+let index_path=Path::new("C:/index/");
+let index_arc=open_index(index_path,false).await.unwrap();
+
 let documents_json = r#"
 [{"title":"title1 test","body":"body1","url":"url1","town":"Berlin"},
 {"title":"title2","body":"body2 test","url":"url2","town":"Warsaw"},
 {"title":"title3 test","body":"body3 test","url":"url3","town":"New York"}]"#;
-
 let documents_vec=serde_json::from_str(documents_json).unwrap();
-index_arc.index_documents(documents_vec).await;
+
+index_arc.index_documents(documents_vec).await; 
+
+// ### commit documents
+
+index_arc.commit().await;
+
+# });
 ```
 
 In addition to the facet functionality (counting, filtering, sorting) the facet value can be also indexed to full-text search.<br>
@@ -173,7 +199,16 @@ They contain the facet values of the whole index, not only the documents matchin
 Therefore only string facets can be returned with get_index_string_facets, while numerical range facets are defined at query time and can't be generated at index time.
 
 
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::search::QueryFacet;
+use seekstorm::index::{IndexArc,open_index};
+
+let index_path=Path::new("C:/index/");
+let index_arc=open_index(index_path,false).await.unwrap();
+
 let query_facets = vec![
     QueryFacet::String16 {
         field: "age".into(),
@@ -181,8 +216,10 @@ let query_facets = vec![
         length: u16::MAX},
 ];
 
-let string_facets=index.get_index_string_facets(query_facets).unwrap();
+let string_facets=index_arc.read().await.get_index_string_facets(query_facets).await.unwrap();
 println!("{}", serde_json::to_string_pretty(&string_facets).unwrap());
+
+# });
 ```
 
 **query_facets filter**: If there are many distinct values per facet field, we might want to filter the returned values to those matching a given prefix or limiting the number of returned distinct values.
@@ -192,6 +229,8 @@ The **length** property of a QueryFacet allows limiting the number of returned d
 The values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
 
 ```rust
+use seekstorm::search::QueryFacet;
+
 let query_facets = vec![
     QueryFacet::String16 {
         field: "language".into(),
@@ -239,8 +278,19 @@ where the ranges can be defined dynamically with different boundaries for each q
 
 #### [Search index](https://docs.rs/seekstorm/latest/seekstorm/#search-index)
 
-```rust
-let query="test".into();
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::search::{Search, QueryType, ResultType, QueryFacet, QueryRewriting};
+use seekstorm::highlighter::{Highlight, highlighter};
+use seekstorm::index::open_index;
+use std::path::Path;
+use std::collections::HashSet;
+
+let index_path=Path::new("C:/index/");
+let index_arc=open_index(index_path,false).await.unwrap();
+
+let query="test".to_string();
 let offset=0;
 let length=10;
 let query_type=QueryType::Intersection; 
@@ -249,12 +299,13 @@ let include_uncommitted=false;
 let field_filter=Vec::new();
 let query_facets = vec![QueryFacet::String16 {field: "age".into(),prefix: "".into(),length:u16::MAX}];
 let facet_filter=Vec::new();
+let result_sort=Vec::new();
 
-let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;
-```
+let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
 
-**display results**
-```rust
+
+// **display results**
+
 let highlights:Vec<Highlight>= vec![
         Highlight {
             field: "body".to_owned(),
@@ -266,26 +317,27 @@ let highlights:Vec<Highlight>= vec![
         },
     ];    
 
-let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_terms));
+let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
 let return_fields_filter= HashSet::new();
-let index=index_arc.write().await;
+let distance_fields=Vec::new();
+let index=index_arc.read().await;
 for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).await.unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
-```
 
-**display facets**
-```rust
+// **display facets**
+
 println!("{}", serde_json::to_string_pretty(&result_object.facets).unwrap());
+
+# });
 ```
 
 **Query**: The query defines which of the indexed documents are returned  as search results.
-```rust
+```text
   query=test
 ```
-
 
 
 **query_facets**: The query_facets parameter specifies for both for string facets and numerical range facets which facet field to return at query time.
@@ -300,6 +352,8 @@ With no facet filter defined the query faceting is completely disabled, resultin
 The values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
 
 ```rust
+use seekstorm::search::QueryFacet;
+
 let query_facets = vec![
     QueryFacet::String16 {
         field: "language".into(),
@@ -330,6 +384,8 @@ pub enum RangeType {
 ```
 
 ```rust
+use seekstorm::search::{QueryFacet,RangeType};
+
 let query_facets = vec![QueryFacet::U8 {
     field: "age".into(),
     range_type: RangeType::CountWithinRange,
@@ -352,7 +408,9 @@ If the **query is changed** and/or the **facet filter is changed** then both **s
 
 **String facet filter**
 ```rust
-let facet_filter = vec![FacetFilter::String {
+use seekstorm::search::FacetFilter;
+
+let facet_filter = vec![FacetFilter::String16 {
     field: "age".into(),
     filter: vec!["62".into()],
 }];
@@ -360,6 +418,8 @@ let facet_filter = vec![FacetFilter::String {
 
 **Numerical range facet filter**
 ```rust
+use seekstorm::search::FacetFilter;
+
 let facet_filter = vec![FacetFilter::U8 {
     field: "age".into(),
     filter: 21..65,
@@ -375,6 +435,8 @@ A special _score field (BM25x), reflecting how relevant the result is for a give
 
 **Result sort**
 ```rust
+use seekstorm::search::{ResultSort,SortOrder,FacetValue};
+
 let result_sort = vec![ResultSort {
     field: "age".into(),
     order: SortOrder::Ascending,

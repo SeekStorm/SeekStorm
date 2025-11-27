@@ -25,7 +25,7 @@ use hyper_util::{
 };
 
 use seekstorm::index::{Document, Synonym};
-use seekstorm::search::{QueryType, ResultType};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType};
 
 use sha2::Digest;
 use sha2::Sha256;
@@ -297,6 +297,7 @@ pub(crate) async fn http_request_handler(
                     facet_filter: Vec::new(),
                     result_sort: Vec::new(),
                     query_type_default: QueryType::Intersection,
+                    query_rewriting: QueryRewriting::SearchOnly,
                 }
             } else {
                 let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
@@ -362,6 +363,7 @@ pub(crate) async fn http_request_handler(
                 create_index_request_object.synonyms,
                 create_index_request_object.force_shard_number,
                 apikey_object,
+                create_index_request_object.spelling_correction,
             )
             .await;
             drop(apikey_list_mut);

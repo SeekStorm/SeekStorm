@@ -17,12 +17,12 @@ use seekstorm::{
     index::{
         AccessType, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
         Document, Facet, FileType, FrequentwordType, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, MinMaxFieldJson, NgramSet, SchemaField, SimilarityType, StemmerType,
-        StopwordType, Synonym, TokenizerType, UpdateDocument, UpdateDocuments, create_index,
-        open_index,
+        IndexMetaObject, MinMaxFieldJson, NgramSet, SchemaField, SimilarityType,
+        SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType, UpdateDocument,
+        UpdateDocuments, create_index, open_index,
     },
     ingest::IndexPdfBytes,
-    search::{FacetFilter, QueryFacet, QueryType, ResultSort, ResultType, Search},
+    search::{FacetFilter, QueryFacet, QueryRewriting, QueryType, ResultSort, ResultType, Search},
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,10 +84,18 @@ pub struct SearchRequestObject {
     #[schema(required = false, example = QueryType::Intersection)]
     #[serde(default = "query_type_api")]
     pub query_type_default: QueryType,
+
+    #[schema(required = false, example = QueryRewriting::SearchOnly)]
+    #[serde(default = "query_rewriting_api")]
+    pub query_rewriting: QueryRewriting,
 }
 
 fn query_type_api() -> QueryType {
     QueryType::Intersection
+}
+
+fn query_rewriting_api() -> QueryRewriting {
+    QueryRewriting::SearchOnly
 }
 
 fn length_api() -> usize {
@@ -143,6 +151,17 @@ pub struct CreateIndexRequest {
     /// - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
     #[serde(default)]
     pub force_shard_number: Option<usize>,
+    /// Enable spelling correction for search queries using the SymSpell algorithm.
+    /// When enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.
+    /// In addition you need to set the parameter `query_rewriting` in the search method to enable it per query.
+    /// The creation of an individual dictionary derived from the indexed documents improves the correction quality compared to a generic dictionary.
+    /// An dictionary per index improves the privacy compared to a global dictionary derived from all indices.
+    /// The dictionary is deleted when delete_index or clear_index is called.
+    /// Note: enabling spelling correction increases the index size, indexing time and query latency.
+    /// Default: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).
+    /// The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
+    #[serde(default)]
+    pub spelling_correction: Option<SpellingCorrection>,
 }
 
 fn similarity_type_api() -> SimilarityType {
@@ -446,6 +465,7 @@ pub(crate) async fn create_index_api<'a>(
     synonyms: Vec<Synonym>,
     force_shard_number: Option<usize>,
     apikey_object: &'a mut ApikeyObject,
+    spelling_correction: Option<SpellingCorrection>,
 ) -> u64 {
     let mut index_id: u64 = 0;
     for id in apikey_object.index_list.keys().sorted() {
@@ -471,6 +491,7 @@ pub(crate) async fn create_index_api<'a>(
         frequent_words,
         ngram_indexing,
         access_type: AccessType::Mmap,
+        spelling_correction,
     };
 
     let index_arc = create_index(
@@ -1022,9 +1043,9 @@ pub(crate) async fn delete_documents_by_query_api(
 }
 
 pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String> {
-    let index_mut = index_arc.read().await;
+    let mut index_mut = index_arc.write().await;
     index_mut.clear_index().await;
-    Ok(index_arc.read().await.indexed_doc_count().await as u64)
+    Ok(index_mut.indexed_doc_count().await as u64)
 }
 
 /// Query Index
@@ -1115,6 +1136,7 @@ pub(crate) async fn query_index_api(
             search_request.query_facets,
             search_request.facet_filter,
             search_request.result_sort,
+            search_request.query_rewriting,
         )
         .await;
 

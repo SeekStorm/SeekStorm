@@ -1,15 +1,18 @@
 #[cfg(target_arch = "x86_64")]
 use std::{
     arch::x86_64::{
-        __m128i, _blsr_u32, _mm_cmpestrm, _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128,
-        _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
-        _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS,
+        __m128i, _SIDD_BIT_MASK, _SIDD_CMP_EQUAL_ANY, _SIDD_UWORD_OPS, _blsr_u32, _mm_cmpestrm,
+        _mm_cmpistrm, _mm_extract_epi32, _mm_lddqu_si128, _mm_loadu_si128, _mm_shuffle_epi8,
+        _mm_storeu_si128, _mm_tzcnt_32, _popcnt32,
     },
     mem::size_of,
 };
 
 #[cfg(target_arch = "aarch64")]
-use std::arch::aarch64::{uint16x8_t, vceqq_u16, vld1q_dup_u16, vld1q_u16, vst1q_u16};
+use std::{
+    arch::aarch64::{uint16x8_t, vceqq_u16, vld1q_dup_u16, vld1q_u16, vst1q_u16},
+    mem::size_of,
+};
 
 use ahash::AHashSet;
 

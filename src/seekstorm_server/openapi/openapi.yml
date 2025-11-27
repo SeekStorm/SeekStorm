@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 1.0.0
+  version: 1.1.0
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -229,6 +229,20 @@ paths:
                     - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
                     - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
                   minimum: 0
+                spelling_correction:
+                  oneOf:
+                  - type: 'null'
+                  - $ref: '#/components/schemas/SpellingCorrection'
+                    description: |-
+                      Enable spelling correction for search queries using the SymSpell algorithm.
+                      When enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.
+                      In addition you need to set the parameter `query_rewriting` in the search method to enable it per query.
+                      The creation of an individual dictionary derived from the indexed documents improves the correction quality compared to a generic dictionary.
+                      An dictionary per index improves the privacy compared to a global dictionary derived from all indices.
+                      The dictionary is deleted when delete_index or clear_index is called.
+                      Note: enabling spelling correction increases the index size, indexing time and query latency.
+                      Default: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).
+                      The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
         required: true
       responses:
         '200':
@@ -984,6 +998,8 @@ paths:
                     order: Ascending
                 query_type_default:
                   $ref: '#/components/schemas/QueryType'
+                query_rewriting:
+                  $ref: '#/components/schemas/QueryRewriting'
         required: true
       responses:
         '200':
@@ -2190,6 +2206,110 @@ components:
         Defines the query facets:
         - string facet field values
         - range segments for numerical facet field values
+    QueryRewriting:
+      oneOf:
+      - type: string
+        description: |-
+          Query rewriting disabled, returs query results for query as-is, returns no suggestions for misspelled query terms.
+          No performance overhead for spelling correction and suggestions.
+        enum:
+        - SearchOnly
+      - type: object
+        description: |-
+          Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+          Additional latency for spelling suggestions.
+        required:
+        - SearchSuggest
+        properties:
+          SearchSuggest:
+            type: object
+            description: |-
+              Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+              Additional latency for spelling suggestions.
+            required:
+            - distance
+            properties:
+              distance:
+                type: integer
+                description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
+                minimum: 0
+              term_length_threshold:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: integer
+                  minimum: 0
+                description: "Term length thresholds for each edit distance.\n  None\t      max_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+              length:
+                type:
+                - integer
+                - 'null'
+                description: The second parameter is the maximum number of suggestions to return.
+                minimum: 0
+      - type: object
+        description: |-
+          Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+          Additional latency for spelling correction and suggestions.
+        required:
+        - SearchCorrect
+        properties:
+          SearchCorrect:
+            type: object
+            description: |-
+              Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+              Additional latency for spelling correction and suggestions.
+            required:
+            - distance
+            properties:
+              distance:
+                type: integer
+                description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
+                minimum: 0
+              term_length_threshold:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: integer
+                  minimum: 0
+                description: "Term length thresholds for each edit distance.\n  None\t max_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+              length:
+                type:
+                - integer
+                - 'null'
+                description: The second parameter is the maximum number of suggestions to return.
+                minimum: 0
+      - type: object
+        description: Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+        required:
+        - SuggestOnly
+        properties:
+          SuggestOnly:
+            type: object
+            description: Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+            required:
+            - distance
+            properties:
+              distance:
+                type: integer
+                description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
+                minimum: 0
+              term_length_threshold:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: integer
+                  minimum: 0
+                description: "Term length thresholds for each edit distance.\n  None\tmax_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+              length:
+                type:
+                - integer
+                - 'null'
+                description: The second parameter is the maximum number of suggestions to return.
+                minimum: 0
+      description: Specifies whether query rewriting is enabled or disabled
     QueryType:
       type: string
       description: |-
@@ -2517,6 +2637,8 @@ components:
             order: Ascending
         query_type_default:
           $ref: '#/components/schemas/QueryType'
+        query_rewriting:
+          $ref: '#/components/schemas/QueryRewriting'
     SearchResultObject:
       type: object
       required:
@@ -2591,6 +2713,24 @@ components:
       enum:
       - Ascending
       - Descending
+    SpellingCorrection:
+      type: object
+      description: Defines spelling correction (fuzzy search) settings for an index.
+      required:
+      - max_dictionary_edit_distance
+      properties:
+        max_dictionary_edit_distance:
+          type: integer
+          description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
+          minimum: 0
+        term_length_threshold:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            minimum: 0
+          description: "Term length thresholds for each edit distance.\n  None\tmax_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
     StemmerType:
       type: string
       description: |-

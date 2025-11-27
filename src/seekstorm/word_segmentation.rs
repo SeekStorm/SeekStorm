@@ -141,6 +141,7 @@ impl WordSegmentationTM {
                         || (probability_log_sum[destination_index]
                             < probability_log_sum[circular_index] + probability_log_part1)
                     {
+                        #[allow(clippy::needless_range_loop)]
                         for i in 0..array_copy_usize {
                             segmented_space_bits[destination_index][i] =
                                 segmented_space_bits[circular_index][i];

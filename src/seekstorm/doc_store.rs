@@ -316,6 +316,7 @@ impl Index {
     ///
     /// Returns:
     /// * `Vec<u8>`: The file content as a byte vector.
+    ///
     pub async fn get_file(&self, doc_id: usize) -> Result<Vec<u8>, String> {
         let shard_id = doc_id & ((1 << self.shard_bits) - 1);
         let doc_id = doc_id >> self.shard_bits;

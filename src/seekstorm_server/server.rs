@@ -3,7 +3,10 @@ use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
     commit::Close,
-    index::{FrequentwordType, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType},
+    index::{
+        FrequentwordType, NgramSet, SimilarityType, SpellingCorrection, StemmerType, StopwordType,
+        TokenizerType,
+    },
     ingest::{IngestCsv, IngestJson, IngestPdf},
 };
 use std::{
@@ -153,9 +156,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                 let mut dash:HashMap<String,String>=HashMap::new();
                 for (i,component) in parameter.iter().enumerate(){
-                    if let Some(key_stripped) = component.strip_prefix("-") && i+1<parameter.len() {
-                        dash.insert(key_stripped.to_string(),parameter[i+1].to_string());
-                    }
+                    if let Some(key_stripped) = component.strip_prefix("-") && i+1<parameter.len() {dash.insert(key_stripped.to_string(),parameter[i+1].to_string());}
                 }
 
                 match command
@@ -254,6 +255,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                     Vec::new(),
                                                     None,
                                                     apikey_object,
+                                                    Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
                                                 ).await
                                             } else {
                                                 0

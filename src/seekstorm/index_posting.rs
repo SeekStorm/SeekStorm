@@ -22,6 +22,30 @@ impl Shard {
         posting_count_ngram_2_compressed: u8,
         posting_count_ngram_3_compressed: u8,
     ) {
+        if let Some(spelling_correction) = self.meta.spelling_correction.as_ref()
+            && term.key_hash & 7 == 0
+            && (spelling_correction.term_length_threshold.as_ref().is_none()
+                || spelling_correction
+                    .term_length_threshold
+                    .as_ref()
+                    .unwrap()
+                    .is_empty()
+                || term.term.len()
+                    >= spelling_correction.term_length_threshold.as_ref().unwrap()[0])
+        {
+            let sum: usize = term
+                .field_positions_vec
+                .iter()
+                .map(|field| field.len())
+                .sum();
+            if sum > 1 {
+                _ = self
+                    .level_terms
+                    .entry((term.key_hash >> 32) as u32)
+                    .or_insert(term.term.clone());
+            }
+        };
+
         let mut positions_count_sum = 0;
         let mut field_positions_vec: Vec<Vec<u16>> = Vec::new();
         for positions_uncompressed in term.field_positions_vec.iter() {

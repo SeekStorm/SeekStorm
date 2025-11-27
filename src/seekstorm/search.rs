@@ -29,12 +29,15 @@ use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::mem;
+use std::mem::discriminant;
 use std::ops::Range;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 use utoipa::ToSchema;
+
+use symspell_rs::Suggestion;
 
 /// Specifies the default QueryType: The following query types are supported:
 /// - **Union** (OR, disjunction),
@@ -54,6 +57,53 @@ pub enum QueryType {
     Phrase = 2,
     /// Not (-)
     Not = 3,
+}
+
+/// Specifies whether query rewriting is enabled or disabled
+#[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
+pub enum QueryRewriting {
+    /// Query rewriting disabled, returs query results for query as-is, returns no suggestions for misspelled query terms.
+    /// No performance overhead for spelling correction and suggestions.
+    #[default]
+    SearchOnly,
+    /// Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+    /// Additional latency for spelling suggestions.
+    SearchSuggest {
+        /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
+        distance: usize,
+        /// Term length thresholds for each edit distance.
+        ///   None:    max_dictionary_edit_distance for all terms lengths
+        ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
+        ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        term_length_threshold: Option<Vec<usize>>,
+        /// The second parameter is the maximum number of suggestions to return.
+        length: Option<usize>,
+    },
+    /// Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+    /// Additional latency for spelling correction and suggestions.
+    SearchCorrect {
+        /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
+        distance: usize,
+        /// Term length thresholds for each edit distance.
+        ///   None:    max_dictionary_edit_distance for all terms lengths
+        ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
+        ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        term_length_threshold: Option<Vec<usize>>,
+        /// The second parameter is the maximum number of suggestions to return.
+        length: Option<usize>,
+    },
+    /// Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+    SuggestOnly {
+        /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
+        distance: usize,
+        /// Term length thresholds for each edit distance.
+        ///   None:    max_dictionary_edit_distance for all terms lengths
+        ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
+        ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        term_length_threshold: Option<Vec<usize>>,
+        /// The second parameter is the maximum number of suggestions to return.
+        length: Option<usize>,
+    },
 }
 
 /// The following result types are supported:
@@ -96,6 +146,8 @@ pub struct ResultObject {
     /// List of facet fields: field name and vector of unique values and their counts.
     /// Unique values and their counts are only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
     pub facets: AHashMap<String, Facet>,
+    ///Suggestions for auto complete and spelling correction.
+    pub suggestions: Vec<String>,
 }
 
 /// Create query_list and non_unique_query_list
@@ -890,13 +942,23 @@ pub trait Search {
     ///   Examples:
     ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
     ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+    /// * `query_rewriting`: Enables query rewriting features such as spelling correction and suggestions.
+    ///   The spelling correction of multi-term query strings handles three cases:
+    ///     1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`
+    ///     2. mistakenly omitted space between two correct terms led to one incorrect combined term: `modernart` -> `modern art`
+    ///     3. multiple independent input terms with/without spelling errors: `cinese indastrialication` -> `chinese industrialization`
+    ///
+    /// See QueryRewriting enum for details.
+    ///   ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `meta.spelling_correction`.
     ///  
-    ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
-    ///   Facets are defined in 3 different places:
-    ///   the facet fields are defined in schema at create_index,
-    ///   the facet field values are set in index_document at index time,
-    ///   the query_facets/facet_filter search parameters are specified at query time.
-    ///   Facets are then returned in the search result object.
+    /// Facets:
+    ///
+    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///    Facets are defined in 3 different places:
+    ///    the facet fields are defined in schema at create_index,
+    ///    the facet field values are set in index_document at index time,
+    ///    the query_facets/facet_filter search parameters are specified at query time.
+    ///    Facets are then returned in the search result object.
     async fn search(
         &self,
         query_string: String,
@@ -909,6 +971,7 @@ pub trait Search {
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
+        query_rewriting: QueryRewriting,
     ) -> ResultObject;
 }
 
@@ -925,12 +988,90 @@ impl Search for IndexArc {
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
+        query_rewriting: QueryRewriting,
     ) -> ResultObject {
         let index_ref = self.read().await;
+
+        let fuzzy: Option<(String, Vec<Suggestion>)> = if let Some(symspell) =
+            &index_ref.symspell_option
+            && query_rewriting != QueryRewriting::SearchOnly
+        {
+            let (edit_distance_max, term_length_threshold, _length) = match &query_rewriting {
+                QueryRewriting::SearchSuggest {
+                    distance,
+                    term_length_threshold,
+                    length,
+                } => (distance, term_length_threshold, length),
+                QueryRewriting::SuggestOnly {
+                    distance,
+                    term_length_threshold,
+                    length,
+                } => (distance, term_length_threshold, length),
+                QueryRewriting::SearchCorrect {
+                    distance,
+                    term_length_threshold,
+                    length,
+                } => (distance, term_length_threshold, length),
+                _ => (&0, &None, &None),
+            };
+
+            if let Ok(symspell) = symspell.try_read()
+                && (term_length_threshold.is_none()
+                    || term_length_threshold.as_ref().unwrap().is_empty()
+                    || query_string.len() >= term_length_threshold.as_ref().unwrap()[0])
+            {
+                let suggestions = symspell.lookup_compound(
+                    &query_string,
+                    edit_distance_max.to_owned(),
+                    term_length_threshold,
+                    false,
+                );
+
+                if suggestions.is_empty() {
+                    None
+                } else {
+                    Some((suggestions[0].term.clone(), suggestions))
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let query_string = if let Some((corrected_query, _suggestions)) = &fuzzy
+            && discriminant(&query_rewriting)
+                != discriminant(&QueryRewriting::SearchSuggest {
+                    distance: 0,
+                    term_length_threshold: None,
+                    length: None,
+                }) {
+            corrected_query
+        } else {
+            &query_string
+        };
+
+        if discriminant(&query_rewriting)
+            == discriminant(&QueryRewriting::SuggestOnly {
+                distance: 0,
+                term_length_threshold: None,
+                length: None,
+            })
+        {
+            let mut result_object = ResultObject {
+                query: query_string.clone(),
+                ..Default::default()
+            };
+            if let Some((_corrected_query, suggestions)) = fuzzy.as_ref() {
+                result_object.suggestions = suggestions.iter().map(|s| s.term.clone()).collect();
+            }
+            return result_object;
+        }
+
         if index_ref.shard_vec.len() == 1 {
-            return index_ref.shard_vec[0]
+            let mut result_object = index_ref.shard_vec[0]
                 .search_shard(
-                    query_string,
+                    query_string.clone(),
                     query_type_default,
                     offset,
                     length,
@@ -942,6 +1083,11 @@ impl Search for IndexArc {
                     result_sort,
                 )
                 .await;
+            result_object.query = query_string.clone();
+            if let Some((_corrected_query, suggestions)) = fuzzy.as_ref() {
+                result_object.suggestions = suggestions.iter().map(|s| s.term.clone()).collect();
+            }
+            return result_object;
         }
 
         let mut result_object_list = Vec::new();
@@ -1146,7 +1292,6 @@ impl Search for IndexArc {
             result_object.facets.insert(key.clone(), sum);
         }
 
-        // != count
         if aggregate_results {
             let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
             if !result_sort.is_empty() {
@@ -1187,6 +1332,11 @@ impl Search for IndexArc {
             }
 
             result_object.result_count = result_object.results.len();
+        }
+
+        result_object.query = query_string.clone();
+        if let Some((_corrected_query, suggestions)) = fuzzy {
+            result_object.suggestions = suggestions.into_iter().map(|s| s.term).collect();
         }
 
         result_object

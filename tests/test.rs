@@ -8,7 +8,7 @@ use seekstorm::index::{
     IndexMetaObject, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType,
     create_index, open_index,
 };
-use seekstorm::search::{QueryType, ResultType, Search};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search};
 use std::collections::HashSet;
 use std::{fs, path::Path};
 
@@ -34,6 +34,7 @@ async fn test_01_create_index() {
         frequent_words: FrequentwordType::English,
         ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
         access_type: AccessType::Mmap,
+        spelling_correction: None,
     };
 
     let segment_number_bits1 = 11;
@@ -108,6 +109,7 @@ async fn test_03_query_index() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            QueryRewriting::SearchOnly,
         )
         .await;
 
@@ -134,7 +136,7 @@ async fn test_04_clear_index() {
     assert_eq!(result, 4);
 
     // clear index
-    index_arc.read().await.clear_index().await;
+    index_arc.write().await.clear_index().await;
 
     let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 0);
@@ -166,6 +168,7 @@ async fn test_04_clear_index() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            QueryRewriting::SearchOnly,
         )
         .await;
 
@@ -236,6 +239,7 @@ async fn test_06_delete_document() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            QueryRewriting::SearchOnly,
         )
         .await;
 
@@ -261,6 +265,7 @@ async fn test_06_delete_document() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            QueryRewriting::SearchOnly,
         )
         .await;
 

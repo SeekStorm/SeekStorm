@@ -43,6 +43,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting.
 * 6 tokenizers, including Chinese word segmentation.
+* Typo tolerance / Fuzzy queries / Query spelling correction: return relevant results even if the query contains spelling mistakes.
 * Stemming for 18 languages
 * Stopword lists, custom and predefined, for smaller indices and faster search.
 * Frequent word lists, custom and predefined, for faster phrase search by N-gram indexing.
@@ -249,7 +250,7 @@ see [ARCHITECTURE.md](https://github.com/SeekStorm/SeekStorm/blob/main/ARCHITECT
 
 ### Building
 
-```
+```text
 cargo build --release
 ```
 
@@ -261,7 +262,7 @@ cargo build --release
 
 **Build documentation**
 
-```
+```text
 cargo doc --no-deps
 ```
 **Access documentation locally**
@@ -284,70 +285,104 @@ seekstorm = { version = "0.12.19", default-features = false }
 ### Usage of the library
 
 Add required crates to your project
-```rust
+```text
 cargo add seekstorm
 cargo add tokio
 cargo add serde_json
 ```
 
+Use an asynchronous Rust runtime
 ```rust
-use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
-use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
-use tokio::sync::RwLock;
-```
-
-use an asynchronous Rust runtime
-```rust
+use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+
+  // your SeekStorm code here
+
+   Ok(())
+}
 ```
 
 create schema (from JSON)
 ```rust
+use seekstorm::index::SchemaField;
+
 let schema_json = r#"
 [{"field":"title","field_type":"Text","stored":false,"indexed":false},
 {"field":"body","field_type":"Text","stored":true,"indexed":true},
 {"field":"url","field_type":"Text","stored":false,"indexed":false}]"#;
-let schema=serde_json::from_str(schema_json).unwrap();
+let schema:Vec<SchemaField>=serde_json::from_str(schema_json).unwrap();
 ```
 
 create schema (from SchemaField)
 ```rust
+use seekstorm::index::{SchemaField,FieldType};
+
 let schema= vec![
-    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false, 1.0),
-    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,1.0),
-    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,1.0),
+    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false,false, 1.0),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
+    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,false,1.0),
 ];
 ```
 
 create index
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,create_index};
+
 let index_path=Path::new("C:/index/");
+
+let schema= vec![
+    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false,false, 1.0),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
+    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,false,1.0),
+];
 
 let meta = IndexMetaObject {
     id: 0,
     name: "test_index".to_string(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
+    stemmer:StemmerType::None,
     stop_words: StopwordType::None,
     frequent_words:FrequentwordType::English,
+    ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
+    spelling_correction: None,
 };
 
 let serialize_schema=true;
 let segment_number_bits1=11;
-let index=create_index(index_path,meta,&schema,serialize_schema,&Vec::new(),segment_number_bits1,false).unwrap();
-let _index_arc = Arc::new(RwLock::new(index));
+let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+
+# });
 ```
 
 open index (alternatively to create index)
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::open_index;
+
 let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
+# });
 ```
 
 index documents (from JSON)
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{open_index, IndexDocuments};
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
 let documents_json = r#"
 [{"title":"title1 test","body":"body1","url":"url1"},
 {"title":"title2","body":"body2 test","url":"url2"},
@@ -355,10 +390,21 @@ let documents_json = r#"
 let documents_vec=serde_json::from_str(documents_json).unwrap();
 
 index_arc.index_documents(documents_vec).await; 
+
+# });
 ```
 
 index document (from Document)
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::{FileType, Document, IndexDocument, open_index};
+use std::path::Path;
+use serde_json::Value;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
 let document= Document::from([
     ("title".to_string(), Value::String("title4 test".to_string())),
     ("body".to_string(), Value::String("body4 test".to_string())),
@@ -366,15 +412,37 @@ let document= Document::from([
 ]);
 
 index_arc.index_document(document,FileType::None).await;
+
+# });
 ```
 
 commit documents
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::commit::Commit;
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
 index_arc.commit().await;
+
+# });
 ```
 
 search index
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::search::{Search, QueryType, ResultType, QueryRewriting};
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
 let query="test".to_string();
 let offset=0;
 let length=10;
@@ -382,11 +450,16 @@ let query_type=QueryType::Intersection;
 let result_type=ResultType::TopkCount;
 let include_uncommitted=false;
 let field_filter=Vec::new();
-let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter).await;
-```
+let query_facets=Vec::new();
+let facet_filter=Vec::new();
+let result_sort=Vec::new();
+let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
 
-display results
-```rust
+// ### display results
+
+use seekstorm::highlighter::{Highlight, highlighter};
+use std::collections::HashSet;
+
 let highlights:Vec<Highlight>= vec![
     Highlight {
         field: "body".to_string(),
@@ -398,23 +471,44 @@ let highlights:Vec<Highlight>= vec![
     },
 ];    
 
-let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_term_strings));
+let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
 let return_fields_filter= HashSet::new();
+let distance_fields=Vec::new();
 let mut index=index_arc.write().await;
 for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter).await.unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+
+# })
 ```
 
 multi-threaded search
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::search::{QueryType, ResultType, QueryRewriting, Search};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
 let query_vec=vec!["house".to_string(),"car".to_string(),"bird".to_string(),"sky".to_string()];
 let offset=0;
 let length=10;
 let query_type=QueryType::Union; 
 let result_type=ResultType::TopkCount;
+
+let include_uncommitted=false;
+let field_filter=Vec::new();
+let query_facets=Vec::new();
+let facet_filter=Vec::new();
+let result_sort=Vec::new();
+
 let thread_number = 4;
 let permits = Arc::new(Semaphore::new(thread_number));
 for query in query_vec {
@@ -422,10 +516,15 @@ for query in query_vec {
 
     let query_clone = query.clone();
     let index_arc_clone = index_arc.clone();
-    let query_type_clone = query_type.clone();
-    let result_type_clone = result_type.clone();
     let offset_clone = offset;
     let length_clone = length;
+    let query_type_clone = query_type.clone();
+    let result_type_clone = result_type.clone();
+    let include_uncommitted_clone=include_uncommitted;
+    let field_filter_clone=field_filter.clone();
+    let query_facets_clone=query_facets.clone();
+    let facet_filter_clone=facet_filter.clone();
+    let result_sort_clone=result_sort.clone();
 
     tokio::spawn(async move {
         let rlo = index_arc_clone
@@ -435,8 +534,12 @@ for query in query_vec {
                 offset_clone,
                 length_clone,
                 result_type_clone,
-                false,
-                Vec::new(),
+                include_uncommitted_clone,
+                field_filter_clone,
+                query_facets_clone,
+                facet_filter_clone,
+                result_sort_clone,
+                QueryRewriting::SearchOnly
             )
             .await;
 
@@ -445,12 +548,25 @@ for query in query_vec {
         drop(permit_thread);
     });
 }
+
+# })
 ```
 
 index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::ingest::IngestJson;
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap(); 
+
 let file_path=Path::new("wiki-articles.json");
 let _ =index_arc.ingest_json(file_path).await;
+
+# })
 ```
 
 index all PDF files in directory and sub-directories
@@ -460,6 +576,7 @@ index all PDF files in directory and sub-directories
 - copies all ingested PDF files to the "files" subdirectory in the index.
 - the following index schema is required (and automatically created by the console `ingest` command):
 ```json
+ let schema_json = r#"
  [
    {
      "field": "title",
@@ -487,48 +604,130 @@ index all PDF files in directory and sub-directories
      "field_type": "Timestamp",
      "facet": true
    }
- ]
+ ]"#;
 ```
 
-```rust
- let file_path=Path::new("C:/Users/johndoe/Downloads");
- let _ =index_arc.ingest_pdf(file_path).await;
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::open_index;
+use std::path::Path;
+use seekstorm::ingest::IngestPdf;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
+let file_path=Path::new("C:/Users/johndoe/Downloads");
+let _ =index_arc.ingest_pdf(file_path).await;
+
+# });
 ```
 
 index PDF file
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::open_index;
+use std::path::Path;
+use seekstorm::ingest::IndexPdfFile;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
 let file_path=Path::new("C:/test.pdf");
-let file_date=Utc::now().timestamp();
 let _ =index_arc.index_pdf_file(file_path).await;
+
+# });
 ```
 
 index PDF file bytes
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::open_index;
+use std::path::Path;
+use std::fs;
+use chrono::Utc;
+use seekstorm::ingest::IndexPdfBytes;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
+//solely used as meta data if it can't be extracted from document bytes
 let file_date=Utc::now().timestamp();
+let file_path=Path::new("C:/test.pdf");
+
 let document = fs::read(file_path).unwrap();
 let _ =index_arc.index_pdf_bytes(file_path, file_date, &document).await;
+
+# });
 ```
 
 get PDF file bytes
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
 let doc_id=0;
-let file=index.get_file(doc_id).unwrap();
+let _file=index_arc.read().await.get_file(doc_id).await.unwrap();
+
+# });
 ```
 
 clear index
-```rust
-index.clear_index();
+```rust, no_run
+# tokio_test::block_on(async {
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
+index_arc.write().await.clear_index().await;
+
+# });
 ```
+
 delete index
-```rust
-index.delete_index();
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::open_index;
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
+index_arc.write().await.delete_index();
+
+# });
 ```
+
 close index
-```rust
-index.close_index();
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::open_index;
+use std::path::Path;
+use seekstorm::commit::Close;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
+index_arc.close().await;
+
+# });
 ```
+
 seekstorm library version string
-```rust
+```rust ,no_run
+use seekstorm::index::version;
+
 let version=version();
 println!("version {}",version);
 ```
@@ -543,27 +742,36 @@ Facets are defined in 3 different places:
 3. The query_facets/facet_filter parameters are specified at query time.  
    Facets are then returned in the search result object.
 
+See also [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md) for more information.
+
 A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious. This is why we provide a quick start example here:
 
 Add required crates to your project
-```rust
+```text
 cargo add seekstorm
 cargo add tokio
 cargo add serde_json
 ```
-Add use declarations
-```rust
-use std::{collections::HashSet, error::Error, path::Path, sync::Arc};
-use seekstorm::{index::*,search::*,highlighter::*,commit::Commit};
-use tokio::sync::RwLock;
-```
-use an asynchronous Rust runtime
-```rust
+
+Use an asynchronous Rust runtime
+```rust ,no_run
+use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+
+  // your SeekStorm code here
+
+   Ok(())
+}
 ```
 create index
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use std::sync::{Arc, RwLock};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,create_index};
+
 let index_path=Path::new("C:/index/");//x
 
 let schema_json = r#"
@@ -575,21 +783,36 @@ let schema=serde_json::from_str(schema_json).unwrap();
 
 let meta = IndexMetaObject {
     id: 0,
-    name: "test_index".to_string(),
+    name: "test_index".into(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
+    stemmer:StemmerType::None,
     stop_words: StopwordType::None,
     frequent_words:FrequentwordType::English,
+    ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
+    spelling_correction: None,
 };
 
-let serialize_schema=true;
+let synonyms=Vec::new();
+
 let segment_number_bits1=11;
-let index=create_index(index_path,meta,&schema,serialize_schema,&Vec::new(),segment_number_bits1,false).unwrap();
-let mut index_arc = Arc::new(RwLock::new(index));
+let index_arc=create_index(index_path,meta,&schema,&synonyms,segment_number_bits1,false,None).await.unwrap();
+
+# });
 ```
+
 index documents
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{IndexDocuments,open_index};
+use seekstorm::commit::Commit;
+
+let index_path=Path::new("C:/index/");
+let index_arc=open_index(index_path,false).await.unwrap();
+
 let documents_json = r#"
 [{"title":"title1 test","body":"body1","url":"url1","town":"Berlin"},
 {"title":"title2","body":"body2 test","url":"url2","town":"Warsaw"},
@@ -597,13 +820,26 @@ let documents_json = r#"
 let documents_vec=serde_json::from_str(documents_json).unwrap();
 
 index_arc.index_documents(documents_vec).await; 
-```
-commit documents
-```rust
+
+// ### commit documents
+
 index_arc.commit().await;
+
+# });
 ```
+
 search index
-```rust
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{IndexDocuments,open_index};
+use seekstorm::search::{Search,QueryType,ResultType,QueryFacet,QueryRewriting};
+use seekstorm::highlighter::{Highlight,highlighter};
+use std::collections::HashSet;
+
+let index_path=Path::new("C:/index/");
+let index_arc=open_index(index_path,false).await.unwrap();
 let query="test".to_string();
 let offset=0;
 let length=10;
@@ -614,13 +850,12 @@ let field_filter=Vec::new();
 let query_facets = vec![QueryFacet::String16 {field: "age".to_string(),prefix: "".to_string(),length:u16::MAX}];
 let facet_filter=Vec::new();
 //let facet_filter = vec![FacetFilter::String { field: "town".to_string(),filter: vec!["Berlin".to_string()],}];
+let result_sort=Vec::new();
 
-let facet_result_sort=Vec::new();
+let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
 
-let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter).await;
-```
-display results
-```rust
+// ### display results
+
 let highlights:Vec<Highlight>= vec![
         Highlight {
             field: "body".to_owned(),
@@ -632,24 +867,23 @@ let highlights:Vec<Highlight>= vec![
         },
     ];    
 
-let highlighter2=Some(highlighter(&index_arc,highlights, result_object.query_terms));
+let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
 let return_fields_filter= HashSet::new();
+let distance_fields=Vec::new();
 let index=index_arc.write().await;
 for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter2,&return_fields_filter).await.unwrap();
+  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
-```
-display facets
-```rust
+
+// ### display facets
+
 println!("{}", serde_json::to_string_pretty(&result_object.facets).unwrap());
+
+# });
 ```
-end of main function
-```rust
-   Ok(())
-}
-```
+
 
 ---
 
@@ -668,7 +902,7 @@ Unzip in a directory of your choice, open in Visual Studio code.
 
 or alternatively
 
-```
+```text
 git clone https://github.com/SeekStorm/SeekStorm.git
 ```
 
@@ -677,7 +911,7 @@ git clone https://github.com/SeekStorm/SeekStorm.git
 Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
 
 In the terminal of Visual Studio Code type:
-```
+```text
 cargo build --release
 ```
 
@@ -693,24 +927,24 @@ The format is called [ndjson](https://github.com/ndjson/ndjson-spec) ("Newline d
 Decompresss Wikipedia corpus. 
 
 https://gnuwin32.sourceforge.net/packages/bzip2.htm
-```
+```text
 bunzip2 wiki-articles.json.bz2
 ```
 
 Move the decompressed wiki-articles.json to the release directory
 
 **Start SeekStorm server**
-```
+```text
 cd target/release
 ```
-```
+```text
 ./seekstorm_server local_ip="0.0.0.0" local_port=80
 ```
 
 **Indexing** 
 
 Type 'ingest' into the command line of the running SeekStorm server: 
-```
+```text
 ingest
 ```
 
@@ -733,14 +967,14 @@ Set the 'individual API key' in test_api.rest to the api key displayed in the se
 **Remove demo index**
 
 Type 'delete' into the command line of the running SeekStorm server: 
-```
+```text
 delete
 ```
 
 **Shutdown server**
 
 Type 'quit' into the commandline of the running SeekStorm server.
-```
+```text
 quit
 ```
 
@@ -765,7 +999,7 @@ Make all your scientific papers, ebooks, resumes, reports, contracts, documentat
 Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
 
 In the terminal of Visual Studio Code type:
-```
+```text
 cargo build --release
 ```
 
@@ -774,10 +1008,10 @@ cargo build --release
 Download and copy the Pdfium library into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries
 
 **Start SeekStorm server**
-```
+```text
 cd target/release
 ```
-```
+```text
 ./seekstorm_server local_ip="0.0.0.0" local_port=80
 ```
 
@@ -786,7 +1020,7 @@ cd target/release
 Choose a directory that contains PDF files you want to index and search, e.g. your documents or download directory.
 
 Type 'ingest' into the command line of the running SeekStorm server: 
-```
+```text
 ingest C:\Users\JohnDoe\Downloads
 ```
 
@@ -801,14 +1035,14 @@ Enter a query into the search box
 **Remove demo index**
 
 Type 'delete' into the command line of the running SeekStorm server: 
-```
+```text
 delete
 ```
 
 **Shutdown server**
 
 Type 'quit' into the commandline of the running SeekStorm server.
-```
+```text
 quit
 ```
 
@@ -840,8 +1074,8 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Sorting of results by any field
 * ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
 * ✅ Tokenizer with Chinese word segmentation
-* Autosuggestion, spelling correction, instant search
-* Fuzzy search
+* ✅ Typo tolerance (Query spelling correction)
+* Query autocompletion
 
 **Improvements**
 * ✅ Better REST API documentation: integrated OpenAPI generator
