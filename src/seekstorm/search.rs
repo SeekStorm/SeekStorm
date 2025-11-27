@@ -73,8 +73,8 @@ pub enum QueryRewriting {
         distance: usize,
         /// Term length thresholds for each edit distance.
         ///   None:    max_dictionary_edit_distance for all terms lengths
-        ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
-        ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+        ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         term_length_threshold: Option<Vec<usize>>,
         /// The second parameter is the maximum number of suggestions to return.
         length: Option<usize>,
@@ -86,8 +86,8 @@ pub enum QueryRewriting {
         distance: usize,
         /// Term length thresholds for each edit distance.
         ///   None:    max_dictionary_edit_distance for all terms lengths
-        ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
-        ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+        ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         term_length_threshold: Option<Vec<usize>>,
         /// The second parameter is the maximum number of suggestions to return.
         length: Option<usize>,
@@ -98,8 +98,8 @@ pub enum QueryRewriting {
         distance: usize,
         /// Term length thresholds for each edit distance.
         ///   None:    max_dictionary_edit_distance for all terms lengths
-        ///   Some([4]):    max_dictionary_edit_distance for all terms lengths >= 4,
-        ///   Some([2,8]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+        ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         term_length_threshold: Option<Vec<usize>>,
         /// The second parameter is the maximum number of suggestions to return.
         length: Option<usize>,
