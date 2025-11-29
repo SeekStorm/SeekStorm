@@ -330,7 +330,7 @@ create index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,create_index};
 
 let index_path=Path::new("C:/index/");
 
@@ -342,18 +342,17 @@ let schema= vec![
 
 let meta = IndexMetaObject {
     id: 0,
-    name: "test_index".to_string(),
+    name: "test_index".into(),
     similarity:SimilarityType::Bm25f,
-    tokenizer:TokenizerType::AsciiAlphabetic,
+    tokenizer:TokenizerType::UnicodeAlphanumeric,
     stemmer:StemmerType::None,
     stop_words: StopwordType::None,
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: None,
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
 };
 
-let serialize_schema=true;
 let segment_number_bits1=11;
 let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
 
@@ -453,7 +452,8 @@ let field_filter=Vec::new();
 let query_facets=Vec::new();
 let facet_filter=Vec::new();
 let result_sort=Vec::new();
-let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
+let query_rewriting= QueryRewriting::SearchCorrect { distance: 1, term_length_threshold: Some([2,8].into()), length: Some(5) };
+let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,query_rewriting).await;
 
 // ### display results
 
@@ -574,39 +574,44 @@ index all PDF files in directory and sub-directories
 - extracts title from metatag, or first line of text, or from filename
 - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
 - copies all ingested PDF files to the "files" subdirectory in the index.
-- the following index schema is required (and automatically created by the console `ingest` command):
-```json
- let schema_json = r#"
- [
-   {
-     "field": "title",
-     "stored": true,
-     "indexed": true,
-     "field_type": "Text",
-     "boost": 10
-   },
-   {
-     "field": "body",
-     "stored": true,
-     "indexed": true,
-     "field_type": "Text"
-   },
-   {
-     "field": "url",
-     "stored": true,
-     "indexed": false,
-     "field_type": "Text"
-   },
-   {
-     "field": "date",
-     "stored": true,
-     "indexed": false,
-     "field_type": "Timestamp",
-     "facet": true
-   }
- ]"#;
+
+First, you need to create an index with the following PDF specific schema (index/schema are automatically created when ingesting via the console `ingest` command):
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,create_index};
+
+let index_path=Path::new("C:/index/");
+
+let schema= vec![
+    // field, stored, indexed, field_type, facet, longest, boost
+    SchemaField::new("title".to_owned(), true, true, FieldType::Text, false,false, 10.0),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
+    SchemaField::new("url".to_owned(), true, false, FieldType::Text,false,false,1.0),
+    SchemaField::new("date".to_owned(), true, false, FieldType::Timestamp,true,false,1.0),
+];
+
+let meta = IndexMetaObject {
+    id: 0,
+    name: "test_index".into(),
+    similarity:SimilarityType::Bm25fProximity,
+    tokenizer:TokenizerType::UnicodeAlphanumeric,
+    stemmer:StemmerType::None,
+    stop_words: StopwordType::None,
+    frequent_words:FrequentwordType::English,
+    ngram_indexing:NgramSet::NgramFF as u8,
+    access_type: AccessType::Mmap,
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
+};
+
+let segment_number_bits1=11;
+let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+
+# });
 ```
 
+Then, ingest all PDF files from a given path:
 ```rust ,no_run
 # tokio_test::block_on(async {
 
@@ -741,8 +746,6 @@ Facets are defined in 3 different places:
 2. The facet field values are set in index_document at index time.
 3. The query_facets/facet_filter parameters are specified at query time.  
    Facets are then returned in the search result object.
-
-See also [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md) for more information.
 
 A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious. This is why we provide a quick start example here:
 
