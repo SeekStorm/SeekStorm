@@ -484,6 +484,59 @@ println!("result counts {} {} {}",result_object.results.len(), result_object.res
 # })
 ```
 
+*Query operators and query type*
+
+Boolean queries are specified in the search method either via the query_type parameter or via operator chars within the query parameter.  
+The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
+
+Intersection, AND `+`
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Union; 
+let query="+red +apple".to_string();
+```
+
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Intersection; 
+let query="red apple".to_string();
+```
+
+Union, OR
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Union; 
+let query="red apple".to_string();
+```
+
+Phrase `""`
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Union; 
+let query="\"red apple\"".to_string();
+```
+
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Phrase; 
+let query="red apple".to_string();
+```
+
+Except, minus, NOT `-`
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Union; 
+let query="apple -red".to_string();
+```
+
+Mixed phrase and intersection
+```rust ,no_run
+use seekstorm::search::QueryType;
+let query_type=QueryType::Union; 
+let query="+\"the who\" +uk".to_string();
+```
+
+
 multi-threaded search
 ```rust ,no_run
 # tokio_test::block_on(async {
