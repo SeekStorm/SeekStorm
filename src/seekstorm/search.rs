@@ -857,9 +857,65 @@ pub type Point = Vec<f64>;
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
 /// Arguments:
-/// * `query_string`: query string + - "" search operators are recognized.
-/// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
-///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+/// * `query_string`: query string `+` `-` `""` search operators are recognized.
+/// * `query_type_default`: Specifiy default QueryType:
+///   * **Union**, disjunction, OR,
+///   * **Intersection**,  conjunction, AND, `+`,
+///   * **Phrase** `""`,
+///   * **Not**, except, minus `-`.
+///
+///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (`+` `-` `""`).
+///   
+///   Boolean queries are specified in the search method either via the query_type parameter or via operator chars within the query parameter.
+///   The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
+///
+/// Intersection, AND `+`
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Union;
+/// let query_string="+red +apple".to_string();
+/// ```
+///
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Intersection;
+/// let query_string="red apple".to_string();
+/// ```
+///
+/// Union, OR
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Union;
+/// let query_string="red apple".to_string();
+/// ```
+///
+/// Phrase `""`
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Union;
+/// let query_string="\"red apple\"".to_string();
+/// ```
+///
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Phrase;
+/// let query_string="red apple".to_string();
+/// ```
+///
+/// Except, minus, NOT `-`
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Union;
+/// let query_string="apple -red".to_string();
+/// ```
+///
+/// Mixed phrase and intersection
+/// ```rust ,no_run
+/// use seekstorm::search::QueryType;
+/// let query_type=QueryType::Union;
+/// let query_string="+\"the who\" +uk".to_string();
+/// ```
+///
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
 ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
@@ -905,9 +961,65 @@ pub trait Search {
     /// Search the index for all indexed documents, both for committed and uncommitted documents.
     /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
     /// Arguments:
-    /// * `query_string`: query string + - "" search operators are recognized.
-    /// * `query_type_default`: Specifiy default QueryType: **Union** (OR, disjunction), **Intersection** (AND, conjunction), **Phrase** (""), **Not** (-).
-    ///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
+    /// * `query_string`: query string `+` `-` `""` search operators are recognized.
+    /// * `query_type_default`: Specifiy default QueryType:
+    ///   * **Union**, disjunction, OR,
+    ///   * **Intersection**,  conjunction, AND, `+`,
+    ///   * **Phrase** `""`,
+    ///   * **Not**, except, minus `-`.
+    ///
+    ///   The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (`+` `-` `""`).
+    ///   
+    ///   Boolean queries are specified in the search method either via the query_type parameter or via operator chars within the query parameter.
+    ///   The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
+    ///
+    /// Intersection, AND `+`
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Union;
+    /// let query_string="+red +apple".to_string();
+    /// ```
+    ///
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Intersection;
+    /// let query_string="red apple".to_string();
+    /// ```
+    ///
+    /// Union, OR
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Union;
+    /// let query_string="red apple".to_string();
+    /// ```
+    ///
+    /// Phrase `""`
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Union;
+    /// let query_string="\"red apple\"".to_string();
+    /// ```
+    ///
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Phrase;
+    /// let query_string="red apple".to_string();
+    /// ```
+    ///
+    /// Except, minus, NOT `-`
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Union;
+    /// let query_string="apple -red".to_string();
+    /// ```
+    ///
+    /// Mixed phrase and intersection
+    /// ```rust ,no_run
+    /// use seekstorm::search::QueryType;
+    /// let query_type=QueryType::Union;
+    /// let query_string="+\"the who\" +uk".to_string();
+    /// ```
+    ///
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
     ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
