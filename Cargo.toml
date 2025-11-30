@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -61,7 +61,7 @@ unicode-normalization = "0.1.25"
 finl_unicode = "1.4.0"
 colored = "3.0.0"
 walkdir = "2.5.0"
-pdfium-render = { version ="0.8.36",  features = ["thread_safe","sync"], optional = true}
+pdfium-render = { version ="0.8.37",  features = ["thread_safe","sync"], optional = true}
 chrono = "0.4.42"
 utoipa = { version ="5.4.0",  features = ["preserve_order","preserve_path_order","yaml"]}
 num_cpus = "1.17.0"

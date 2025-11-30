@@ -605,7 +605,42 @@ for query in query_vec {
 # })
 ```
 
-index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
+First, you need to create an index with a schema matching the JSON file fields to ingest:
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use std::path::Path;
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,create_index};
+
+let index_path=Path::new("C:/index/");
+
+let schema= vec![
+    // field, stored, indexed, field_type, facet, longest, boost
+    SchemaField::new("title".to_owned(), true, true, FieldType::Text, false,false, 10.0),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
+    SchemaField::new("url".to_owned(), true, false, FieldType::Text,false,false,1.0),
+];
+
+let meta = IndexMetaObject {
+    id: 0,
+    name: "wikipedia_index".into(),
+    similarity:SimilarityType::Bm25f,
+    tokenizer:TokenizerType::UnicodeAlphanumeric,
+    stemmer:StemmerType::None,
+    stop_words: StopwordType::None,
+    frequent_words:FrequentwordType::English,
+    ngram_indexing:NgramSet::NgramFF as u8,
+    access_type: AccessType::Mmap,
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
+};
+
+let segment_number_bits1=11;
+let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+
+# });
+```
+
+Then, index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
 ```rust ,no_run
 # tokio_test::block_on(async {
 
@@ -647,7 +682,7 @@ let schema= vec![
 
 let meta = IndexMetaObject {
     id: 0,
-    name: "test_index".into(),
+    name: "pdf_index".into(),
     similarity:SimilarityType::Bm25fProximity,
     tokenizer:TokenizerType::UnicodeAlphanumeric,
     stemmer:StemmerType::None,

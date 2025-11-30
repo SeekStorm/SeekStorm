@@ -102,7 +102,7 @@ async fn test_03_query_index() {
             query,
             QueryType::Intersection,
             0,
-            10,
+            usize::MAX,
             ResultType::TopkCount,
             false,
             Vec::new(),
@@ -121,6 +121,34 @@ async fn test_03_query_index() {
 
     let result = result_list.result_count_total;
     assert_eq!(result, 1);
+
+    //
+
+    let query = "test".into();
+    let result_list = index_arc
+        .search(
+            query,
+            QueryType::Union,
+            0,
+            10,
+            ResultType::Count,
+            false,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            QueryRewriting::SearchOnly,
+        )
+        .await;
+
+    let result = result_list.results.len();
+    assert_eq!(result, 0);
+
+    let result = result_list.result_count;
+    assert_eq!(result, 0);
+
+    let result = result_list.result_count_total;
+    assert_eq!(result, 2);
 
     index_arc.close().await;
 }

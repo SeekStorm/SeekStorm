@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-11-30
+
+### Fixed
+
+- If TokenizerType::UnicodeAlphanumericFolded is selected, then diacritics, ligatures, and accents in the query string are now folded prior to spelling correction.
+- Examples for query spelling correction added to README.md (in create_index and search).
+- Examples for specifying Boolean queries via query operators and query type have been added to README.md.
+- Query operators added to library documentation.
+- Limit the size of the min-heap per shard to s=cmp::min(offset+length, shard.indexed_doc_count).  
+  This prevents an out-of-memory error if the query parameter length is set to usize::MAX, while the actual query results would still fit in memory (see issue #15).
+
 ## [1.1.0] - 2025-11-22
 
 ### Added

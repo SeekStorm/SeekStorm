@@ -1,10 +1,10 @@
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
 use crate::index::{
     DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
-    ShardArc,
+    ShardArc, TokenizerType,
 };
 use crate::min_heap::{Result, result_ordering_root};
-use crate::tokenizer::tokenizer;
+use crate::tokenizer::{fold_diacritics_accents_zalgo_umlaut, tokenizer};
 use crate::union::{union_docid_2, union_docid_3};
 use crate::utils::{
     read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u8, read_u16, read_u32,
@@ -28,13 +28,13 @@ use itertools::Itertools;
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::mem;
 use std::mem::discriminant;
 use std::ops::Range;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+use std::{cmp, mem};
 use utoipa::ToSchema;
 
 use symspell_rs::Suggestion;
@@ -1132,12 +1132,23 @@ impl Search for IndexArc {
                     || term_length_threshold.as_ref().unwrap().is_empty()
                     || query_string.len() >= term_length_threshold.as_ref().unwrap()[0])
             {
-                let suggestions = symspell.lookup_compound(
-                    &query_string,
-                    edit_distance_max.to_owned(),
-                    term_length_threshold,
-                    false,
-                );
+                let suggestions =
+                    if index_ref.meta.tokenizer == TokenizerType::UnicodeAlphanumericFolded {
+                        let query_string = fold_diacritics_accents_zalgo_umlaut(&query_string);
+                        symspell.lookup_compound(
+                            &query_string,
+                            edit_distance_max.to_owned(),
+                            term_length_threshold,
+                            false,
+                        )
+                    } else {
+                        symspell.lookup_compound(
+                            &query_string,
+                            edit_distance_max.to_owned(),
+                            term_length_threshold,
+                            false,
+                        )
+                    };
 
                 if suggestions.is_empty() {
                     None
@@ -1488,11 +1499,11 @@ pub(crate) fn binary_search(
 
         let pivot = read_u64(byte_array, mid as usize * key_head_size);
         match pivot.cmp(&key_hash) {
-            std::cmp::Ordering::Equal => {
+            cmp::Ordering::Equal => {
                 return mid;
             }
-            std::cmp::Ordering::Less => left = mid + 1,
-            std::cmp::Ordering::Greater => right = mid - 1,
+            cmp::Ordering::Less => left = mid + 1,
+            cmp::Ordering::Greater => right = mid - 1,
         }
     }
 
@@ -1831,8 +1842,13 @@ impl SearchShard for ShardArc {
             }
         }
 
+        let heap_size = if result_type != ResultType::Count {
+            cmp::min(offset + length, shard_ref.indexed_doc_count)
+        } else {
+            0
+        };
         let mut search_result = SearchResult {
-            topk_candidates: MinHeap::new(offset + length, &shard_ref, &result_sort_index),
+            topk_candidates: MinHeap::new(heap_size, &shard_ref, &result_sort_index),
             query_facets: Vec::new(),
             skip_facet_count: false,
         };
