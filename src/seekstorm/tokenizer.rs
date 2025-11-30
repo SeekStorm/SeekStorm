@@ -33,6 +33,34 @@ pub fn fold_diacritics_accents_zalgo_umlaut(string: &str) -> String {
             let mut base_char2 = None;
 
             match cc {
+                //ligatures
+                'ﬀ' => folded.push_str("ff"),
+                'ﬃ' => folded.push_str("ffi"),
+                'ﬄ' => folded.push_str("ffl"),
+                'ﬁ' => folded.push_str("fi"),
+                'ﬂ' => folded.push_str("fl"),
+                'ﬆ' => folded.push_str("st"),
+                'ﬅ' => folded.push_str("st"),
+
+                //roman numerals
+                'ⅰ' => folded.push('i'),
+                'ⅱ' => folded.push_str("ii"),
+                'ⅲ' => folded.push_str("iii"),
+                'ⅳ' => folded.push_str("iv"),
+                'ⅴ' => folded.push('v'),
+                'ⅵ' => folded.push_str("vi"),
+                'ⅶ' => folded.push_str("vii"),
+                'ⅷ' => folded.push_str("viii"),
+                'ⅸ' => folded.push_str("ix"),
+                'ⅹ' => folded.push('x'),
+                'ⅺ' => folded.push_str("xi"),
+                'ⅻ' => folded.push_str("xii"),
+                'ⅼ' => folded.push('l'),
+                'ⅽ' => folded.push('c'),
+                'ⅾ' => folded.push('d'),
+                'ⅿ' => folded.push('m'),
+
+                //umlauts
                 'ä' => folded.push_str("ae"),
                 'ö' => folded.push_str("oe"),
                 'ü' => folded.push_str("ue"),
