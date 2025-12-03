@@ -8,17 +8,33 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 1.1.0
+  version: 1.1.3
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
 paths:
+  /api/v1/hello:
+    get:
+      tags:
+      - Info
+      summary: |-
+        Hello
+        Returns a hello message with the SeekStorm server version.
+      operationId: hello_api
+      responses:
+        '200':
+          description: Hello message
+          content:
+            text/plain:
+              schema:
+                type: string
   /api/v1/apikey:
     get:
       tags:
       - API Key
-      summary: Get API Key Info
-      description: Get info about all indices associated with the specified API key
+      summary: |-
+        Get API Key Info
+        Get info about all indices associated with the specified API key
       operationId: get_apikey_indices_info_api
       parameters:
       - name: apikey
@@ -46,14 +62,13 @@ paths:
     post:
       tags:
       - API Key
-      summary: Create API Key
-      description: |-
+      summary: |-
+        Create API Key
         Creates an API key and returns the Base64 encoded API key.
         Expects the Base64 encoded master API key in the header.
         Use the master API key displayed in the server console at startup.
-
+      description: |-
         WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
-
         For development purposes you may also use the SeekStorm server console command 'create' to create an demo API key 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='.
       operationId: create_apikey_api
       parameters:
@@ -115,11 +130,10 @@ paths:
     delete:
       tags:
       - API Key
-      summary: Delete API Key
-      description: |-
+      summary: |-
+        Delete API Key
         Deletes an API and returns the number of remaining API keys.
         Expects the Base64 encoded master API key in the header.
-
         WARNING: This will delete all indices and documents associated with the API key.
       operationId: delete_apikey_api
       parameters:
@@ -145,8 +159,9 @@ paths:
     post:
       tags:
       - Index
-      summary: Create Index
-      description: Create an index within the directory associated with the specified API key and return the index_id.
+      summary: |-
+        Create Index
+        Create an index within the directory associated with the specified API key and return the index_id.
       operationId: create_index_api
       parameters:
       - name: apikey
@@ -263,8 +278,9 @@ paths:
     get:
       tags:
       - Index
-      summary: Get Index Info
-      description: Get index Info from index with index_id
+      summary: |-
+        Get Index Info
+        Get index Info from index with index_id
       operationId: get_index_info_api
       parameters:
       - name: apikey
@@ -298,8 +314,9 @@ paths:
     delete:
       tags:
       - Index
-      summary: Delete Index
-      description: Delete an index within the directory associated with the specified API key and return the number of remaining indices.
+      summary: |-
+        Delete Index
+        Delete an index within the directory associated with the specified API key and return the number of remaining indices.
       operationId: delete_index_api
       parameters:
       - name: apikey
@@ -335,8 +352,8 @@ paths:
     patch:
       tags:
       - Index
-      summary: Commit Index
-      description: |-
+      summary: |-
+        Commit Index
         Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
         to the final compressed data structure (roaring bitmap) on Mmap or disk -
         which is persistent, more compact, with lower query latency and allows search with realtime=false.
@@ -347,7 +364,6 @@ paths:
         is invoked implicitly with every index_doc,
         i.e. the document can immediately searched and included in the search results
         if it matches the query AND the query paramter realtime=true is enabled.
-
         **Use commit with caution, as it is an expensive operation**.
         **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
         Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
@@ -392,10 +408,9 @@ paths:
     post:
       tags:
       - Document
-      summary: Index Document(s)
-      description: |-
+      summary: |-
+        Index Document(s)
         Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
-
         Index documents enables true real-time search (as opposed to near realtime.search):
         When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
         Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
@@ -447,18 +462,15 @@ paths:
     delete:
       tags:
       - Document
-      summary: Delete Document(s) by Request Object
-      description: |-
+      summary: |-
+        Delete Document(s) by Request Object
         Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
-
         Immediately effective, indpendent of commit.
         Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
         By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
-
         Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
         For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
         BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
-
         Document ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.
       operationId: delete_document_by_object_api
       parameters:
@@ -509,13 +521,11 @@ paths:
     patch:
       tags:
       - Document
-      summary: Update Document(s)
-      description: |-
+      summary: |-
+        Update Document(s)
         Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
-
         Update document is a combination of delete_document and index_document.
         All current limitations of delete_document apply.
-
         Update documents enables true real-time search (as opposed to near realtime.search):
         When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
         Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
@@ -575,8 +585,8 @@ paths:
     post:
       tags:
       - PDF File
-      summary: Index PDF file
-      description: |-
+      summary: |-
+        Index PDF file
         Index PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.
         - Converts PDF to a JSON document with "title", "body", "url" and "date" fields and indexes it.
         - extracts title from metatag, or first line of text, or from filename
@@ -639,8 +649,9 @@ paths:
     get:
       tags:
       - Document
-      summary: Get Document
-      description: Get document from index with index_id
+      summary: |-
+        Get Document
+        Get document from index with index_id
       operationId: get_document_api
       parameters:
       - name: apikey
@@ -711,15 +722,13 @@ paths:
     delete:
       tags:
       - Document
-      summary: Delete Document
-      description: |-
+      summary: |-
+        Delete Document
         Delete document by document_id from index with index_id
-
         Document ID can by obtained by search.
         Immediately effective, indpendent of commit.
         Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
         By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
-
         Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
         For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
         BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
@@ -766,8 +775,9 @@ paths:
     get:
       tags:
       - PDF File
-      summary: Get PDF file
-      description: Get PDF file from index with index_id
+      summary: |-
+        Get PDF file
+        Get PDF file from index with index_id
       operationId: get_file_api
       parameters:
       - name: apikey
@@ -814,10 +824,9 @@ paths:
     get:
       tags:
       - Query
-      summary: Query Index
-      description: |-
+      summary: |-
+        Query Index
         Query results from index with index_id.
-
         Query index via GET is a convenience function, that offers only a limited set of parameters compared to Query Index via POST.
       operationId: query_index_api_get
       parameters:
@@ -885,10 +894,9 @@ paths:
     post:
       tags:
       - Query
-      summary: Query Index
-      description: |-
+      summary: |-
+        Query Index
         Query results from index with index_id
-
         The following parameters are supported:
         - Result type
         - Result sorting
@@ -980,7 +988,6 @@ paths:
                     $ref: '#/components/schemas/ResultSort'
                   description: |-
                     Sort field and order:
-
                     Search results are sorted by the specified facet field, either in ascending or descending order.
                     If no sort field is specified, then the search results are sorted by rank in descending order per default.
                     Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -988,7 +995,6 @@ paths:
                     until the n-th field value is either not equal or the last field is reached.
                     A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
                     Sort is only enabled on facet fields that are defined in schema at create_index!
-
                     Examples:
                     - result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
                     - result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
@@ -2240,7 +2246,11 @@ components:
                 items:
                   type: integer
                   minimum: 0
-                description: "Term length thresholds for each edit distance.\n  None\t      max_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                description: |-
+                  Term length thresholds for each edit distance.
+                    None:    max_dictionary_edit_distance for all terms lengths
+                    Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+                    Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
               length:
                 type:
                 - integer
@@ -2273,7 +2283,11 @@ components:
                 items:
                   type: integer
                   minimum: 0
-                description: "Term length thresholds for each edit distance.\n  None\t max_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                description: |-
+                  Term length thresholds for each edit distance.
+                    None:    max_dictionary_edit_distance for all terms lengths
+                    Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+                    Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
               length:
                 type:
                 - integer
@@ -2302,7 +2316,11 @@ components:
                 items:
                   type: integer
                   minimum: 0
-                description: "Term length thresholds for each edit distance.\n  None\tmax_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                description: |-
+                  Term length thresholds for each edit distance.
+                    None:    max_dictionary_edit_distance for all terms lengths
+                    Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+                    Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
               length:
                 type:
                 - integer
@@ -2619,7 +2637,6 @@ components:
             $ref: '#/components/schemas/ResultSort'
           description: |-
             Sort field and order:
-
             Search results are sorted by the specified facet field, either in ascending or descending order.
             If no sort field is specified, then the search results are sorted by rank in descending order per default.
             Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -2627,7 +2644,6 @@ components:
             until the n-th field value is either not equal or the last field is reached.
             A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
             Sort is only enabled on facet fields that are defined in schema at create_index!
-
             Examples:
             - result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
             - result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
@@ -2730,7 +2746,11 @@ components:
           items:
             type: integer
             minimum: 0
-          description: "Term length thresholds for each edit distance.\n  None\tmax_dictionary_edit_distance for all terms lengths\n  Some([4])   max_dictionary_edit_distance for all terms lengths >= 4,\n  Some([2,8]) max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+          description: |-
+            Term length thresholds for each edit distance.
+              None:    max_dictionary_edit_distance for all terms lengths
+              Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+              Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
     StemmerType:
       type: string
       description: |-
@@ -2828,7 +2848,6 @@ components:
       type: string
       description: |-
         Defines tokenizer behavior:
-
         AsciiAlphabetic
         - Mainly for for benchmark compatibility
         - Only ASCII alphabetic chars are recognized as token.
@@ -2862,6 +2881,8 @@ components:
         type: number
         format: double
 tags:
+- name: Info
+  description: Return info about the server
 - name: API Key
   description: Create and delete API keys
 - name: Index

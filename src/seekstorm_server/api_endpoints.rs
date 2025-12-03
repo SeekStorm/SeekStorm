@@ -274,6 +274,20 @@ pub(crate) fn save_apikey_data(apikey: &ApikeyObject, index_path: &PathBuf) {
     save_file_atomically(&apikey_persistence_path, apikey_persistence_json);
 }
 
+/// Hello
+/// Returns a hello message with the SeekStorm server version.
+#[utoipa::path(
+    tag = "Info",
+    get,
+    path = "/api/v1/hello",
+    responses(
+        (status = 200, description = "Hello message", body = String),
+    )
+)]
+pub(crate) fn hello_api<'a>() -> String {
+    "SeekStorm server ".to_owned() + VERSION
+}
+
 /// Create API Key
 /// Creates an API key and returns the Base64 encoded API key.  
 /// Expects the Base64 encoded master API key in the header.  
@@ -1201,6 +1215,7 @@ pub(crate) async fn query_index_api(
 
 #[derive(OpenApi, Default)]
 #[openapi(paths(
+    hello_api,
     create_apikey_api,
     get_apikey_indices_info_api,
     delete_apikey_api,
@@ -1219,6 +1234,7 @@ pub(crate) async fn query_index_api(
     query_index_api_get,
 ),
 tags(
+    (name="Info", description="Return info about the server"),
     (name="API Key", description="Create and delete API keys"),
     (name="Index", description="Create and delete indices"),
     (name="Document", description="Index, update, get and delete documents"),

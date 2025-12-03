@@ -34,7 +34,7 @@ use tokio::net::TcpListener;
 
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::api_endpoints::CreateIndexRequest;
+use crate::api_endpoints::{CreateIndexRequest, hello_api};
 use crate::api_endpoints::DeleteApikeyRequest;
 use crate::api_endpoints::update_document_api;
 use crate::api_endpoints::update_documents_api;
@@ -165,6 +165,14 @@ pub(crate) async fn http_request_handler(
         parts[5],
         req.method(),
     ) {
+        ("api", "v1", "hello", _, _, _, &Method::GET) => {
+            let hello_message =
+                serde_json::to_vec(&hello_api()).unwrap();
+            Ok(Response::new(BoxBody::new(Full::new(
+                hello_message.into(),
+            ))))
+        }
+
         ("api", "v1", "index", _, "query", _, &Method::POST) => {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
