@@ -1166,7 +1166,7 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
 * ✅ Tokenizer with Chinese word segmentation
 * ✅ Typo tolerance (Query spelling correction)
-* Query autocompletion
+* 👷 Typo-tolerant query auto-completion (QAC)
 
 **Improvements**
 * ✅ Better REST API documentation: integrated OpenAPI generator
@@ -1177,11 +1177,11 @@ The Rust port is not yet feature complete. The following features are currently 
 **New features**
 * ✅ Docker file and container image
 * ✅ Stemming for 18 languages
-* 👷 Typo-tolerant query auto-completion (QAC)
-* 👷 Split of storage and compute
+* Geocoding, reverse geocoding, GeoJSON
+* Model Context Protocol (MCP) server for Retrieval Augmented Generation (RAG)
+* Split of storage and compute
   * Use S3 object storage as index backend
   * Use Distributed Key-Value store as index backend
-* Geocoding, reverse geocoding, GeoJSON
 * Elasticity: automatic spawning and winding down of shards in the cloud depending on index size and load.
 * Distributed search cluster (currently PoC)
 * Native vector search (currently PoC)
