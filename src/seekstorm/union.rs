@@ -1450,8 +1450,6 @@ pub(crate) async fn union_docid_3<'a>(
                     query_term_count,
                 )
                 .await;
-            } else {
-                println!("union early termination {}", recursion_count);
             }
         }
     }

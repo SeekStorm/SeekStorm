@@ -1339,15 +1339,6 @@ impl Search for IndexArc {
                     )
                     .await;
 
-                println!(
-                    "aggregate: shard {} offset {} length {} results_len {} total {} ",
-                    shard_id,
-                    offset,
-                    length,
-                    rlo.results.len(),
-                    rlo.result_count_total
-                );
-
                 if aggregate_results {
                     for result in rlo.results.iter_mut() {
                         result.doc_id = (result.doc_id << shard_bits) | shard_id as usize;

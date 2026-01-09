@@ -615,11 +615,6 @@ pub(crate) async fn tokenizer(
                                 v.1 |= indexed_field_id == 0
                             })
                             .or_insert((1, indexed_field_id == 0));
-                    } else {
-                        println!(
-                            "completions exceeded {} {}",
-                            completion_len, max_completion_entries
-                        );
                     }
                 }
 
@@ -634,11 +629,6 @@ pub(crate) async fn tokenizer(
                                     v.1 |= indexed_field_id == 0
                                 })
                                 .or_insert((1, indexed_field_id == 0));
-                        } else {
-                            println!(
-                                "completions exceeded {} {}",
-                                completion_len, max_completion_entries
-                            );
                         }
                     }
 
@@ -656,11 +646,6 @@ pub(crate) async fn tokenizer(
                                     v.1 |= indexed_field_id == 0
                                 })
                                 .or_insert((1, indexed_field_id == 0));
-                        } else {
-                            println!(
-                                "completions exceeded {} {}",
-                                completion_len, max_completion_entries
-                            );
                         }
                     }
                 }
