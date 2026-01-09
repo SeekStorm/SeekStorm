@@ -2,10 +2,9 @@ use base64::{Engine, engine::general_purpose};
 use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
-    commit::Close,
     index::{
-        FrequentwordType, NgramSet, SimilarityType, SpellingCorrection, StemmerType, StopwordType,
-        TokenizerType,
+        Close, FrequentwordType, NgramSet, QueryCompletion, SimilarityType, SpellingCorrection,
+        StemmerType, StopwordType, TokenizerType,
     },
     ingest::{IngestCsv, IngestJson, IngestPdf},
 };
@@ -109,9 +108,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
     let stdin = io::stdin();
     let terminal = stdin.is_terminal();
-
     let receiver_ctrl_c = ctrl_channel().unwrap();
-
     let (sender_commandline, receiver_commandline) = bounded(20);
     if terminal {
         tokio::spawn(async { commandline(sender_commandline).await });
@@ -158,6 +155,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                     println!("Server stopped by Ctrl-C");
                     return;
                 }
+
 
                 recv(receiver_commandline) -> message => {
 
@@ -238,9 +236,9 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                             } else if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
                                                     let indexname_schemajson = if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME)
                                                     {("wikipedia_demo",r#"
-                                                [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0},
-                                                {"field":"body","field_type":"Text","stored":true,"indexed":true,"longest":true},
-                                                {"field":"url","field_type":"Text","stored":true,"indexed":false}]"#,SimilarityType::Bm25fProximity,TokenizerType::UnicodeAlphanumeric  )} 
+                                                [{"field":"title","field_type":"Text","stored":true,"indexed":true,"boost":10.0,"dictionary_source": true, "completion_source": true},
+                                                {"field":"body","field_type":"Text","stored":true,"indexed":true,"longest":true,"dictionary_source": true},
+                                                {"field":"url","field_type":"Text","stored":true,"indexed":false}]"#,SimilarityType::Bm25fProximity,TokenizerType::UnicodeAlphanumericFolded  )}
                                                     else if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(MSMARCO_FILENAME)
                                                     {("msmarco_demo", r#"
                                                     [{"field":"url","field_type":"Text","stored":false,"indexed":false},
@@ -266,7 +264,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         Vec::new(),
                                                         None,
                                                         apikey_object,
-                                                        Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
+                                                        Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries: 500_000 }),
+                                                        Some(QueryCompletion {max_completion_entries:10_000_000_000})
                                                     ).await
                                                 } else {
                                                     0
@@ -436,7 +435,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                     }
 
                 }
-
 
                 }
             }

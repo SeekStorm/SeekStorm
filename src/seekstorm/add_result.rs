@@ -1876,7 +1876,7 @@ pub(crate) fn decode_positions_multiterm_multifield(
                         & shard.indexed_field_id_mask as u32) as u16;
                     field_vec.push((field_id, 4));
                     if phrase_query {
-                        let position_bits_1 = position_bits >> 2; // /4;
+                        let position_bits_1 = position_bits >> 2;
                         let position_bits_2 = (position_bits - position_bits_1) / 3;
                         let position_bits_3 =
                             (position_bits - position_bits_1 - position_bits_2) >> 1;

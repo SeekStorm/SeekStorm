@@ -36,7 +36,9 @@ impl Shard {
             let sum: usize = term
                 .field_positions_vec
                 .iter()
-                .map(|field| field.len())
+                .enumerate()
+                .filter(|&x| self.indexed_schema_vec[x.0].dictionary_source)
+                .map(|field| field.1.len())
                 .sum();
             if sum > 1 {
                 _ = self

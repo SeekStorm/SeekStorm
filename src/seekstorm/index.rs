@@ -22,7 +22,7 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use symspell_rs::SymSpell;
+use symspell_complete_rs::{PruningRadixTrie, SymSpell};
 use tokio::sync::{RwLock, Semaphore};
 use utils::{read_u32, write_u16};
 use utoipa::ToSchema;
@@ -31,6 +31,7 @@ use utoipa::ToSchema;
 use crate::word_segmentation::WordSegmentationTM;
 use crate::{
     add_result::{self, B, K, SIGMA},
+    commit::Commit,
     geo_search::encode_morton_2_d,
     search::{
         self, FacetFilter, Point, QueryFacet, QueryRewriting, Ranges, ResultObject, ResultSort,
@@ -57,6 +58,7 @@ pub(crate) const FACET_FILENAME: &str = "facet.bin";
 pub(crate) const FACET_VALUES_FILENAME: &str = "facet.json";
 
 pub(crate) const DICTIONARY_FILENAME: &str = "dictionary.csv";
+pub(crate) const COMPLETIONS_FILENAME: &str = "completions.csv";
 
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -551,6 +553,7 @@ pub struct SchemaField {
     #[serde(skip_serializing_if = "is_default_bool")]
     #[serde(default = "default_false")]
     pub facet: bool,
+
     /// Indicate the longest field in schema.  
     /// Otherwise the longest field will be automatically detected in first index_document.
     /// Setting/detecting the longest field ensures efficient index encoding.
@@ -562,6 +565,20 @@ pub struct SchemaField {
     #[serde(skip_serializing_if = "is_default_f32")]
     #[serde(default = "default_1")]
     pub boost: f32,
+
+    /// if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.
+    /// if disabled, then a manually generated dictionary can be used: {index_path}/dictionary.csv
+    #[serde(skip_serializing_if = "is_default_bool")]
+    #[serde(default = "default_false")]
+    pub dictionary_source: bool,
+
+    /// if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.
+    /// if disabled, then a manually generated completion list can be used: {index_path}/completions.csv
+    /// it is recommended to enable completion_source only for fields that contain short text with high-quality terms for auto-completion, e.g. title, author, category, product name, tags,
+    /// in order to keep the extraction time and RAM requirement for completions low and the completions relevance high.
+    #[serde(skip_serializing_if = "is_default_bool")]
+    #[serde(default = "default_false")]
+    pub completion_source: bool,
 
     #[serde(skip)]
     pub(crate) indexed_field_id: usize,
@@ -585,10 +602,11 @@ pub struct SchemaField {
 /// # Example
 /// ```rust
 /// use seekstorm::index::{SchemaField, FieldType};
-/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String16, false, false, 1.0);
+/// let schema_field = SchemaField::new("title".to_string(), true, true, FieldType::String16, false, false, 1.0, false, false);
 /// ```
 impl SchemaField {
     /// Creates a new SchemaField.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         field: String,
         stored: bool,
@@ -597,6 +615,8 @@ impl SchemaField {
         facet: bool,
         longest: bool,
         boost: f32,
+        dictionary_source: bool,
+        completion_source: bool,
     ) -> Self {
         SchemaField {
             field,
@@ -606,6 +626,8 @@ impl SchemaField {
             facet,
             longest,
             boost,
+            dictionary_source,
+            completion_source,
 
             indexed_field_id: 0,
             field_id: 0,
@@ -692,9 +714,20 @@ pub struct SpellingCorrection {
     pub max_dictionary_edit_distance: usize,
     /// Term length thresholds for each edit distance.
     ///   None:    max_dictionary_edit_distance for all terms lengths
-    ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+    ///   Some(\[4\]):     max_dictionary_edit_distance for all terms lengths >= 4,
     ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
     pub term_length_threshold: Option<Vec<usize>>,
+
+    /// Maximum number of completions to generate during indexing
+    pub max_dictionary_entries: usize,
+}
+
+/// Defines spelling correction (fuzzy search) settings for an index.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct QueryCompletion {
+    /// Maximum number of completions to generate during indexing
+    /// disabled if == 0
+    pub max_completion_entries: usize,
 }
 
 /// Specifies SimilarityType, TokenizerType and AccessType when creating an new index
@@ -764,6 +797,13 @@ pub struct IndexMetaObject {
     /// ⚠️ In addition to the create_index parameter `meta.spelling_correction` you also need to set the parameter `query_rewriting` in the search method to enable it per query.
     #[serde(default)]
     pub spelling_correction: Option<SpellingCorrection>,
+
+    /// Enable query completion for search queries
+    /// When enabled, an auto-completion list is incrementally created during indexing of documents and stored in the index.
+    /// Because the completions are not based on a generic dictionary, but on a domain specific one derived from your indexed documents (only from indexed fields with completion_source=true), this increases the relevance of completions.
+    /// ⚠️ Deriving completions from indexed documents increases the indexing time and index size.
+    #[serde(default)]
+    pub query_completion: Option<QueryCompletion>,
 }
 
 fn ngram_indexing_default() -> u8 {
@@ -1001,6 +1041,8 @@ pub struct Shard {
     pub(crate) frequent_hashset: AHashSet<u64>,
     pub(crate) key_head_size: usize,
     pub(crate) level_terms: AHashMap<u32, String>,
+    #[allow(clippy::type_complexity)]
+    pub(crate) level_completions: Arc<RwLock<AHashMap<Vec<String>, (usize, bool)>>>,
 }
 
 /// The root object of the index. It contains all levels and all segments of the index.
@@ -1045,7 +1087,11 @@ pub struct Index {
     pub(crate) shard_vec: Vec<Arc<RwLock<Shard>>>,
     pub(crate) shard_queue: Arc<RwLock<VecDeque<usize>>>,
 
+    pub(crate) max_dictionary_entries: usize,
     pub(crate) symspell_option: Option<Arc<RwLock<SymSpell>>>,
+
+    pub(crate) max_completion_entries: usize,
+    pub(crate) completion_option: Option<Arc<RwLock<PruningRadixTrie>>>,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -1235,7 +1281,7 @@ pub(crate) async fn create_index_root(
             for (i, schema_field) in schema.iter().enumerate() {
                 let mut schema_field_clone = schema_field.clone();
                 schema_field_clone.indexed_field_id = indexed_field_vec.len();
-                if schema_field.longest {
+                if schema_field.longest && schema_field.indexed {
                     longest_field_id_option = Some(schema_field_clone.indexed_field_id);
                 }
 
@@ -1381,6 +1427,13 @@ pub(crate) async fn create_index_root(
                 shard_vec,
                 shard_queue: shard_queue_arc,
 
+                max_dictionary_entries: if let Some(spelling_correction) = &meta.spelling_correction
+                {
+                    spelling_correction.max_dictionary_entries
+                } else {
+                    usize::MAX
+                },
+
                 symspell_option: if let Some(spelling_correction) = meta.spelling_correction {
                     Some(Arc::new(RwLock::new(SymSpell::new(
                         spelling_correction.max_dictionary_edit_distance,
@@ -1391,6 +1444,17 @@ pub(crate) async fn create_index_root(
                 } else {
                     None
                 },
+
+                max_completion_entries: if let Some(query_completion) = &meta.query_completion {
+                    query_completion.max_completion_entries
+                } else {
+                    usize::MAX
+                },
+
+                completion_option: meta
+                    .query_completion
+                    .as_ref()
+                    .map(|_query_completion| Arc::new(RwLock::new(PruningRadixTrie::new()))),
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -1809,6 +1873,7 @@ pub(crate) fn create_shard(
                     23
                 },
                 level_terms: AHashMap::new(),
+                level_completions: Arc::new(RwLock::new(AHashMap::with_capacity(200_000))),
             };
 
             let file_len = index.index_file.metadata().unwrap().len();
@@ -2716,9 +2781,7 @@ pub(crate) async fn open_shard(index_path: &Path, mute: bool) -> Result<ShardArc
                             update_list_max_impact_score(&mut shard);
 
                             let mut reader = BufReader::with_capacity(8192, &shard.delete_file);
-                            loop {
-                                let Ok(buffer) = reader.fill_buf() else { break };
-
+                            while let Ok(buffer) = reader.fill_buf() {
                                 let length = buffer.len();
 
                                 if length == 0 {
@@ -2799,6 +2862,18 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                 );
                             }
 
+                            if let Some(completion_option) =
+                                &mut index_arc.read().await.completion_option.as_ref()
+                            {
+                                let _ = completion_option.write().await.load_completions(
+                                    &Path::new(&index_arc.read().await.index_path_string)
+                                        .join(COMPLETIONS_FILENAME),
+                                    0,
+                                    1,
+                                    ":",
+                                );
+                            }
+
                             let mut level_count = 0;
 
                             let mut shard_vec: Vec<Arc<RwLock<Shard>>> = Vec::new();
@@ -2818,6 +2893,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     open_shard(&path, true).await.unwrap()
                                 }));
                             }
+
                             for shard_handle in shard_handle_vec {
                                 let shard_arc = shard_handle.await.unwrap();
                                 shard_arc.write().await.index_option = Some(index_arc.clone());
@@ -2848,7 +2924,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                             if !mute {
                                 let index_ref = index_arc.read().await;
                                 println!(
-                                    "{} name {} id {} version {} {} shards {} ngrams {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} time {} s",
+                                    "{} name {} id {} version {} {} shards {} ngrams {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} dictionary {} completions {} time {} s",
                                     INDEX_FILENAME,
                                     index_ref.meta.name,
                                     index_ref.meta.id,
@@ -2867,6 +2943,25 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     index_ref.indexed_doc_count.to_formatted_string(&Locale::en),
                                     index_ref.deleted_doc_count.to_formatted_string(&Locale::en),
                                     index_ref.segment_number1,
+                                    if let Some(symspell) = index_ref.symspell_option.as_ref() {
+                                        symspell
+                                            .read()
+                                            .await
+                                            .get_dictionary_size()
+                                            .to_formatted_string(&Locale::en)
+                                    } else {
+                                        "None".to_string()
+                                    },
+                                    if let Some(completions) = index_ref.completion_option.as_ref()
+                                    {
+                                        completions
+                                            .read()
+                                            .await
+                                            .len()
+                                            .to_formatted_string(&Locale::en)
+                                    } else {
+                                        "None".to_string()
+                                    },
                                     elapsed_time / 1_000_000_000
                                 );
                             }
@@ -3673,6 +3768,11 @@ impl Index {
             ))));
         }
 
+        let _ = fs::remove_file(index_path.join(COMPLETIONS_FILENAME));
+        if let Some(_query_completion) = self.meta.query_completion.as_ref() {
+            self.completion_option = Some(Arc::new(RwLock::new(PruningRadixTrie::new())));
+        }
+
         let mut result_object_list = Vec::new();
         for shard in self.shard_vec.iter() {
             let shard_clone = shard.clone();
@@ -3688,6 +3788,7 @@ impl Index {
         let index_path = Path::new(&self.index_path_string);
 
         let _ = fs::remove_file(index_path.join(DICTIONARY_FILENAME));
+        let _ = fs::remove_file(index_path.join(COMPLETIONS_FILENAME));
 
         let _ = fs::remove_file(index_path.join(INDEX_FILENAME));
         let _ = fs::remove_file(index_path.join(SCHEMA_FILENAME));
@@ -3747,6 +3848,54 @@ impl Index {
 
         self.synonyms_map = get_synonyms_map(&merged_synonyms, self.segment_number_mask1);
         Ok(merged_synonyms.len())
+    }
+}
+
+/// Remove index from RAM (Reverse of open_index)
+#[allow(async_fn_in_trait)]
+pub trait Close {
+    /// Remove index from RAM (Reverse of open_index)
+    async fn close(&self);
+}
+
+/// Remove index from RAM (Reverse of open_index)
+impl Close for IndexArc {
+    /// Remove index from RAM (Reverse of open_index)
+    async fn close(&self) {
+        self.commit().await;
+
+        if let Some(completion_option) = &self.read().await.completion_option.as_ref() {
+            let trie = completion_option.read().await;
+            let completions_path =
+                Path::new(&self.read().await.index_path_string).join(COMPLETIONS_FILENAME);
+
+            _ = trie.save_completions(&completions_path, ":");
+        }
+
+        if let Some(symspell) = &mut self.read().await.symspell_option.as_ref() {
+            let dictionary_path =
+                Path::new(&self.read().await.index_path_string).join(DICTIONARY_FILENAME);
+            let _ = symspell.read().await.save_dictionary(&dictionary_path, " ");
+        }
+
+        let mut result_object_list = Vec::new();
+        for shard in self.read().await.shard_vec.iter() {
+            let shard_clone = shard.clone();
+            result_object_list.push(tokio::spawn(async move {
+                let mut mmap_options = MmapOptions::new();
+                let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
+                shard_clone.write().await.index_file_mmap = mmap
+                    .make_read_only()
+                    .expect("Unable to make Mmap read-only");
+
+                let mut mmap_options = MmapOptions::new();
+                let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
+                shard_clone.write().await.docstore_file_mmap = mmap
+                    .make_read_only()
+                    .expect("Unable to make Mmap read-only");
+            }));
+        }
+        future::join_all(result_object_list).await;
     }
 }
 
@@ -4044,7 +4193,8 @@ impl IndexDocumentShard for ShardArc {
                     ngram_indexing,
                     schema_field.indexed_field_id,
                     indexed_field_vec_len,
-                );
+                )
+                .await;
 
                 let document_length_compressed: u8 = int_to_byte4(nonunique_terms_count);
                 let document_length_normalized: u32 =

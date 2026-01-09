@@ -1,0 +1,22 @@
+class AutocompleteManager{constructor(inputSelector,suggestionsSelector){this.input=$(inputSelector);this.suggestionsContainer=$(suggestionsSelector);this.suggestions=[];this.selectedIndex=-1;this.lastActionWasDelete=false;this.showSuggestions=false;this.currentValue="";this.init();}
+init(){this.input.on("focus",()=>this.onInputFocus());this.input.on("blur",()=>this.onInputBlur());this.input.on("keydown",(e)=>this.onKeyDown(e));this.suggestionsContainer.on("mouseenter",".suggestion",(e)=>{this.setSelection($(e.currentTarget).index());});this.suggestionsContainer.on("click",".suggestion",(e)=>{this.selectSuggestion($(e.currentTarget).data("suggestion"));});this.suggestionsContainer.parent().on("mouseleave",()=>{if(!this.input.is(":focus")){this.setSuggestionsVisible(false);}});}
+updateSuggestions(suggestions){this.suggestions=suggestions;this.selectedIndex=-1;this.renderSuggestions();}
+renderSuggestions(){this.suggestionsContainer.empty();if(this.suggestions.length===0){this.setSuggestionsVisible(false);return;}
+this.suggestions.forEach((sugg,index)=>{const currentInput=this.input.val().toLowerCase();const suggLower=sugg.toLowerCase();let html;if(suggLower.startsWith(currentInput)){html=`<span class="typed">${this.escapeHtml(this.input.val())}</span>${this.escapeHtml(sugg.substring(this.input.val().length))}`;}else{html=this.escapeHtml(sugg);}
+const suggElement=$(`<div class="suggestion"data-suggestion="${this.escapeHtml(sugg)}"><div>${html}</div></div>`);this.suggestionsContainer.append(suggElement);});if(this.input.is(":focus"))this.setSuggestionsVisible(true);}
+setSuggestionsVisible(visible){this.showSuggestions=visible;if(visible){this.suggestionsContainer.show();}else{this.suggestionsContainer.hide();}}
+setSelection(index){this.suggestionsContainer.find(".suggestion").removeClass("active");if(index>=0&&index<this.suggestions.length){this.selectedIndex=index;this.suggestionsContainer.find(".suggestion").eq(index).addClass("active");}else{this.selectedIndex=-1;}}
+selectSuggestion(suggestion){this.input.val(suggestion);this.input.trigger("input");this.input.trigger("blur");this.setSuggestionsVisible(false);}
+applyAutoCompletion(){if(this.suggestions.length===0||this.lastActionWasDelete||!this.input.is(":focus")){this.input.css("text-decoration","none");return;}
+const correction=this.suggestions[0];const currentValue=this.input.val();const currentValueLower=currentValue.toLowerCase();const correctionLower=correction.toLowerCase();if(correctionLower.startsWith(currentValueLower)){this.input.css("text-decoration","none");const completeValue=currentValue+correction.substring(currentValue.length);this.input.val(completeValue);this.input[0].setSelectionRange(currentValue.length,completeValue.length);}else{this.input.css("text-decoration","wavy red underline");}}
+onInputFocus(){this.setSuggestionsVisible(this.suggestions.length>0);}
+onInputBlur(){setTimeout(()=>{if(!this.suggestionsContainer.is(":hover")){this.setSuggestionsVisible(false);}},200);}
+onKeyDown(event){const key=event.key;if(key==="Backspace"){this.lastActionWasDelete=true;}else if(key!=="ArrowUp"&&key!=="ArrowDown"){this.lastActionWasDelete=false;}
+switch(key){case"Escape":this.input.trigger("blur");event.preventDefault();break;case"Enter":if(this.selectedIndex!==-1){const sugg=this.suggestions[this.selectedIndex];if(sugg.toLowerCase()!==this.input.val().toLowerCase()){this.selectSuggestion(sugg);}else{this.input.trigger("blur");}}else{if((this.suggestions.length>0&&this.suggestions[0].startsWith(this.input.val().toLowerCase()))||(this.suggestions.length==0))this.input.trigger("input");this.input.trigger("blur");this.setSuggestionsVisible(false);}
+event.preventDefault();break;case"ArrowDown":if(this.suggestions.length>0){if(this.selectedIndex<this.suggestions.length-1){this.setSelection(this.selectedIndex+1);}else{this.setSelection(-1);}
+event.preventDefault();}
+break;case"ArrowUp":if(this.suggestions.length>0){if(this.selectedIndex>0){this.setSelection(this.selectedIndex-1);}else if(this.selectedIndex===-1){this.setSelection(this.suggestions.length-1);}else{this.setSelection(-1);}
+event.preventDefault();}
+break;}}
+escapeHtml(text){const map={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"};return text.replace(/[&<>"']/g,(char)=>map[char]);}
+isMobile(){return window.innerWidth<=750;}}

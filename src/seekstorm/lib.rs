@@ -47,6 +47,7 @@
 //! ngram_indexing:NgramSet::NgramFF as u8,
 //! access_type: AccessType::Mmap,
 //! spelling_correction: None,
+//! query_completion: None,
 //! };
 //! let segment_number_bits1=11;
 //! let serialize_schema=true;
@@ -344,7 +345,7 @@
 //! # use std::path::Path;
 //! # let index_path=Path::new("C:/index/");
 //! # let mut index_arc=open_index(index_path,false).await.unwrap();
-//! use seekstorm::commit::Close;
+//! use seekstorm::index::Close;
 //!
 //! index_arc.close().await;
 //! # });
@@ -391,6 +392,7 @@
 //!     ngram_indexing:NgramSet::NgramFF as u8,
 //!     access_type: AccessType::Mmap,
 //!     spelling_correction: None,
+//!     query_completion: None,
 //! };
 //! let serialize_schema=true;
 //! let segment_number_bits1=11;

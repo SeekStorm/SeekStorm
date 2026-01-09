@@ -11,10 +11,8 @@ use std::{
 #[cfg(target_arch = "aarch64")]
 use std::{
     arch::aarch64::{uint16x8_t, vceqq_u16, vld1q_dup_u16, vld1q_u16, vst1q_u16},
-    mem::size_of,
+    mem::{self},
 };
-
-use ahash::AHashSet;
 
 use crate::index::Shard;
 use crate::{
@@ -23,6 +21,7 @@ use crate::{
     search::{FilterSparse, ResultType, SearchResult},
     utils::read_u16,
 };
+use ahash::AHashSet;
 
 /// Fast SIMD intersection and union partially ported and modified from Daniel Lemire's CRoaring project (which is dual licensed Apache/MIT).
 #[cfg(target_arch = "x86_64")]
@@ -461,7 +460,7 @@ pub(crate) fn intersection_vector16(
     unsafe {
         let mut i_a = 0;
         let mut i_b = 0;
-        let vectorlength = size_of::<uint16x8_t>() / size_of::<u16>();
+        let vectorlength = mem::size_of::<uint16x8_t>() / mem::size_of::<u16>();
         let st_b = (s_b / vectorlength) * vectorlength;
         while i_a < s_a && i_b < st_b {
             if read_u16(&a[..], i_a * 2) < read_u16(&b[..], i_b * 2) {

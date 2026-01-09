@@ -5,7 +5,7 @@ use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::str::{self, from_utf8};
+use std::str::from_utf8;
 use std::sync::Arc;
 use std::{convert::Infallible, net::SocketAddr};
 
@@ -34,9 +34,8 @@ use tokio::net::TcpListener;
 
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::api_endpoints::{CreateIndexRequest, hello_api};
+use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
-use crate::api_endpoints::update_document_api;
 use crate::api_endpoints::update_documents_api;
 use crate::api_endpoints::{GetDocumentRequest, delete_apikey_api};
 use crate::api_endpoints::{SearchRequestObject, create_index_api};
@@ -50,6 +49,7 @@ use crate::api_endpoints::{delete_documents_by_object_api, delete_documents_by_q
 use crate::api_endpoints::{delete_index_api, get_file_api};
 use crate::api_endpoints::{get_apikey_indices_info_api, index_file_api};
 use crate::api_endpoints::{get_document_api, get_synonyms_api};
+use crate::api_endpoints::{hello_api, update_document_api};
 use crate::api_endpoints::{index_document_api, query_index_api_get, query_index_api_post};
 use crate::multi_tenancy::ApikeyObject;
 use crate::multi_tenancy::get_apikey_hash;
@@ -59,6 +59,7 @@ const INDEX_HTML: &str = include_str!("web/index.html");
 const FLEXBOX_CSS: &str = include_str!("web/css/flexboxgrid.min.css");
 const MASTER_CSS: &str = include_str!("web/css/master.css");
 const MASTER_JS: &str = include_str!("web/js/master.js");
+const AUTOCOMPLETE_JS: &str = include_str!("web/js/autocomplete.js");
 const JQUERY_JS: &str = include_str!("web/js/jquery-3.7.1.min.js");
 const LOGO_SVG: &[u8] = include_bytes!("web/svg/logo.svg");
 const FAVICON_16: &[u8] = include_bytes!("web/favicon-16x16.png");
@@ -166,11 +167,8 @@ pub(crate) async fn http_request_handler(
         req.method(),
     ) {
         ("api", "v1", "hello", _, _, _, &Method::GET) => {
-            let hello_message =
-                serde_json::to_vec(&hello_api()).unwrap();
-            Ok(Response::new(BoxBody::new(Full::new(
-                hello_message.into(),
-            ))))
+            let hello_message = serde_json::to_vec(&hello_api()).unwrap();
+            Ok(Response::new(BoxBody::new(Full::new(hello_message.into()))))
         }
 
         ("api", "v1", "index", _, "query", _, &Method::POST) => {
@@ -372,6 +370,7 @@ pub(crate) async fn http_request_handler(
                 create_index_request_object.force_shard_number,
                 apikey_object,
                 create_index_request_object.spelling_correction,
+                create_index_request_object.query_completion,
             )
             .await;
             drop(apikey_list_mut);
@@ -1048,6 +1047,7 @@ pub(crate) async fn http_request_handler(
             "/css/flexboxgrid.min.css" => Ok(Response::new(BoxBody::new(FLEXBOX_CSS.to_string()))),
             "/css/master.css" => Ok(Response::new(BoxBody::new(MASTER_CSS.to_string()))),
             "/js/master.js" => Ok(Response::new(BoxBody::new(MASTER_JS.to_string()))),
+            "/js/autocomplete.js" => Ok(Response::new(BoxBody::new(AUTOCOMPLETE_JS.to_string()))),
             "/js/jquery-3.7.1.min.js" => Ok(Response::new(BoxBody::new(JQUERY_JS.to_string()))),
 
             "/css/bootstrap.histogram.slider.css" => {

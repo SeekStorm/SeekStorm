@@ -43,7 +43,8 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting.
 * 6 tokenizers, including Chinese word segmentation.
-* Typo tolerance / Fuzzy queries / Query spelling correction: return relevant results even if the query contains spelling mistakes.
+* Typo tolerance / Fuzzy queries / Query spelling correction: return results if the query contains spelling errors.
+* Typo-tolerant Query Auto-Completion (QAC) and Instant search.
 * Stemming for 18 languages
 * Stopword lists, custom and predefined, for smaller indices and faster search.
 * Frequent word lists, custom and predefined, for faster phrase search by N-gram indexing.
@@ -58,6 +59,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * SIMD (Single Instruction, Multiple Data) hardware acceleration support,  
   both for x86-64 (AMD64 and Intel 64) and AArch64 (ARM, Apple Silicon).
 * Single-machine scalability: serving thousands of concurrent queries with low latency from a single commodity server without needing clusters or proprietary hardware accelerators.
+* Web UI with query auto correction, query auto-completion, instant search, keyword highlighting, histogram, date filter, faceting, result sorting, document preview (as demo, for testing, as template).
 
 Query types
 + OR  disjunction  union
@@ -308,7 +310,7 @@ create schema (from JSON)
 use seekstorm::index::SchemaField;
 
 let schema_json = r#"
-[{"field":"title","field_type":"Text","stored":false,"indexed":false},
+[{"field":"title","field_type":"Text","stored":false,"indexed":false,"dictionary_source":true,"completion_source":true},
 {"field":"body","field_type":"Text","stored":true,"indexed":true},
 {"field":"url","field_type":"Text","stored":false,"indexed":false}]"#;
 let schema:Vec<SchemaField>=serde_json::from_str(schema_json).unwrap();
@@ -319,9 +321,9 @@ create schema (from SchemaField)
 use seekstorm::index::{SchemaField,FieldType};
 
 let schema= vec![
-    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false,false, 1.0),
-    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
-    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,false,1.0),
+    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false,false, 1.0,true,true),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0,false,false),
+    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,false,1.0,false,false),
 ];
 ```
 
@@ -330,14 +332,14 @@ create index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,create_index};
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false,false, 1.0),
-    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
-    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,false,1.0),
+    SchemaField::new("title".to_owned(), false, false, FieldType::Text, false,false, 1.0,true,true),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0,false,false),
+    SchemaField::new("url".to_owned(), false, false, FieldType::Text,false,false,1.0,false,false),
 ];
 
 let meta = IndexMetaObject {
@@ -350,7 +352,8 @@ let meta = IndexMetaObject {
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries:500_000 }),
+    query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
 };
 
 let segment_number_bits1=11;
@@ -452,7 +455,7 @@ let field_filter=Vec::new();
 let query_facets=Vec::new();
 let facet_filter=Vec::new();
 let result_sort=Vec::new();
-let query_rewriting= QueryRewriting::SearchCorrect { distance: 1, term_length_threshold: Some([2,8].into()), length: Some(5) };
+let query_rewriting= QueryRewriting::SearchRewrite { distance: 1, term_length_threshold: Some([2,8].into()), correct:Some(2),complete: Some(3), length: Some(5) };
 let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,query_rewriting).await;
 
 // ### display results
@@ -479,7 +482,16 @@ for result in result_object.results.iter() {
   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
 }
+
 println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+
+// ### display suggestions
+
+println!("original query string: {} query string after correction/completion {}",result_object.original_query, result_object.query);
+
+for suggesion in result_object.suggestions.iter() {
+    println!("suggestion: {}", suggesion);
+}
 
 # })
 ```
@@ -610,15 +622,15 @@ First, you need to create an index with a schema matching the JSON file fields t
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,create_index};
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
     // field, stored, indexed, field_type, facet, longest, boost
-    SchemaField::new("title".to_owned(), true, true, FieldType::Text, false,false, 10.0),
-    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
-    SchemaField::new("url".to_owned(), true, false, FieldType::Text,false,false,1.0),
+    SchemaField::new("title".to_owned(), true, true, FieldType::Text, false,false, 10.0,false,false),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0,false,false),
+    SchemaField::new("url".to_owned(), true, false, FieldType::Text,false,false,1.0,false,false),
 ];
 
 let meta = IndexMetaObject {
@@ -631,7 +643,8 @@ let meta = IndexMetaObject {
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries:500_000 }),
+    query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
 };
 
 let segment_number_bits1=11;
@@ -668,16 +681,16 @@ First, you need to create an index with the following PDF specific schema (index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,create_index};
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
     // field, stored, indexed, field_type, facet, longest, boost
-    SchemaField::new("title".to_owned(), true, true, FieldType::Text, false,false, 10.0),
-    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0),
-    SchemaField::new("url".to_owned(), true, false, FieldType::Text,false,false,1.0),
-    SchemaField::new("date".to_owned(), true, false, FieldType::Timestamp,true,false,1.0),
+    SchemaField::new("title".to_owned(), true, true, FieldType::Text, false,false, 10.0,false,false),
+    SchemaField::new("body".to_owned(),true,true,FieldType::Text,false,true,1.0,false,false),
+    SchemaField::new("url".to_owned(), true, false, FieldType::Text,false,false,1.0,false,false),
+    SchemaField::new("date".to_owned(), true, false, FieldType::Timestamp,true,false,1.0,false,false),
 ];
 
 let meta = IndexMetaObject {
@@ -690,7 +703,8 @@ let meta = IndexMetaObject {
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()) }),
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries:500_000 }),
+    query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
 };
 
 let segment_number_bits1=11;
@@ -806,8 +820,8 @@ close index
 # tokio_test::block_on(async {
 
 use seekstorm::index::open_index;
+use seekstorm::index::Close;
 use std::path::Path;
-use seekstorm::commit::Close;
 
 let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path,false).await.unwrap();
@@ -883,6 +897,7 @@ let meta = IndexMetaObject {
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
     spelling_correction: None,
+    query_completion: None,
 };
 
 let synonyms=Vec::new();
@@ -1166,7 +1181,7 @@ The Rust port is not yet feature complete. The following features are currently 
 * ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
 * ✅ Tokenizer with Chinese word segmentation
 * ✅ Typo tolerance (Query spelling correction)
-* 👷 Typo-tolerant query auto-completion (QAC)
+* ✅ Typo-tolerant query auto-completion (QAC)
 
 **Improvements**
 * ✅ Better REST API documentation: integrated OpenAPI generator
@@ -1189,3 +1204,5 @@ The Rust port is not yet feature complete. The following features are currently 
 * WebAssembly (Wasm)
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
 * Client libraries/SDK in JavaScript, Python, Java, C#, C, Go, Rust for the SeekStorm server REST API
+
+

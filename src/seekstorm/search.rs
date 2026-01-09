@@ -1,10 +1,10 @@
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
 use crate::index::{
     DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
-    ShardArc, TokenizerType,
+    ShardArc,
 };
 use crate::min_heap::{Result, result_ordering_root};
-use crate::tokenizer::{fold_diacritics_accents_zalgo_umlaut, tokenizer};
+use crate::tokenizer::{tokenizer, tokenizer_lite};
 use crate::union::{union_docid_2, union_docid_3};
 use crate::utils::{
     read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u8, read_u16, read_u32,
@@ -37,7 +37,7 @@ use std::sync::{
 use std::{cmp, mem};
 use utoipa::ToSchema;
 
-use symspell_rs::Suggestion;
+use symspell_complete_rs::Suggestion;
 
 /// Specifies the default QueryType: The following query types are supported:
 /// - **Union** (OR, disjunction),
@@ -62,13 +62,16 @@ pub enum QueryType {
 /// Specifies whether query rewriting is enabled or disabled
 #[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum QueryRewriting {
-    /// Query rewriting disabled, returs query results for query as-is, returns no suggestions for misspelled query terms.
+    /// Query rewriting disabled, returns query results for query as-is, returns no suggestions for corrected or completed query.
     /// No performance overhead for spelling correction and suggestions.
     #[default]
     SearchOnly,
-    /// Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+    /// Query rewriting disabled, returns query results for original query string, returns suggestions for corrected or completed query.
     /// Additional latency for spelling suggestions.
     SearchSuggest {
+        /// Enable query correction, for queries with query string length >= threshold
+        /// A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+        correct: Option<usize>,
         /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
         distance: usize,
         /// Term length thresholds for each edit distance.
@@ -76,12 +79,18 @@ pub enum QueryRewriting {
         ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
         ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         term_length_threshold: Option<Vec<usize>>,
-        /// The second parameter is the maximum number of suggestions to return.
+        /// Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections
+        /// A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+        complete: Option<usize>,
+        /// An option to limit maximum number of returned suggestions.
         length: Option<usize>,
     },
-    /// Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+    /// Query rewriting enabled, returns query results for spelling corrected or completed query string (=instant search), returns suggestions for corrected or completed query.
     /// Additional latency for spelling correction and suggestions.
-    SearchCorrect {
+    SearchRewrite {
+        /// Enable query correction, for queries with query string length >= threshold
+        /// A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+        correct: Option<usize>,
         /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
         distance: usize,
         /// Term length thresholds for each edit distance.
@@ -89,11 +98,17 @@ pub enum QueryRewriting {
         ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
         ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         term_length_threshold: Option<Vec<usize>>,
-        /// The second parameter is the maximum number of suggestions to return.
+        /// Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections
+        /// A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+        complete: Option<usize>,
+        /// An option to limit maximum number of returned suggestions.
         length: Option<usize>,
     },
-    /// Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+    /// Search disabled, returns no query results, only returns suggestions for corrected or completed query.
     SuggestOnly {
+        /// Enable query correction, for queries with query string length >= threshold
+        /// A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+        correct: Option<usize>,
         /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.
         distance: usize,
         /// Term length thresholds for each edit distance.
@@ -101,7 +116,10 @@ pub enum QueryRewriting {
         ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
         ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         term_length_threshold: Option<Vec<usize>>,
-        /// The second parameter is the maximum number of suggestions to return.
+        /// Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections
+        /// A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+        complete: Option<usize>,
+        /// An option to limit maximum number of returned suggestions.
         length: Option<usize>,
     },
 }
@@ -131,6 +149,8 @@ pub(crate) struct SearchResult<'a> {
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub struct ResultObject {
     /// Search query string
+    pub original_query: String,
+    /// Search query string after any automatic query correction or completion
     pub query: String,
     /// Vector of search query terms. Can be used e.g. for custom highlighting.
     pub query_terms: Vec<String>,
@@ -895,7 +915,6 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="\"red apple\"".to_string();
 /// ```
-///
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Phrase;
@@ -908,13 +927,13 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="apple -red".to_string();
 /// ```
-///
 /// Mixed phrase and intersection
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Union;
 /// let query_string="+\"the who\" +uk".to_string();
 /// ```
+///
 ///
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
@@ -999,7 +1018,6 @@ pub trait Search {
     /// let query_type=QueryType::Union;
     /// let query_string="\"red apple\"".to_string();
     /// ```
-    ///
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
     /// let query_type=QueryType::Phrase;
@@ -1012,7 +1030,6 @@ pub trait Search {
     /// let query_type=QueryType::Union;
     /// let query_string="apple -red".to_string();
     /// ```
-    ///
     /// Mixed phrase and intersection
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
@@ -1054,23 +1071,24 @@ pub trait Search {
     ///   Examples:
     ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
     ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
-    /// * `query_rewriting`: Enables query rewriting features such as spelling correction and suggestions.
+    /// * `query_rewriting`: Enables query rewriting features such as spelling correction and query auto-completion (QAC).
     ///   The spelling correction of multi-term query strings handles three cases:
     ///     1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`
     ///     2. mistakenly omitted space between two correct terms led to one incorrect combined term: `modernart` -> `modern art`
     ///     3. multiple independent input terms with/without spelling errors: `cinese indastrialication` -> `chinese industrialization`
     ///
-    /// See QueryRewriting enum for details.
+    ///   Query correction/completion supports phrases "", but is disabled, if +- operators are used,  or if a opening quote is used after the first term, or if a closing quote is used before the last term.
+    ///   See QueryRewriting enum for details.
     ///   ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `meta.spelling_correction`.
     ///  
     /// Facets:
     ///
-    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
-    ///    Facets are defined in 3 different places:
-    ///    the facet fields are defined in schema at create_index,
-    ///    the facet field values are set in index_document at index time,
-    ///    the query_facets/facet_filter search parameters are specified at query time.
-    ///    Facets are then returned in the search result object.
+    ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///   Facets are defined in 3 different places:
+    ///   the facet fields are defined in schema at create_index,
+    ///   the facet field values are set in index_document at index time,
+    ///   the query_facets/facet_filter search parameters are specified at query time.
+    ///   Facets are then returned in the search result object.
     async fn search(
         &self,
         query_string: String,
@@ -1103,89 +1121,165 @@ impl Search for IndexArc {
         query_rewriting: QueryRewriting,
     ) -> ResultObject {
         let index_ref = self.read().await;
+        let original_query = query_string.clone();
 
-        let fuzzy: Option<(String, Vec<Suggestion>)> = if let Some(symspell) =
-            &index_ref.symspell_option
-            && query_rewriting != QueryRewriting::SearchOnly
-        {
-            let (edit_distance_max, term_length_threshold, _length) = match &query_rewriting {
+        let (edit_distance_max, term_length_threshold, correct, complete, suggestion_length) =
+            match &query_rewriting {
                 QueryRewriting::SearchSuggest {
                     distance,
                     term_length_threshold,
+                    correct,
+                    complete,
                     length,
-                } => (distance, term_length_threshold, length),
+                } => (distance, term_length_threshold, correct, complete, length),
                 QueryRewriting::SuggestOnly {
                     distance,
                     term_length_threshold,
+                    correct,
+                    complete,
                     length,
-                } => (distance, term_length_threshold, length),
-                QueryRewriting::SearchCorrect {
+                } => (distance, term_length_threshold, correct, complete, length),
+                QueryRewriting::SearchRewrite {
                     distance,
                     term_length_threshold,
+                    correct,
+                    complete,
                     length,
-                } => (distance, term_length_threshold, length),
-                _ => (&0, &None, &None),
+                } => (distance, term_length_threshold, correct, complete, length),
+                _ => (&0, &None, &None, &None, &None),
             };
 
-            if let Ok(symspell) = symspell.try_read()
-                && (term_length_threshold.is_none()
-                    || term_length_threshold.as_ref().unwrap().is_empty()
-                    || query_string.len() >= term_length_threshold.as_ref().unwrap()[0])
-            {
-                let suggestions =
-                    if index_ref.meta.tokenizer == TokenizerType::UnicodeAlphanumericFolded {
-                        let query_string = fold_diacritics_accents_zalgo_umlaut(&query_string);
-                        symspell.lookup_compound(
-                            &query_string,
-                            edit_distance_max.to_owned(),
-                            term_length_threshold,
-                            false,
-                        )
-                    } else {
-                        symspell.lookup_compound(
-                            &query_string,
-                            edit_distance_max.to_owned(),
-                            term_length_threshold,
-                            false,
-                        )
-                    };
+        let (query_string, suggestions) = if correct.is_some() || complete.is_some() {
+            let shard = index_ref.shard_vec[0].read().await;
+            let query_terms = tokenizer_lite(&query_string, &index_ref.meta.tokenizer, &shard);
+            drop(shard);
 
-                if suggestions.is_empty() {
-                    None
+            if !query_terms.is_empty() {
+                let query_terms_vec: Vec<String> =
+                    query_terms.iter().map(|s| s.0.to_string()).collect();
+
+                let suffix = if query_string.ends_with(" ") { " " } else { "" };
+                let (query_terms_prefix, query_terms_str) = if query_terms.len() + suffix.len() > 3
+                {
+                    (
+                        query_terms_vec[..query_terms.len() - 3 + suffix.len()].join(" ") + " ",
+                        query_terms_vec[query_terms.len() - 3 + suffix.len()..].join(" ") + suffix,
+                    )
                 } else {
-                    Some((suggestions[0].term.clone(), suggestions))
+                    (String::new(), query_terms_vec.join(" ") + suffix)
+                };
+                let is_phrase = !query_terms.is_empty() && query_terms[0].1 == QueryType::Phrase;
+
+                let qac: Option<(String, Vec<Suggestion>)> = if let Some(completion_option) =
+                    index_ref.completion_option.as_ref()
+                    && complete.is_some()
+                    && query_string.len() >= complete.unwrap()
+                    && query_rewriting != QueryRewriting::SearchOnly
+                {
+                    let trie = completion_option.read().await;
+                    let completions =
+                        trie.lookup_completions(&query_terms_str, suggestion_length.to_owned());
+
+                    if completions.is_empty() {
+                        None
+                    } else {
+                        let mut suggestions: Vec<Suggestion> = Vec::new();
+                        for qc in completions.iter() {
+                            suggestions.push(Suggestion {
+                                term: if is_phrase {
+                                    ["\"", &query_terms_prefix, &qc.term, "\""].join("")
+                                } else {
+                                    [query_terms_prefix.as_str(), &qc.term].join("")
+                                },
+                                distance: qc.term.len() - query_string.len(),
+                                count: *qc.count,
+                            });
+                        }
+
+                        let completed_query = suggestions[0].term.to_string();
+
+                        Some((completed_query, suggestions))
+                    }
+                } else {
+                    None
+                };
+
+                let qac: Option<(String, Vec<Suggestion>)> = if let Some(symspell) =
+                    &index_ref.symspell_option
+                    && correct.is_some()
+                    && query_string.len() >= correct.unwrap()
+                    && query_rewriting != QueryRewriting::SearchOnly
+                    && qac.is_none()
+                {
+                    if let Ok(symspell) = symspell.try_read()
+                        && (term_length_threshold.is_none()
+                            || term_length_threshold.as_ref().unwrap().is_empty()
+                            || query_string.len() >= term_length_threshold.as_ref().unwrap()[0])
+                    {
+                        let mut corrections = symspell.lookup_compound_vec(
+                            &query_terms_vec,
+                            edit_distance_max.to_owned(),
+                            term_length_threshold,
+                            false,
+                        );
+
+                        if corrections.is_empty() {
+                            None
+                        } else {
+                            if is_phrase {
+                                for suggestion in corrections.iter_mut() {
+                                    suggestion.term = ["\"", &suggestion.term, "\""].join("");
+                                }
+                            }
+
+                            Some((corrections[0].term.clone(), corrections))
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    qac
+                };
+
+                if let Some((corrected_query, suggestions)) = qac {
+                    if discriminant(&query_rewriting)
+                        == discriminant(&QueryRewriting::SearchRewrite {
+                            distance: 0,
+                            term_length_threshold: None,
+                            correct: None,
+                            complete: None,
+                            length: None,
+                        })
+                    {
+                        (corrected_query, Some(suggestions))
+                    } else {
+                        (query_string, Some(suggestions))
+                    }
+                } else {
+                    (query_string, None)
                 }
             } else {
-                None
+                (query_string, None)
             }
         } else {
-            None
-        };
-
-        let query_string = if let Some((corrected_query, _suggestions)) = &fuzzy
-            && discriminant(&query_rewriting)
-                != discriminant(&QueryRewriting::SearchSuggest {
-                    distance: 0,
-                    term_length_threshold: None,
-                    length: None,
-                }) {
-            corrected_query
-        } else {
-            &query_string
+            (query_string, None)
         };
 
         if discriminant(&query_rewriting)
             == discriminant(&QueryRewriting::SuggestOnly {
                 distance: 0,
                 term_length_threshold: None,
+                correct: None,
+                complete: None,
                 length: None,
             })
         {
             let mut result_object = ResultObject {
+                original_query,
                 query: query_string.clone(),
                 ..Default::default()
             };
-            if let Some((_corrected_query, suggestions)) = fuzzy.as_ref() {
+            if let Some(suggestions) = suggestions.as_ref() {
                 result_object.suggestions = suggestions.iter().map(|s| s.term.clone()).collect();
             }
             return result_object;
@@ -1206,8 +1300,9 @@ impl Search for IndexArc {
                     result_sort,
                 )
                 .await;
+            result_object.original_query = original_query;
             result_object.query = query_string.clone();
-            if let Some((_corrected_query, suggestions)) = fuzzy.as_ref() {
+            if let Some(suggestions) = suggestions.as_ref() {
                 result_object.suggestions = suggestions.iter().map(|s| s.term.clone()).collect();
             }
             return result_object;
@@ -1233,8 +1328,8 @@ impl Search for IndexArc {
                     .search_shard(
                         query_string_clone,
                         query_type_clone,
-                        offset,
-                        length,
+                        0,
+                        offset + length,
                         result_type_clone,
                         include_uncommited,
                         field_filter_clone,
@@ -1243,6 +1338,15 @@ impl Search for IndexArc {
                         result_sort_clone,
                     )
                     .await;
+
+                println!(
+                    "aggregate: shard {} offset {} length {} results_len {} total {} ",
+                    shard_id,
+                    offset,
+                    length,
+                    rlo.results.len(),
+                    rlo.result_count_total
+                );
 
                 if aggregate_results {
                     for result in rlo.results.iter_mut() {
@@ -1415,6 +1519,7 @@ impl Search for IndexArc {
             result_object.facets.insert(key.clone(), sum);
         }
 
+        // != count
         if aggregate_results {
             let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
             if !result_sort.is_empty() {
@@ -1450,6 +1555,14 @@ impl Search for IndexArc {
                     .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
             }
 
+            if offset > 0 {
+                result_object.results = if offset >= result_object.results.len() {
+                    Vec::new()
+                } else {
+                    result_object.results.split_off(offset)
+                };
+            }
+
             if result_object.results.len() > length {
                 result_object.results.truncate(length);
             }
@@ -1457,9 +1570,10 @@ impl Search for IndexArc {
             result_object.result_count = result_object.results.len();
         }
 
+        result_object.original_query = original_query;
         result_object.query = query_string.clone();
-        if let Some((_corrected_query, suggestions)) = fuzzy {
-            result_object.suggestions = suggestions.into_iter().map(|s| s.term).collect();
+        if let Some(suggestions) = suggestions {
+            result_object.suggestions = suggestions.into_iter().map(|s| s.term.clone()).collect();
         }
 
         result_object
@@ -2352,7 +2466,8 @@ impl SearchShard for ShardArc {
                 shard_ref.meta.ngram_indexing,
                 0,
                 1,
-            );
+            )
+            .await;
 
             if include_uncommited && shard_ref.uncommitted {
                 shard_ref.search_uncommitted(

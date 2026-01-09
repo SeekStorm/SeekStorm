@@ -604,16 +604,37 @@ impl IngestJson for IndexArc {
 
                 let date: DateTime<Utc> = DateTime::from(SystemTime::now());
 
+                let index_ref = self.read().await;
+
                 println!(
-                    "{}: {} shards {}  ngrams {:08b}  docs {}  docs/sec {}  docs/day {} minutes {:.2} seconds {}",
+                    "{}: {} shards {} levels {} ngrams {:08b}  docs {}  docs/sec {}  docs/day {} dictionary {} completions {} minutes {:.2} seconds {}",
                     "Indexing finished".green(),
                     date.format("%D"),
-                    index_arc_clone.read().await.shard_count().await,
-                    self.read().await.meta.ngram_indexing,
+                    index_ref.shard_count().await,
+                    index_ref.shard_vec[0].read().await.level_index.len(),
+                    index_ref.meta.ngram_indexing,
                     docid.to_formatted_string(&Locale::en),
                     (docid as u128 * 1_000_000_000 / elapsed_time).to_formatted_string(&Locale::en),
                     ((docid as u128 * 1_000_000_000 / elapsed_time) * 3600 * 24)
                         .to_formatted_string(&Locale::en),
+                    if let Some(symspell) = index_ref.symspell_option.as_ref() {
+                        symspell
+                            .read()
+                            .await
+                            .get_dictionary_size()
+                            .to_formatted_string(&Locale::en)
+                    } else {
+                        "None".to_string()
+                    },
+                    if let Some(completions) = index_ref.completion_option.as_ref() {
+                        completions
+                            .read()
+                            .await
+                            .len()
+                            .to_formatted_string(&Locale::en)
+                    } else {
+                        "None".to_string()
+                    },
                     elapsed_time as f64 / 1_000_000_000.0 / 60.0,
                     elapsed_time / 1_000_000_000
                 );

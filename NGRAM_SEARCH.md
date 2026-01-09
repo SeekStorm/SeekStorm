@@ -241,13 +241,16 @@ The results were generated using the following benchmark environment:
 
 | Library | N-gram type | mean (µs) | factor | p50 (µs) | factor | p95 (µs) | factor | p99 (µs) | factor | p99.9 (µs) | factor |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **SeekStorm 0.13.0** | **Single Terms**               | **1,090** | **1.00** | **320** | **1.00** | **2,990** | **1.00** | **16,910** | **1.00** | **60,490** | **1.00** | 
-| SeekStorm 0.13.0 | Frequent Bigrams                   |   890 | 1.22 | 320  | 1.00 | 3,180 | 0.94 | 10,230 | 1.65 | 26,070 | 2.32 |
-| **SeekStorm 0.13.0** | **Frequent Bigrams/Frequent Trigrams** |   **880** | **1.24** | **320** | **1.00** | **2,850** | **1.05** | **8,950** | **1.89** | **24,430** | **2.48** |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    |   820 | 1.33 | 310 | 1.03 | 2,890 | 1.03  | 8,440 | 2.00 | 24,840 | 2.44 |
-| SeekStorm 0.13.0 | Mixed Bigrams                      |   510 | 2.14 | 260 | 1.23 | 1,050 | 2.84 | 3,800 | 4.45 | 8,050 | 7.51 |
-| **SeekStorm 0.13.0** | **Mixed Bigrams/Frequent Trigrams**    |   **500** | **2.18** | **260** | **1.23** | **1,890** | **1.58** | **3,820** | **4.43** | **7,930** | **7.63** |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       |   510 | 2.14 | 270 | 1.19 | 1,790 | 1.67 | 3,850 | 4.39 |  8,180 | 7.39 |
+| **SeekStorm 1.0.0** | **Single Terms**               | **1,090** | **1.00** | **320** | **1.00** | **2,990** | **1.00** | **16,910** | **1.00** | **60,490** | **1.00** | 
+| SeekStorm 1.0.0 | Frequent Bigrams                   |   890 | 1.22 | 320  | 1.00 | 3,180 | 0.94 | 10,230 | 1.65 | 26,070 | 2.32 |
+| **SeekStorm 1.0.0** | **Frequent Bigrams/Frequent Trigrams** |   **880** | **1.24** | **320** | **1.00** | **2,850** | **1.05** | **8,950** | **1.89** | **24,430** | **2.48** |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    |   820 | 1.33 | 310 | 1.03 | 2,890 | 1.03  | 8,440 | 2.00 | 24,840 | 2.44 |
+| SeekStorm 1.0.0 | Mixed Bigrams                      |   510 | 2.14 | 260 | 1.23 | 1,050 | 2.84 | 3,800 | 4.45 | 8,050 | 7.51 |
+| **SeekStorm 1.0.0** | **Mixed Bigrams/Frequent Trigrams**    |   **500** | **2.18** | **260** | **1.23** | **1,890** | **1.58** | **3,820** | **4.43** | **7,930** | **7.63** |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       |   510 | 2.14 | 270 | 1.19 | 1,790 | 1.67 | 3,850 | 4.39 |  8,180 | 7.39 |
+| Lucene 10.2.2 | Single Terms               |  |  |  |  |  |  |  |  |  |  | 
+| Lucene 10.2.2-bp | Single Terms            |  |  |  |  |  |  |  |  |  |  | 
+| Tantivy 0.24.2 | Single Terms              |  |  |  |  |  |  |  |  |  |  | 
 
 7 (Frequent Bigrams) vs. 51 (Mixed Bigrams + Mixed Trigrams) of 903 queries in the benchmark are benefiting from N-gram indexing.  
 Those are usually the most challenging ones, causing high tail latencies.
@@ -260,13 +263,56 @@ For more information on tail latencies see our blog post [Tail latencies and per
 
 | Library | N-gram type | Index size (byte) | factor | Indexing time (s) | factor |
 | --- | --- |  ---: |  ---: | ---: | ---: |
-| **SeekStorm 0.13.0** | **Single Terms**               | **3.880.714.411** | **1.00** | **558** | **1.00** |
-| SeekStorm 0.13.0 | Frequent Bigrams                   | 4.476.185.397 | 1.15 | 605 | 1.08 |
-| **SeekStorm 0.13.0** | **Frequent Bigrams/Frequent Trigrams** | **4.613.052.374** | **1.19** | **636** | **1.14** |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    | 9.680.952.871 | 2.49 | 2203 | 3.95 |
-| SeekStorm 0.13.0 | Mixed Bigrams                      | 11.314.218.483 | 2.92 | 2138 | 3.83 |
-| **SeekStorm 0.13.0** | **Mixed Bigrams/Frequent Trigrams**    | **11.531.297.587** | **2.97** | **2204** | **3.95** |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       | 16.599.113.374 | 4.28 | 4164 | 7.46 |
+| **SeekStorm 1.0.0** | **Single Terms**               | **3.880.714.411** | **1.00** | **558** | **1.00** |
+| SeekStorm 1.0.0 | Frequent Bigrams                   | 4.476.185.397 | 1.15 | 605 | 1.08 |
+| **SeekStorm 1.0.0** | **Frequent Bigrams/Frequent Trigrams** | **4.613.052.374** | **1.19** | **636** | **1.14** |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    | 9.680.952.871 | 2.49 | 2203 | 3.95 |
+| SeekStorm 1.0.0 | Mixed Bigrams                      | 11.314.218.483 | 2.92 | 2138 | 3.83 |
+| **SeekStorm 1.0.0** | **Mixed Bigrams/Frequent Trigrams**    | **11.531.297.587** | **2.97** | **2204** | **3.95** |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       | 16.599.113.374 | 4.28 | 4164 | 7.46 |
+| Lucene 10.2.2 | Single Terms                         |                |      |      |      |
+| Lucene 10.2.2-bp | Single Terms                      |                |      |      |      |
+| Tantivy 0.24.2 | Single Terms                        |                |      |      |      |
+
+#### The bigger picture of general state-of-the-art search performance
+
+| Library | Query type | Fields | mean (µs) | factor | p50 (µs) | factor | p95 (µs) | factor | p99 (µs) | factor | p99.9 (µs) | factor |
+| --- | --- | ---: | ---: | ---: |---: | ---: | ---: | ---: | ---: | ---: |---: | ---: |
+| SeekStorm 1.0.0  | Phrase       | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | Phrase       | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | Phrase       | 1 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | Phrase       | 1 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | Phrase       | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | Phrase       | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | Phrase       | 2 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | Phrase       | 2 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | Intersection | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | Intersection | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | Intersection | 1 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | Intersection | 1 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | Intersection | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | Intersection | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | Intersection | 2 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | Intersection | 2 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | Union        | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | Union        | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | Union        | 1 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | Union        | 1 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | Union        | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | Union        | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | Union        | 2 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | Union        | 2 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | All          | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | All          | 1 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | All          | 1 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | All          | 1 |  |  |  |  |  |  |  |  |  |  |
+| SeekStorm 1.0.0  | All          | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2    | All          | 2 |  |  |  |  |  |  |  |  |  |  |
+| Lucene 10.2.2-bp | All          | 2 |  |  |  |  |  |  |  |  |  |  |
+| Tantivy 0.24.2   | All          | 2 |  |  |  |  |  |  |  |  |  |  |
+
+*SeekStorm with N-gram indexing (Single Terms + Mixed Bigrams + Frequent Trigrams)  
+*Lucene 10.2.2-bp [Doc IDs are reordered using bipartite graph partitioning](https://lucene.apache.org/core/9_11_1/misc/org/apache/lucene/misc/index/BPIndexReorderer.html)  
 
 #### Some challenging phrase queries containing frequent terms:
 
@@ -274,61 +320,76 @@ For more information on tail latencies see our blog post [Tail latencies and per
 
 | Library | N-gram type | Phrase query latency (µs) | factor | N-gram query rewriting |
 | --- | --- | ---: | ---: | --- |
-| SeekStorm 0.13.0 | Single Terms                       | 151,850 | 1.00 | the wo |
-| **SeekStorm 0.13.0** | **Frequent Bigrams**           | **120** | **1,265.00** | **the_who** |
-| SeekStorm 0.13.0 | Frequent Bigrams/Frequent Trigrams | 140 | 1.084.64 | the_who |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    | 130 | 1,178.08 | the_who |
-| SeekStorm 0.13.0 | Mixed Bigrams                      |  90 | 1,687.00 | the_who |
-| SeekStorm 0.13.0 | Mixed Bigrams/Frequent Trigrams    |  80 | 1,898.12 | the_who |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       | 140 | 1.084.64 | the_who |
+| SeekStorm 1.0.0 | Single Terms                       | 151,850 | 1.00 | the who |
+| **SeekStorm 1.0.0** | **Frequent Bigrams**           | **120** | **1,265.00** | **the_who** |
+| SeekStorm 1.0.0 | Frequent Bigrams/Frequent Trigrams | 140 | 1.084.64 | the_who |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    | 130 | 1,178.08 | the_who |
+| SeekStorm 1.0.0 | Mixed Bigrams                      |  90 | 1,687.00 | the_who |
+| SeekStorm 1.0.0 | Mixed Bigrams/Frequent Trigrams    |  80 | 1,898.12 | the_who |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       | 140 | 1.084.64 | the_who |
+| Lucene 10.2.2   | Single Terms                       |     |          | the who | 
+| Lucene 10.2.2-bp | Single Terms                      |     |          | the who | 
+| Tantivy 0.24.2  | Single Terms                       |     |          | the who | 
 
 ### ["the doors"](https://en.wikipedia.org/wiki/The_Doors)
 
 | Library | N-gram type | Phrase query latency (µs) | factor | N-gram query rewriting |
 | --- | --- | ---: | ---: | --- |
-| SeekStorm 0.13.0 | Single Terms                       | 8,160 |  1.00 | the doors |
-| SeekStorm 0.13.0 | Frequent Bigrams                   | 9,500 |  0.86 | the doors |
-| SeekStorm 0.13.0 | Frequent Bigrams/Frequent Trigrams | 7,480 |  1.09 | the doors |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    | 8,890 |  0.92 | the doors |
-| **SeekStorm 0.13.0** | Mixed Bigrams                  | **130** | **62.77** | **the_doors** |
-| SeekStorm 0.13.0 | Mixed Bigrams/Frequent Trigrams    |   140 | 58.29 | the_doors |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       |   140 | 58.29 | the_doors |
+| SeekStorm 1.0.0 | Single Terms                       | 8,160 |  1.00 | the doors |
+| SeekStorm 1.0.0 | Frequent Bigrams                   | 9,500 |  0.86 | the doors |
+| SeekStorm 1.0.0 | Frequent Bigrams/Frequent Trigrams | 7,480 |  1.09 | the doors |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    | 8,890 |  0.92 | the doors |
+| **SeekStorm 1.0.0** | Mixed Bigrams                  | **130** | **62.77** | **the_doors** |
+| SeekStorm 1.0.0 | Mixed Bigrams/Frequent Trigrams    |   140 | 58.29 | the_doors |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       |   140 | 58.29 | the_doors |
+| Lucene 10.2.2   | Single Terms                       |       |       | the doors | 
+| Lucene 10.2.2-bp | Single Terms                      |       |       | the doors | 
+| Tantivy 0.24.2  | Single Terms                       |       |       | the doors | 
 
 ### ["who is who"](https://en.wikipedia.org/wiki/Who%27s_Who)
 
 | Library | N-gram type | Phrase query latency (µs) | factor | N-gram query rewriting |
 | --- | --- | ---: | ---: | --- |
-| SeekStorm 0.13.0 | Single Terms                       | 65,220 |     1.00 | who is who |
-| SeekStorm 0.13.0 | Frequent Bigrams                   |  8,280 |     7.88 | who_is who |
-| **SeekStorm 0.13.0** | **Frequent Bigrams/Frequent Trigrams** | **70** | **931.71** | **who_is_who** |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    |     80 |   815.25 | who_is_who |
-| SeekStorm 0.13.0 | Mixed Bigrams                      |  9,940 |     6.56 | who_is who |
-| SeekStorm 0.13.0 | Mixed Bigrams/Frequent Trigrams    |     80 |   815.25 | who_is_who |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       |     60 | 1,087.00 | who_is_who |
+| SeekStorm 1.0.0 | Single Terms                       | 65,220 |     1.00 | who is who |
+| SeekStorm 1.0.0 | Frequent Bigrams                   |  8,280 |     7.88 | who_is who |
+| **SeekStorm 1.0.0** | **Frequent Bigrams/Frequent Trigrams** | **70** | **931.71** | **who_is_who** |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    |     80 |   815.25 | who_is_who |
+| SeekStorm 1.0.0 | Mixed Bigrams                      |  9,940 |     6.56 | who_is who |
+| SeekStorm 1.0.0 | Mixed Bigrams/Frequent Trigrams    |     80 |   815.25 | who_is_who |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       |     60 | 1,087.00 | who_is_who |
+| Lucene 10.2.2   | Single Terms                       |       |           | who is who | 
+| Lucene 10.2.2-bp | Single Terms                      |       |           | who is who | 
+| Tantivy 0.24.2  | Single Terms                       |       |           | who is who | 
 
 ### ["to be or not to be"](https://en.wikipedia.org/wiki/To_be,_or_not_to_be)
 
 | Library | N-gram type | Phrase query latency (µs) | factor | N-gram query rewriting |
 | --- | --- | ---: | ---: | --- |
-| SeekStorm 0.13.0 | Single Terms                       | 60,880 | 1.00 | to be or not to be |
-| SeekStorm 0.13.0 | Frequent Bigrams                   |  2,190 | 27.80 | to_be or_not to_be |
-| **SeekStorm 0.13.0** | **Frequent Bigrams/Frequent Trigrams** | **220** | **276.73** | **to_be_or not_to_be** |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    |   240 | 253.67 | to_be_or not_to_be |
-| SeekStorm 0.13.0 | Mixed Bigrams                      | 4,080 |  14.92 | to_be or_not to_be |
-| SeekStorm 0.13.0 | Mixed Bigrams/Frequent Trigrams    |   250 | 243.52 | to_be_or not_to_be |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       |   170 | 358.12 | to_be_or not_to_be |
+| SeekStorm 1.0.0 | Single Terms                       | 60,880 | 1.00 | to be or not to be |
+| SeekStorm 1.0.0 | Frequent Bigrams                   |  2,190 | 27.80 | to_be or_not to_be |
+| **SeekStorm 1.0.0** | **Frequent Bigrams/Frequent Trigrams** | **220** | **276.73** | **to_be_or not_to_be** |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    |   240 | 253.67 | to_be_or not_to_be |
+| SeekStorm 1.0.0 | Mixed Bigrams                      | 4,080 |  14.92 | to_be or_not to_be |
+| SeekStorm 1.0.0 | Mixed Bigrams/Frequent Trigrams    |   250 | 243.52 | to_be_or not_to_be |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       |   170 | 358.12 | to_be_or not_to_be |
+| Lucene 10.2.2   | Single Terms                       |       |        | to be or not to be | 
+| Lucene 10.2.2-bp | Single Terms                      |       |        | to be or not to be | 
+| Tantivy 0.24.2  | Single Terms                       |       |        | to be or not to be | 
 
 ### ["pump it up"](https://en.wikipedia.org/wiki/Pump_It_Up!)
 
 | Library | N-gram type | Phrase query latency (µs) | factor | N-gram query rewriting |
 | --- | --- | ---: | ---: | --- |
-| SeekStorm 0.13.0 | Single Terms                       | 2,220 |  1.00 | pump  it  up |
-| **SeekStorm 0.13.0** | **Frequent Bigrams**           | **200** | **11.10** | **pump it_up** |
-| SeekStorm 0.13.0 | Frequent Bigrams/Frequent Trigrams |   210 | 10.57 | pump it_up |
-| SeekStorm 0.13.0 | Frequent Bigrams/Mixed Trigrams    |    50 | 44.40 | pump_it_up |
-| SeekStorm 0.13.0 | Mixed Bigrams                      |   310 |  7.16 | pump_it up |
-| SeekStorm 0.13.0 | Mixed Bigrams/Frequent Trigrams    |   310 |  7.16 | pump_it up |
-| SeekStorm 0.13.0 | Mixed Bigrams/Mixed Trigrams       |    70 | 31.71 | pump_it_up |
+| SeekStorm 1.0.0 | Single Terms                       | 2,220 |  1.00 | pump it up |
+| **SeekStorm 1.0.0** | **Frequent Bigrams**           | **200** | **11.10** | **pump it_up** |
+| SeekStorm 1.0.0 | Frequent Bigrams/Frequent Trigrams |   210 | 10.57 | pump it_up |
+| SeekStorm 1.0.0 | Frequent Bigrams/Mixed Trigrams    |    50 | 44.40 | pump_it_up |
+| SeekStorm 1.0.0 | Mixed Bigrams                      |   310 |  7.16 | pump_it up |
+| SeekStorm 1.0.0 | Mixed Bigrams/Frequent Trigrams    |   310 |  7.16 | pump_it up |
+| SeekStorm 1.0.0 | Mixed Bigrams/Mixed Trigrams       |    70 | 31.71 | pump_it_up |
+| Lucene 10.2.2   | Single Terms                       |       |       | pump it up | 
+| Lucene 10.2.2-bp | Single Terms                      |       |       | pump it up | 
+| Tantivy 0.24.2  | Single Terms                       |       |       | pump it up | 
 
 ### Recommended N-gram combinations
 

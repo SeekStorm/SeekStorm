@@ -12,12 +12,12 @@ use std::collections::HashSet;
 use utoipa::{OpenApi, ToSchema};
 
 use seekstorm::{
-    commit::{Close, Commit},
+    commit::Commit,
     highlighter::{Highlight, highlighter},
     index::{
-        AccessType, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
+        AccessType, Close, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
         Document, Facet, FileType, FrequentwordType, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, MinMaxFieldJson, NgramSet, SchemaField, SimilarityType,
+        IndexMetaObject, MinMaxFieldJson, NgramSet, QueryCompletion, SchemaField, SimilarityType,
         SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType, UpdateDocument,
         UpdateDocuments, create_index, open_index,
     },
@@ -104,17 +104,29 @@ fn length_api() -> usize {
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct SearchResultObject {
+    /// Time taken to execute the search query in nanoseconds
     pub time: u128,
+    /// Search query string
+    pub original_query: String,
+    /// Search query string after any automatic query correction or completion
     pub query: String,
+    /// Offset of the returned search results
     pub offset: usize,
+    /// Number of requested search results
     pub length: usize,
+    /// Number of returned search results matching the query
     pub count: usize,
+    /// Total number of search results matching the query
     pub count_total: usize,
+    /// Vector of search query terms. Can be used e.g. for custom highlighting.
     pub query_terms: Vec<String>,
     #[schema(value_type=Vec<HashMap<String, serde_json::Value>>)]
+    /// Vector of search result documents
     pub results: Vec<Document>,
     #[schema(value_type=HashMap<String, Vec<(String, usize)>>)]
+    /// Facets with their values and corresponding document counts
     pub facets: AHashMap<String, Facet>,
+    /// Suggestions for query correction or completion
     pub suggestions: Vec<String>,
 }
 
@@ -162,6 +174,8 @@ pub struct CreateIndexRequest {
     /// The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
     #[serde(default)]
     pub spelling_correction: Option<SpellingCorrection>,
+    #[serde(default)]
+    pub query_completion: Option<QueryCompletion>,
 }
 
 fn similarity_type_api() -> SimilarityType {
@@ -275,7 +289,7 @@ pub(crate) fn save_apikey_data(apikey: &ApikeyObject, index_path: &PathBuf) {
 }
 
 /// Hello
-/// 
+///
 /// Returns a hello message with the SeekStorm server version.
 #[utoipa::path(
     tag = "Info",
@@ -285,12 +299,11 @@ pub(crate) fn save_apikey_data(apikey: &ApikeyObject, index_path: &PathBuf) {
         (status = 200, description = "Hello message", body = String),
     )
 )]
-pub(crate) fn hello_api<'a>() -> String {
+pub(crate) fn hello_api() -> String {
     "SeekStorm server ".to_owned() + VERSION
 }
 
 /// Create API Key
-/// 
 /// Creates an API key and returns the Base64 encoded API key.  
 /// Expects the Base64 encoded master API key in the header.  
 /// Use the master API key displayed in the server console at startup.
@@ -347,7 +360,6 @@ pub(crate) fn create_apikey_api<'a>(
 }
 
 /// Delete API Key
-/// 
 /// Deletes an API and returns the number of remaining API keys.
 /// Expects the Base64 encoded master API key in the header.
 /// WARNING: This will delete all indices and documents associated with the API key.
@@ -451,7 +463,6 @@ pub(crate) async fn open_all_apikeys(
 }
 
 /// Create Index
-/// 
 /// Create an index within the directory associated with the specified API key and return the index_id.
 #[utoipa::path(
     post,
@@ -484,6 +495,7 @@ pub(crate) async fn create_index_api<'a>(
     force_shard_number: Option<usize>,
     apikey_object: &'a mut ApikeyObject,
     spelling_correction: Option<SpellingCorrection>,
+    query_completion: Option<QueryCompletion>,
 ) -> u64 {
     let mut index_id: u64 = 0;
     for id in apikey_object.index_list.keys().sorted() {
@@ -510,6 +522,7 @@ pub(crate) async fn create_index_api<'a>(
         ngram_indexing,
         access_type: AccessType::Mmap,
         spelling_correction,
+        query_completion,
     };
 
     let index_arc = create_index(
@@ -530,7 +543,6 @@ pub(crate) async fn create_index_api<'a>(
 }
 
 /// Delete Index
-/// 
 /// Delete an index within the directory associated with the specified API key and return the number of remaining indices.
 #[utoipa::path(
     delete,
@@ -566,7 +578,6 @@ pub(crate) async fn delete_index_api(
 }
 
 /// Commit Index
-/// 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
 /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
@@ -642,7 +653,6 @@ pub(crate) async fn get_synonyms_api(index_arc: &IndexArc) -> Result<Vec<Synonym
 }
 
 /// Get Index Info
-/// 
 /// Get index Info from index with index_id
 #[utoipa::path(
     get,
@@ -688,7 +698,6 @@ pub(crate) async fn get_index_info_api(
 }
 
 /// Get API Key Info
-/// 
 /// Get info about all indices associated with the specified API key
 #[utoipa::path(
     get,
@@ -731,7 +740,6 @@ pub(crate) async fn get_apikey_indices_info_api(
 }
 
 /// Index Document(s)
-/// 
 /// Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// Index documents enables true real-time search (as opposed to near realtime.search):
 /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
@@ -765,7 +773,6 @@ pub(crate) async fn index_document_api(
 }
 
 /// Index PDF file
-/// 
 /// Index PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// - Converts PDF to a JSON document with "title", "body", "url" and "date" fields and indexes it.
 /// - extracts title from metatag, or first line of text, or from filename
@@ -807,7 +814,6 @@ pub(crate) async fn index_file_api(
 }
 
 /// Get PDF file
-/// 
 /// Get PDF file from index with index_id
 #[utoipa::path(
     get,
@@ -847,7 +853,6 @@ pub(crate) async fn index_documents_api(
 }
 
 /// Get Document
-/// 
 /// Get document from index with index_id
 #[utoipa::path(
     get,
@@ -917,7 +922,6 @@ pub(crate) async fn get_document_api(
 }
 
 /// Update Document(s)
-/// 
 /// Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// Update document is a combination of delete_document and index_document.
 /// All current limitations of delete_document apply.
@@ -959,7 +963,6 @@ pub(crate) async fn update_documents_api(
 }
 
 /// Delete Document
-/// 
 /// Delete document by document_id from index with index_id
 /// Document ID can by obtained by search.
 /// Immediately effective, indpendent of commit.
@@ -998,7 +1001,6 @@ pub(crate) async fn delete_document_by_parameter_api(
 }
 
 /// Delete Document(s) by Request Object
-/// 
 /// Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
 /// Immediately effective, indpendent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
@@ -1078,7 +1080,6 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
 }
 
 /// Query Index
-/// 
 /// Query results from index with index_id
 /// The following parameters are supported:
 /// - Result type
@@ -1118,7 +1119,6 @@ pub(crate) async fn query_index_api_post(
 }
 
 /// Query Index
-/// 
 /// Query results from index with index_id.
 /// Query index via GET is a convenience function, that offers only a limited set of parameters compared to Query Index via POST.
 #[utoipa::path(
@@ -1217,7 +1217,8 @@ pub(crate) async fn query_index_api(
     }
 
     SearchResultObject {
-        query: search_request.query_string.to_owned(),
+        original_query: result_object.original_query.to_owned(),
+        query: result_object.query.to_owned(),
         time: elapsed_time,
         offset: search_request.offset,
         length: search_request.length,
@@ -1226,7 +1227,7 @@ pub(crate) async fn query_index_api(
         query_terms: result_object.query_terms,
         results,
         facets: result_object.facets,
-        suggestions: Vec::new(),
+        suggestions: result_object.suggestions,
     }
 }
 

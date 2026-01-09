@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-12-03
+
+### Added
+
+- Typo-tolerant Query Auto-Completion (QAC) and Instant Search: see [blog post](https://seekstorm.com/blog/query-auto-completion-(QAC)/).
+  - The completions are automatically derived in real-time from indexed documents, not from a query log:
+    - works, even if no query log is available, especially for domain-specific, newly created indices or few users.
+    - works for new or domain-specific terms.
+    - allows out-of-the-box domain specific suggestions
+    - prevents inconsistencies between completions and index content.  
+      Query logs contains invalid queries: because its sourced from a different index or because users don't know the content of your index.
+    - Works for the long tail of queries, that never made it to a log.
+    - SchemaField completion_source : if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.
+    - SchemaField dictionary_source : if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.
+    - create_index QueryCompletion    max_completion_entries: Maximum number of completion entries to generate during indexing
+    - create_index SpellingCorrection max_dictionary_entries: Maximum number of dictionary entries to generate during indexing
+    - If schema `completion_source=false` for all fields, then a manually generated completion list can be used: {index_path}/completions.csv
+    - If schema `dictionary_source=false` for all fields, then a manually generated dictionary can be used: {index_path}/dictionary.csv
+  - Completion prevents spelling errors and saves time.
+  - Language-, content- and domain independent.
+  - Additionally allows to use hand crafted completion files.
+  - Ghosting: highlighting the suggested text within the search box in the UI
+  - QueryRewriting::SearchOnly/SearchSuggest/SearchCorrect/SuggestOnly.complete : enable query completions in addition to spelling corrections
+  - The embedded Web UI of the SeekStorm server now supports query auto-correction, query auto-completion, and instant search.
+  - Queries with spelling mistakes are marked with a wavy red underline. You get a "did you mean"-like choice to search for the corrected or the original query.
+  - For a demo of the Query Auto-Completion (QAC) see [Build a Wikipedia search engine with the SeekStorm server](https://github.com/SeekStorm/SeekStorm?tab=readme-ov-file#build-a-wikipedia-search-engine-with-the-seekstorm-server).
+
+### Fixed
+
+- Fixed paging (offset>0) for search in sharded index.
+- When query spelling correction/completion is enabled (`QueryRewriting::SearchSuggest/SearchRewrite/SuggestOnly`) it now supports/preserves phrases "",  
+  but query spelling correction/completion is automatically disabled if +- operators are used, or if a opening quote is used after the first term, or if a closing quote is used before the last term.
+- In the Web UI query spelling corrected queries were not used when switching to next or previous page. Fixed!
+- If in index schema a field is set to "longest"=true, but "indexed"=false, then fallback to auto-detection of longest field.  
+
+### Changed
+
+- QueryRewriting::SearchCorrect changed to QueryRewriting::SearchRewrite 
+- Moved index_arc.close() from commit.rs to index.rs
+- symspell_rs dependency replaced with symspell_complete_rs
+
 ## [1.1.3] - 2025-12-03
 
 ### Added
@@ -19,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Normalization/folding of ligatures and roman numerals fixed.
+- normalisation/folding of ligatures and roman numerals fixed.
 
 ## [1.1.1] - 2025-11-30
 
@@ -32,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Limit the size of the min-heap per shard to s=cmp::min(offset+length, shard.indexed_doc_count).  
   This prevents an out-of-memory error if the query parameter length is set to usize::MAX, while the actual query results would still fit in memory (see issue #15).
 
-## [1.1.0] - 2025-11-22
+## [1.1.0] - 2025-11-27
 
 ### Added
 
@@ -64,8 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Improved
 
-- 4..6x faster indexing speed with sharded index.
-- 3x shorter query latency with sharded index.
+- 5x faster indexing speed with sharded index: lock-free concurrent indexing with document paritioned index shards (enables 100% processor cores saturation).
+- 4x shorter query latency with intra-query concurrency.
 - Faster index loading.
 - Faster clear_index.
 - Benchmarks updated.
@@ -90,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - multithreading within index_document() removed.
 - Index.index_option references to parent index from shards.
 - open_index error handling refactored.
+
 - fn create_index() -> Index changed to async fn create_index() -> IndexArc
 - index.close_index (sync) -> index_arc.close().await (async).
 - index_arc.close() disconnects index_file_mmap from index_file, otherwise we cannot reuse the file (e.g. with open_index) when the program is still running.
@@ -436,7 +478,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code first OpenAPI documentation generation added for SeekStorm server REST API. 
 - New console command `openapi` to create `openapi.json` and `openapi.yml`.
 - Pregenerated [openapi files](https://github.com/SeekStorm/SeekStorm/tree/main/src/seekstorm_server) directory.
-- SeekStorm server [REST API online documentation](https://seekstorm.apidocumentation.com/).
+- SeekStorm server [REST API online documentation](https://seekstorm.apidocumentation.com/reference).
 - Constructor for SchemaField added.
 
 ## [0.11.1] - 2024-12-05

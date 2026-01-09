@@ -133,7 +133,7 @@ let schema=serde_json::from_str(schema_json).unwrap();
 
 let meta = IndexMetaObject {
     id: 0,
-    name: "test_index".into(),
+    name: "test_index".to_string(),
     similarity:SimilarityType::Bm25f,
     tokenizer:TokenizerType::AsciiAlphabetic,
     stemmer:StemmerType::None,
@@ -142,6 +142,7 @@ let meta = IndexMetaObject {
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
     spelling_correction: None,
+    query_completion: None,
 };
 
 let synonyms=Vec::new();

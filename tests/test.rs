@@ -2,9 +2,9 @@
 //! Use: cargo test
 //! To show output use: cargo test -- --show-output
 
-use seekstorm::commit::{Close, Commit};
+use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, DeleteDocument, FileType, FrequentwordType, IndexDocument, IndexDocuments,
+    AccessType, Close, DeleteDocument, FileType, FrequentwordType, IndexDocument, IndexDocuments,
     IndexMetaObject, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType,
     create_index, open_index,
 };
@@ -35,6 +35,7 @@ async fn test_01_create_index() {
         ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
         access_type: AccessType::Mmap,
         spelling_correction: None,
+        query_completion: None,
     };
 
     let segment_number_bits1 = 11;
@@ -97,12 +98,12 @@ async fn test_03_query_index() {
     assert_eq!(result, 4);
 
     let query = "+body2 +test".into();
-    let result_list = index_arc
+    let result_object = index_arc
         .search(
             query,
             QueryType::Intersection,
             0,
-            usize::MAX,
+            10,
             ResultType::TopkCount,
             false,
             Vec::new(),
@@ -113,19 +114,19 @@ async fn test_03_query_index() {
         )
         .await;
 
-    let result = result_list.results.len();
+    let result = result_object.results.len();
     assert_eq!(result, 1);
 
-    let result = result_list.result_count;
+    let result = result_object.result_count;
     assert_eq!(result, 1);
 
-    let result = result_list.result_count_total;
+    let result = result_object.result_count_total;
     assert_eq!(result, 1);
 
     //
 
     let query = "test".into();
-    let result_list = index_arc
+    let result_object = index_arc
         .search(
             query,
             QueryType::Union,
@@ -141,13 +142,13 @@ async fn test_03_query_index() {
         )
         .await;
 
-    let result = result_list.results.len();
+    let result = result_object.results.len();
     assert_eq!(result, 0);
 
-    let result = result_list.result_count;
+    let result = result_object.result_count;
     assert_eq!(result, 0);
 
-    let result = result_list.result_count_total;
+    let result = result_object.result_count_total;
     assert_eq!(result, 2);
 
     index_arc.close().await;
@@ -184,7 +185,7 @@ async fn test_04_clear_index() {
 
     // query index
     let query = "body1".into();
-    let result_list = index_arc
+    let result_object = index_arc
         .search(
             query,
             QueryType::Union,
@@ -200,11 +201,11 @@ async fn test_04_clear_index() {
         )
         .await;
 
-    for r in result_list.results.iter() {
+    for r in result_object.results.iter() {
         println!("result doc_id: {}", r.doc_id);
     }
 
-    let result = result_list.result_count_total;
+    let result = result_object.result_count_total;
     assert_eq!(result, 1);
 
     index_arc.close().await;
@@ -255,7 +256,7 @@ async fn test_06_delete_document() {
 
     // query index before delete
     let query = "body1".into();
-    let result_list = index_arc
+    let result_object = index_arc
         .search(
             query,
             QueryType::Union,
@@ -271,17 +272,17 @@ async fn test_06_delete_document() {
         )
         .await;
 
-    let result = result_list.result_count_total;
+    let result = result_object.result_count_total;
     assert_eq!(result, 1);
 
     // delete document
     index_arc
-        .delete_document(result_list.results[0].doc_id as u64)
+        .delete_document(result_object.results[0].doc_id as u64)
         .await;
 
     // query index after delete
     let query = "body1".into();
-    let result_list = index_arc
+    let result_object = index_arc
         .search(
             query,
             QueryType::Union,
@@ -297,7 +298,7 @@ async fn test_06_delete_document() {
         )
         .await;
 
-    let result = result_list.result_count_total;
+    let result = result_object.result_count_total;
     assert_eq!(result, 0);
 
     let result = index_arc.read().await.current_doc_count().await;

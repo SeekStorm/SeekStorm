@@ -1,4 +1,3 @@
-use futures::future;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
@@ -16,10 +15,10 @@ use crate::{
     compatible::{_blsr_u64, _mm_tzcnt_64},
     compress_postinglist::compress_postinglist,
     index::{
-        AccessType, BlockObjectIndex, CompressionType, DICTIONARY_FILENAME,
-        DOCUMENT_LENGTH_COMPRESSION, FACET_VALUES_FILENAME, IndexArc, LevelIndex,
-        MAX_POSITIONS_PER_TERM, NgramType, NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE,
-        PostingListObjectIndex, PostingListObjectQuery, ROARING_BLOCK_SIZE, Shard, TermObject,
+        AccessType, BlockObjectIndex, CompressionType, DOCUMENT_LENGTH_COMPRESSION,
+        FACET_VALUES_FILENAME, IndexArc, LevelIndex, MAX_POSITIONS_PER_TERM, NgramType,
+        NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE, PostingListObjectIndex,
+        PostingListObjectQuery, ROARING_BLOCK_SIZE, Shard, TermObject,
         update_list_max_impact_score, warmup,
     },
     utils::{
@@ -27,46 +26,6 @@ use crate::{
         write_u64,
     },
 };
-
-/// Remove index from RAM (Reverse of open_index)
-#[allow(async_fn_in_trait)]
-pub trait Close {
-    /// Remove index from RAM (Reverse of open_index)
-    async fn close(&self);
-}
-
-/// Remove index from RAM (Reverse of open_index)
-impl Close for IndexArc {
-    /// Remove index from RAM (Reverse of open_index)
-    async fn close(&self) {
-        self.commit().await;
-
-        if let Some(symspell) = &mut self.read().await.symspell_option.as_ref() {
-            let dictionary_path =
-                Path::new(&self.read().await.index_path_string).join(DICTIONARY_FILENAME);
-            let _ = symspell.read().await.save_dictionary(&dictionary_path, " ");
-        }
-
-        let mut result_object_list = Vec::new();
-        for shard in self.read().await.shard_vec.iter() {
-            let shard_clone = shard.clone();
-            result_object_list.push(tokio::spawn(async move {
-                let mut mmap_options = MmapOptions::new();
-                let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
-                shard_clone.write().await.index_file_mmap = mmap
-                    .make_read_only()
-                    .expect("Unable to make Mmap read-only");
-
-                let mut mmap_options = MmapOptions::new();
-                let mmap: MmapMut = mmap_options.len(4).map_anon().unwrap();
-                shard_clone.write().await.docstore_file_mmap = mmap
-                    .make_read_only()
-                    .expect("Unable to make Mmap read-only");
-            }));
-        }
-        future::join_all(result_object_list).await;
-    }
-}
 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
@@ -387,14 +346,25 @@ impl Shard {
 
         if let Some(root_index_arc) = &self.index_option {
             let root_index = root_index_arc.read().await;
+
+            if let Some(root_completion_option) = root_index.completion_option.as_ref() {
+                let mut root_completions = root_completion_option.write().await;
+                for completion in self.level_completions.read().await.iter() {
+                    if root_completions.len() < root_index.max_completion_entries {
+                        root_completions.add_completion(&completion.0.join(" "), completion.1.0);
+                    }
+                }
+                self.level_completions.write().await.clear();
+            }
+
             if let Some(symspell) = root_index.symspell_option.as_ref() {
                 let threshold = delta_doc_count >> 13;
-
                 for key0 in 0..self.segment_number1 {
                     for key in self.segments_level0[key0].segment.keys() {
                         let plo = self.segments_level0[key0].segment.get(key).unwrap();
-
                         if self.meta.spelling_correction.is_some()
+                            && symspell.read().await.get_dictionary_size()
+                                < root_index.max_dictionary_entries
                             && key & 7 == 0
                             && plo.posting_count > threshold
                             && let Some(term) = self.level_terms.get(&((key >> 32) as u32))
@@ -405,10 +375,10 @@ impl Shard {
                         };
                     }
                 }
+
+                self.level_terms.clear();
             };
         };
-
-        self.level_terms.clear();
 
         self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
         self.postings_buffer = vec![0; POSTING_BUFFER_SIZE];
