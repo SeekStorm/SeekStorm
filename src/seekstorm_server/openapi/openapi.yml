@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 1.1.3
+  version: 1.2.2
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -31,8 +31,9 @@ paths:
     get:
       tags:
       - API Key
-      summary: Get API Key Info
-      description: Get info about all indices associated with the specified API key
+      summary: |-
+        Get API Key Info
+        Get info about all indices associated with the specified API key
       operationId: get_apikey_indices_info_api
       parameters:
       - name: apikey
@@ -60,12 +61,12 @@ paths:
     post:
       tags:
       - API Key
-      summary: Create API Key
-      description: |-
+      summary: |-
+        Create API Key
         Creates an API key and returns the Base64 encoded API key.
         Expects the Base64 encoded master API key in the header.
         Use the master API key displayed in the server console at startup.
-
+      description: |-
         WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
         For development purposes you may also use the SeekStorm server console command 'create' to create an demo API key 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='.
       operationId: create_apikey_api
@@ -128,8 +129,8 @@ paths:
     delete:
       tags:
       - API Key
-      summary: Delete API Key
-      description: |-
+      summary: |-
+        Delete API Key
         Deletes an API and returns the number of remaining API keys.
         Expects the Base64 encoded master API key in the header.
         WARNING: This will delete all indices and documents associated with the API key.
@@ -157,8 +158,9 @@ paths:
     post:
       tags:
       - Index
-      summary: Create Index
-      description: Create an index within the directory associated with the specified API key and return the index_id.
+      summary: |-
+        Create Index
+        Create an index within the directory associated with the specified API key and return the index_id.
       operationId: create_index_api
       parameters:
       - name: apikey
@@ -255,6 +257,10 @@ paths:
                       Note: enabling spelling correction increases the index size, indexing time and query latency.
                       Default: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).
                       The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
+                query_completion:
+                  oneOf:
+                  - type: 'null'
+                  - $ref: '#/components/schemas/QueryCompletion'
         required: true
       responses:
         '200':
@@ -275,8 +281,9 @@ paths:
     get:
       tags:
       - Index
-      summary: Get Index Info
-      description: Get index Info from index with index_id
+      summary: |-
+        Get Index Info
+        Get index Info from index with index_id
       operationId: get_index_info_api
       parameters:
       - name: apikey
@@ -310,8 +317,9 @@ paths:
     delete:
       tags:
       - Index
-      summary: Delete Index
-      description: Delete an index within the directory associated with the specified API key and return the number of remaining indices.
+      summary: |-
+        Delete Index
+        Delete an index within the directory associated with the specified API key and return the number of remaining indices.
       operationId: delete_index_api
       parameters:
       - name: apikey
@@ -347,8 +355,8 @@ paths:
     patch:
       tags:
       - Index
-      summary: Commit Index
-      description: |-
+      summary: |-
+        Commit Index
         Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
         to the final compressed data structure (roaring bitmap) on Mmap or disk -
         which is persistent, more compact, with lower query latency and allows search with realtime=false.
@@ -403,8 +411,8 @@ paths:
     post:
       tags:
       - Document
-      summary: Index Document(s)
-      description: |-
+      summary: |-
+        Index Document(s)
         Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
         Index documents enables true real-time search (as opposed to near realtime.search):
         When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
@@ -457,8 +465,8 @@ paths:
     delete:
       tags:
       - Document
-      summary: Delete Document(s) by Request Object
-      description: |-
+      summary: |-
+        Delete Document(s) by Request Object
         Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
         Immediately effective, indpendent of commit.
         Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
@@ -516,8 +524,8 @@ paths:
     patch:
       tags:
       - Document
-      summary: Update Document(s)
-      description: |-
+      summary: |-
+        Update Document(s)
         Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
         Update document is a combination of delete_document and index_document.
         All current limitations of delete_document apply.
@@ -580,8 +588,8 @@ paths:
     post:
       tags:
       - PDF File
-      summary: Index PDF file
-      description: |-
+      summary: |-
+        Index PDF file
         Index PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.
         - Converts PDF to a JSON document with "title", "body", "url" and "date" fields and indexes it.
         - extracts title from metatag, or first line of text, or from filename
@@ -644,8 +652,9 @@ paths:
     get:
       tags:
       - Document
-      summary: Get Document
-      description: Get document from index with index_id
+      summary: |-
+        Get Document
+        Get document from index with index_id
       operationId: get_document_api
       parameters:
       - name: apikey
@@ -716,8 +725,8 @@ paths:
     delete:
       tags:
       - Document
-      summary: Delete Document
-      description: |-
+      summary: |-
+        Delete Document
         Delete document by document_id from index with index_id
         Document ID can by obtained by search.
         Immediately effective, indpendent of commit.
@@ -769,8 +778,9 @@ paths:
     get:
       tags:
       - PDF File
-      summary: Get PDF file
-      description: Get PDF file from index with index_id
+      summary: |-
+        Get PDF file
+        Get PDF file from index with index_id
       operationId: get_file_api
       parameters:
       - name: apikey
@@ -817,8 +827,8 @@ paths:
     get:
       tags:
       - Query
-      summary: Query Index
-      description: |-
+      summary: |-
+        Query Index
         Query results from index with index_id.
         Query index via GET is a convenience function, that offers only a limited set of parameters compared to Query Index via POST.
       operationId: query_index_api_get
@@ -887,8 +897,8 @@ paths:
     post:
       tags:
       - Query
-      summary: Query Index
-      description: |-
+      summary: |-
+        Query Index
         Query results from index with index_id
         The following parameters are supported:
         - Result type
@@ -1739,6 +1749,18 @@ components:
           description: minimum value of the field
         max:
           description: maximum value of the field
+    QueryCompletion:
+      type: object
+      description: Defines spelling correction (fuzzy search) settings for an index.
+      required:
+      - max_completion_entries
+      properties:
+        max_completion_entries:
+          type: integer
+          description: |-
+            Maximum number of completions to generate during indexing
+            disabled if == 0
+          minimum: 0
     QueryFacet:
       oneOf:
       - type: object
@@ -2209,13 +2231,13 @@ components:
       oneOf:
       - type: string
         description: |-
-          Query rewriting disabled, returs query results for query as-is, returns no suggestions for misspelled query terms.
+          Query rewriting disabled, returns query results for query as-is, returns no suggestions for corrected or completed query.
           No performance overhead for spelling correction and suggestions.
         enum:
         - SearchOnly
       - type: object
         description: |-
-          Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+          Query rewriting disabled, returns query results for original query string, returns suggestions for corrected or completed query.
           Additional latency for spelling suggestions.
         required:
         - SearchSuggest
@@ -2223,11 +2245,19 @@ components:
           SearchSuggest:
             type: object
             description: |-
-              Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.
+              Query rewriting disabled, returns query results for original query string, returns suggestions for corrected or completed query.
               Additional latency for spelling suggestions.
             required:
             - distance
             properties:
+              correct:
+                type:
+                - integer
+                - 'null'
+                description: |-
+                  Enable query correction, for queries with query string length >= threshold
+                  A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+                minimum: 0
               distance:
                 type: integer
                 description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
@@ -2244,27 +2274,43 @@ components:
                     None:    max_dictionary_edit_distance for all terms lengths
                     Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
                     Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+              complete:
+                type:
+                - integer
+                - 'null'
+                description: |-
+                  Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections
+                  A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+                minimum: 0
               length:
                 type:
                 - integer
                 - 'null'
-                description: The second parameter is the maximum number of suggestions to return.
+                description: An option to limit maximum number of returned suggestions.
                 minimum: 0
       - type: object
         description: |-
-          Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+          Query rewriting enabled, returns query results for spelling corrected or completed query string (=instant search), returns suggestions for corrected or completed query.
           Additional latency for spelling correction and suggestions.
         required:
-        - SearchCorrect
+        - SearchRewrite
         properties:
-          SearchCorrect:
+          SearchRewrite:
             type: object
             description: |-
-              Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.
+              Query rewriting enabled, returns query results for spelling corrected or completed query string (=instant search), returns suggestions for corrected or completed query.
               Additional latency for spelling correction and suggestions.
             required:
             - distance
             properties:
+              correct:
+                type:
+                - integer
+                - 'null'
+                description: |-
+                  Enable query correction, for queries with query string length >= threshold
+                  A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+                minimum: 0
               distance:
                 type: integer
                 description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
@@ -2281,23 +2327,39 @@ components:
                     None:    max_dictionary_edit_distance for all terms lengths
                     Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
                     Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+              complete:
+                type:
+                - integer
+                - 'null'
+                description: |-
+                  Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections
+                  A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+                minimum: 0
               length:
                 type:
                 - integer
                 - 'null'
-                description: The second parameter is the maximum number of suggestions to return.
+                description: An option to limit maximum number of returned suggestions.
                 minimum: 0
       - type: object
-        description: Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+        description: Search disabled, returns no query results, only returns suggestions for corrected or completed query.
         required:
         - SuggestOnly
         properties:
           SuggestOnly:
             type: object
-            description: Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.
+            description: Search disabled, returns no query results, only returns suggestions for corrected or completed query.
             required:
             - distance
             properties:
+              correct:
+                type:
+                - integer
+                - 'null'
+                description: |-
+                  Enable query correction, for queries with query string length >= threshold
+                  A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+                minimum: 0
               distance:
                 type: integer
                 description: 'The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.'
@@ -2314,11 +2376,19 @@ components:
                     None:    max_dictionary_edit_distance for all terms lengths
                     Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
                     Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+              complete:
+                type:
+                - integer
+                - 'null'
+                description: |-
+                  Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections
+                  A minimum length of 2 is advised to prevent irrelevant suggestions and results.
+                minimum: 0
               length:
                 type:
                 - integer
                 - 'null'
-                description: The second parameter is the maximum number of suggestions to return.
+                description: An option to limit maximum number of returned suggestions.
                 minimum: 0
       description: Specifies whether query rewriting is enabled or disabled
     QueryType:
@@ -2428,11 +2498,7 @@ components:
           description: range end
     RangeType:
       type: string
-      description: |-
-        Create query_list and non_unique_query_list
-        blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
-        then the intersect_docid within a single block is executed  (=segments?)
-        specifies how to count the frequency of numerical facet field values
+      description: specifies how to count the frequency of numerical facet field values
       enum:
       - CountWithinRange
       - CountAboveRange
@@ -2571,6 +2637,18 @@ components:
           type: number
           format: float
           description: optional custom weight factor for Bm25 ranking
+        dictionary_source:
+          type: boolean
+          description: |-
+            if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.
+            if disabled, then a manually generated dictionary can be used: {index_path}/dictionary.csv
+        completion_source:
+          type: boolean
+          description: |-
+            if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.
+            if disabled, then a manually generated completion list can be used: {index_path}/completions.csv
+            it is recommended to enable completion_source only for fields that contain short text with high-quality terms for auto-completion, e.g. title, author, category, product name, tags,
+            in order to keep the extraction time and RAM requirement for completions low and the completions relevance high.
     SearchRequestObject:
       type: object
       description: Search request object
@@ -2652,6 +2730,7 @@ components:
       type: object
       required:
       - time
+      - original_query
       - query
       - offset
       - length
@@ -2664,25 +2743,35 @@ components:
       properties:
         time:
           type: integer
+          description: Time taken to execute the search query in nanoseconds
           minimum: 0
+        original_query:
+          type: string
+          description: Search query string
         query:
           type: string
+          description: Search query string after any automatic query correction or completion
         offset:
           type: integer
+          description: Offset of the returned search results
           minimum: 0
         length:
           type: integer
+          description: Number of requested search results
           minimum: 0
         count:
           type: integer
+          description: Number of returned search results matching the query
           minimum: 0
         count_total:
           type: integer
+          description: Total number of search results matching the query
           minimum: 0
         query_terms:
           type: array
           items:
             type: string
+          description: Vector of search query terms. Can be used e.g. for custom highlighting.
         results:
           type: array
           items:
@@ -2690,8 +2779,10 @@ components:
             additionalProperties: {}
             propertyNames:
               type: string
+          description: Vector of search result documents
         facets:
           type: object
+          description: Facets with their values and corresponding document counts
           additionalProperties:
             type: array
             items:
@@ -2707,6 +2798,7 @@ components:
           type: array
           items:
             type: string
+          description: Suggestions for query correction or completion
     SimilarityType:
       type: string
       description: |-
@@ -2727,6 +2819,7 @@ components:
       description: Defines spelling correction (fuzzy search) settings for an index.
       required:
       - max_dictionary_edit_distance
+      - max_dictionary_entries
       properties:
         max_dictionary_edit_distance:
           type: integer
@@ -2742,8 +2835,12 @@ components:
           description: |-
             Term length thresholds for each edit distance.
               None:    max_dictionary_edit_distance for all terms lengths
-              Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+              Some(\[4\]):     max_dictionary_edit_distance for all terms lengths >= 4,
               Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+        max_dictionary_entries:
+          type: integer
+          description: Maximum number of completions to generate during indexing
+          minimum: 0
     StemmerType:
       type: string
       description: |-

@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.1.3"
+    "version": "1.2.2"
   },
   "servers": [
     {
@@ -47,8 +47,7 @@
         "tags": [
           "API Key"
         ],
-        "summary": "Get API Key Info",
-        "description": "Get info about all indices associated with the specified API key",
+        "summary": "Get API Key Info\nGet info about all indices associated with the specified API key",
         "operationId": "get_apikey_indices_info_api",
         "parameters": [
           {
@@ -91,8 +90,8 @@
         "tags": [
           "API Key"
         ],
-        "summary": "Create API Key",
-        "description": "Creates an API key and returns the Base64 encoded API key.\nExpects the Base64 encoded master API key in the header.\nUse the master API key displayed in the server console at startup.\n\nWARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.\nFor development purposes you may also use the SeekStorm server console command 'create' to create an demo API key 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='.",
+        "summary": "Create API Key\nCreates an API key and returns the Base64 encoded API key.\nExpects the Base64 encoded master API key in the header.\nUse the master API key displayed in the server console at startup.",
+        "description": "WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.\nFor development purposes you may also use the SeekStorm server console command 'create' to create an demo API key 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='.",
         "operationId": "create_apikey_api",
         "parameters": [
           {
@@ -176,8 +175,7 @@
         "tags": [
           "API Key"
         ],
-        "summary": "Delete API Key",
-        "description": "Deletes an API and returns the number of remaining API keys.\nExpects the Base64 encoded master API key in the header.\nWARNING: This will delete all indices and documents associated with the API key.",
+        "summary": "Delete API Key\nDeletes an API and returns the number of remaining API keys.\nExpects the Base64 encoded master API key in the header.\nWARNING: This will delete all indices and documents associated with the API key.",
         "operationId": "delete_apikey_api",
         "parameters": [
           {
@@ -215,8 +213,7 @@
         "tags": [
           "Index"
         ],
-        "summary": "Create Index",
-        "description": "Create an index within the directory associated with the specified API key and return the index_id.",
+        "summary": "Create Index\nCreate an index within the directory associated with the specified API key and return the index_id.",
         "operationId": "create_index_api",
         "parameters": [
           {
@@ -336,6 +333,16 @@
                         "description": "Enable spelling correction for search queries using the SymSpell algorithm.\nWhen enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.\nIn addition you need to set the parameter `query_rewriting` in the search method to enable it per query.\nThe creation of an individual dictionary derived from the indexed documents improves the correction quality compared to a generic dictionary.\nAn dictionary per index improves the privacy compared to a global dictionary derived from all indices.\nThe dictionary is deleted when delete_index or clear_index is called.\nNote: enabling spelling correction increases the index size, indexing time and query latency.\nDefault: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).\nThe higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives."
                       }
                     ]
+                  },
+                  "query_completion": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "$ref": "#/components/schemas/QueryCompletion"
+                      }
+                    ]
                   }
                 }
               }
@@ -373,8 +380,7 @@
         "tags": [
           "Index"
         ],
-        "summary": "Get Index Info",
-        "description": "Get index Info from index with index_id",
+        "summary": "Get Index Info\nGet index Info from index with index_id",
         "operationId": "get_index_info_api",
         "parameters": [
           {
@@ -425,8 +431,7 @@
         "tags": [
           "Index"
         ],
-        "summary": "Delete Index",
-        "description": "Delete an index within the directory associated with the specified API key and return the number of remaining indices.",
+        "summary": "Delete Index\nDelete an index within the directory associated with the specified API key and return the number of remaining indices.",
         "operationId": "delete_index_api",
         "parameters": [
           {
@@ -479,8 +484,7 @@
         "tags": [
           "Index"
         ],
-        "summary": "Commit Index",
-        "description": "Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM\nto the final compressed data structure (roaring bitmap) on Mmap or disk -\nwhich is persistent, more compact, with lower query latency and allows search with realtime=false.\nCommit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).\nThere is no way to prevent this automatic commit by not manually invoking it.\nBut commit can also be invoked manually at any time at any number of newly indexed documents.\ncommit is a **hard commit** for persistence on disk. A **soft commit** for searchability\nis invoked implicitly with every index_doc,\ni.e. the document can immediately searched and included in the search results\nif it matches the query AND the query paramter realtime=true is enabled.\n**Use commit with caution, as it is an expensive operation**.\n**Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.\nBefore terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.\nThere are only 2 reasons that justify a manual commit:\n1. if you want to search newly indexed documents without using realtime=true for search performance reasons or\n2. if after indexing new documents there won't be more documents indexed (for some time),\n   so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,\n   but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.",
+        "summary": "Commit Index\nCommit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM\nto the final compressed data structure (roaring bitmap) on Mmap or disk -\nwhich is persistent, more compact, with lower query latency and allows search with realtime=false.\nCommit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).\nThere is no way to prevent this automatic commit by not manually invoking it.\nBut commit can also be invoked manually at any time at any number of newly indexed documents.\ncommit is a **hard commit** for persistence on disk. A **soft commit** for searchability\nis invoked implicitly with every index_doc,\ni.e. the document can immediately searched and included in the search results\nif it matches the query AND the query paramter realtime=true is enabled.\n**Use commit with caution, as it is an expensive operation**.\n**Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.\nBefore terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.\nThere are only 2 reasons that justify a manual commit:\n1. if you want to search newly indexed documents without using realtime=true for search performance reasons or\n2. if after indexing new documents there won't be more documents indexed (for some time),\n   so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,\n   but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.",
         "operationId": "commit_index_api",
         "parameters": [
           {
@@ -535,8 +539,7 @@
         "tags": [
           "Document"
         ],
-        "summary": "Index Document(s)",
-        "description": "Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nIndex documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.",
+        "summary": "Index Document(s)\nIndex a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nIndex documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.",
         "operationId": "index_document_api",
         "parameters": [
           {
@@ -608,8 +611,7 @@
         "tags": [
           "Document"
         ],
-        "summary": "Delete Document(s) by Request Object",
-        "description": "Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.\nDocument ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.",
+        "summary": "Delete Document(s) by Request Object\nDelete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.\nDocument ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.",
         "operationId": "delete_document_by_object_api",
         "parameters": [
           {
@@ -682,8 +684,7 @@
         "tags": [
           "Document"
         ],
-        "summary": "Update Document(s)",
-        "description": "Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nUpdate document is a combination of delete_document and index_document.\nAll current limitations of delete_document apply.\nUpdate documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.",
+        "summary": "Update Document(s)\nUpdate a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nUpdate document is a combination of delete_document and index_document.\nAll current limitations of delete_document apply.\nUpdate documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.",
         "operationId": "update_document_api",
         "parameters": [
           {
@@ -771,8 +772,7 @@
         "tags": [
           "PDF File"
         ],
-        "summary": "Index PDF file",
-        "description": "Index PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.\n- Converts PDF to a JSON document with \"title\", \"body\", \"url\" and \"date\" fields and indexes it.\n- extracts title from metatag, or first line of text, or from filename\n- extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)\n- copies all ingested pdf files to \"files\" subdirectory in index",
+        "summary": "Index PDF file\nIndex PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.\n- Converts PDF to a JSON document with \"title\", \"body\", \"url\" and \"date\" fields and indexes it.\n- extracts title from metatag, or first line of text, or from filename\n- extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)\n- copies all ingested pdf files to \"files\" subdirectory in index",
         "operationId": "index_file_api",
         "parameters": [
           {
@@ -859,8 +859,7 @@
         "tags": [
           "Document"
         ],
-        "summary": "Get Document",
-        "description": "Get document from index with index_id",
+        "summary": "Get Document\nGet document from index with index_id",
         "operationId": "get_document_api",
         "parameters": [
           {
@@ -966,8 +965,7 @@
         "tags": [
           "Document"
         ],
-        "summary": "Delete Document",
-        "description": "Delete document by document_id from index with index_id\nDocument ID can by obtained by search.\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.",
+        "summary": "Delete Document\nDelete document by document_id from index with index_id\nDocument ID can by obtained by search.\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.",
         "operationId": "delete_document_by_parameter_api",
         "parameters": [
           {
@@ -1032,8 +1030,7 @@
         "tags": [
           "PDF File"
         ],
-        "summary": "Get PDF file",
-        "description": "Get PDF file from index with index_id",
+        "summary": "Get PDF file\nGet PDF file from index with index_id",
         "operationId": "get_file_api",
         "parameters": [
           {
@@ -1102,8 +1099,7 @@
         "tags": [
           "Query"
         ],
-        "summary": "Query Index",
-        "description": "Query results from index with index_id.\nQuery index via GET is a convenience function, that offers only a limited set of parameters compared to Query Index via POST.",
+        "summary": "Query Index\nQuery results from index with index_id.\nQuery index via GET is a convenience function, that offers only a limited set of parameters compared to Query Index via POST.",
         "operationId": "query_index_api_get",
         "parameters": [
           {
@@ -1199,8 +1195,7 @@
         "tags": [
           "Query"
         ],
-        "summary": "Query Index",
-        "description": "Query results from index with index_id\nThe following parameters are supported:\n- Result type\n- Result sorting\n- Realtime search\n- Field filter\n- Fields to include in search results\n- Distance fields: derived fields from distance calculations\n- Highlights: keyword-in-context snippets and term highlighting\n- Query facets: which facets fields to calculate and return at query time\n- Facet filter: filter facets by field and value\n- Result sort: sort results by field and direction\n- Query type default: default query type, if not specified in query",
+        "summary": "Query Index\nQuery results from index with index_id\nThe following parameters are supported:\n- Result type\n- Result sorting\n- Realtime search\n- Field filter\n- Fields to include in search results\n- Distance fields: derived fields from distance calculations\n- Highlights: keyword-in-context snippets and term highlighting\n- Query facets: which facets fields to calculate and return at query time\n- Facet filter: filter facets by field and value\n- Result sort: sort results by field and direction\n- Query type default: default query type, if not specified in query",
         "operationId": "query_index_api_post",
         "parameters": [
           {
@@ -2389,6 +2384,20 @@
           }
         }
       },
+      "QueryCompletion": {
+        "type": "object",
+        "description": "Defines spelling correction (fuzzy search) settings for an index.",
+        "required": [
+          "max_completion_entries"
+        ],
+        "properties": {
+          "max_completion_entries": {
+            "type": "integer",
+            "description": "Maximum number of completions to generate during indexing\ndisabled if == 0",
+            "minimum": 0
+          }
+        }
+      },
       "QueryFacet": {
         "oneOf": [
           {
@@ -3095,25 +3104,33 @@
         "oneOf": [
           {
             "type": "string",
-            "description": "Query rewriting disabled, returs query results for query as-is, returns no suggestions for misspelled query terms.\nNo performance overhead for spelling correction and suggestions.",
+            "description": "Query rewriting disabled, returns query results for query as-is, returns no suggestions for corrected or completed query.\nNo performance overhead for spelling correction and suggestions.",
             "enum": [
               "SearchOnly"
             ]
           },
           {
             "type": "object",
-            "description": "Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.\nAdditional latency for spelling suggestions.",
+            "description": "Query rewriting disabled, returns query results for original query string, returns suggestions for corrected or completed query.\nAdditional latency for spelling suggestions.",
             "required": [
               "SearchSuggest"
             ],
             "properties": {
               "SearchSuggest": {
                 "type": "object",
-                "description": "Query rewriting disabled, returns query results for spelling original query string, returns suggestions for misspelled query terms.\nAdditional latency for spelling suggestions.",
+                "description": "Query rewriting disabled, returns query results for original query string, returns suggestions for corrected or completed query.\nAdditional latency for spelling suggestions.",
                 "required": [
                   "distance"
                 ],
                 "properties": {
+                  "correct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Enable query correction, for queries with query string length >= threshold\nA minimum length of 2 is advised to prevent irrelevant suggestions and results.",
+                    "minimum": 0
+                  },
                   "distance": {
                     "type": "integer",
                     "description": "The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.",
@@ -3130,12 +3147,20 @@
                     },
                     "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
+                  "complete": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections\nA minimum length of 2 is advised to prevent irrelevant suggestions and results.",
+                    "minimum": 0
+                  },
                   "length": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "The second parameter is the maximum number of suggestions to return.",
+                    "description": "An option to limit maximum number of returned suggestions.",
                     "minimum": 0
                   }
                 }
@@ -3144,18 +3169,26 @@
           },
           {
             "type": "object",
-            "description": "Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.\nAdditional latency for spelling correction and suggestions.",
+            "description": "Query rewriting enabled, returns query results for spelling corrected or completed query string (=instant search), returns suggestions for corrected or completed query.\nAdditional latency for spelling correction and suggestions.",
             "required": [
-              "SearchCorrect"
+              "SearchRewrite"
             ],
             "properties": {
-              "SearchCorrect": {
+              "SearchRewrite": {
                 "type": "object",
-                "description": "Query rewriting enabled, returns query results for spelling corrected query string, returns suggestions for misspelled query terms.\nAdditional latency for spelling correction and suggestions.",
+                "description": "Query rewriting enabled, returns query results for spelling corrected or completed query string (=instant search), returns suggestions for corrected or completed query.\nAdditional latency for spelling correction and suggestions.",
                 "required": [
                   "distance"
                 ],
                 "properties": {
+                  "correct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Enable query correction, for queries with query string length >= threshold\nA minimum length of 2 is advised to prevent irrelevant suggestions and results.",
+                    "minimum": 0
+                  },
                   "distance": {
                     "type": "integer",
                     "description": "The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.",
@@ -3172,12 +3205,20 @@
                     },
                     "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
+                  "complete": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections\nA minimum length of 2 is advised to prevent irrelevant suggestions and results.",
+                    "minimum": 0
+                  },
                   "length": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "The second parameter is the maximum number of suggestions to return.",
+                    "description": "An option to limit maximum number of returned suggestions.",
                     "minimum": 0
                   }
                 }
@@ -3186,18 +3227,26 @@
           },
           {
             "type": "object",
-            "description": "Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.",
+            "description": "Search disabled, returns no query results, only returns suggestions for corrected or completed query.",
             "required": [
               "SuggestOnly"
             ],
             "properties": {
               "SuggestOnly": {
                 "type": "object",
-                "description": "Query rewriting disabled, returns no query results, only suggestions for misspelled query terms.",
+                "description": "Search disabled, returns no query results, only returns suggestions for corrected or completed query.",
                 "required": [
                   "distance"
                 ],
                 "properties": {
+                  "correct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Enable query correction, for queries with query string length >= threshold\nA minimum length of 2 is advised to prevent irrelevant suggestions and results.",
+                    "minimum": 0
+                  },
                   "distance": {
                     "type": "integer",
                     "description": "The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.",
@@ -3214,12 +3263,20 @@
                     },
                     "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
+                  "complete": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Enable query completions, for queries with query string length >= threshold, in addition to spelling corrections\nA minimum length of 2 is advised to prevent irrelevant suggestions and results.",
+                    "minimum": 0
+                  },
                   "length": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "The second parameter is the maximum number of suggestions to return.",
+                    "description": "An option to limit maximum number of returned suggestions.",
                     "minimum": 0
                   }
                 }
@@ -3361,7 +3418,7 @@
       },
       "RangeType": {
         "type": "string",
-        "description": "Create query_list and non_unique_query_list\nblockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,\nthen the intersect_docid within a single block is executed  (=segments?)\nspecifies how to count the frequency of numerical facet field values",
+        "description": "specifies how to count the frequency of numerical facet field values",
         "enum": [
           "CountWithinRange",
           "CountAboveRange",
@@ -3526,6 +3583,14 @@
             "type": "number",
             "format": "float",
             "description": "optional custom weight factor for Bm25 ranking"
+          },
+          "dictionary_source": {
+            "type": "boolean",
+            "description": "if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.\nif disabled, then a manually generated dictionary can be used: {index_path}/dictionary.csv"
+          },
+          "completion_source": {
+            "type": "boolean",
+            "description": "if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.\nif disabled, then a manually generated completion list can be used: {index_path}/completions.csv\nit is recommended to enable completion_source only for fields that contain short text with high-quality terms for auto-completion, e.g. title, author, category, product name, tags,\nin order to keep the extraction time and RAM requirement for completions low and the completions relevance high."
           }
         }
       },
@@ -3627,6 +3692,7 @@
         "type": "object",
         "required": [
           "time",
+          "original_query",
           "query",
           "offset",
           "length",
@@ -3640,32 +3706,43 @@
         "properties": {
           "time": {
             "type": "integer",
+            "description": "Time taken to execute the search query in nanoseconds",
             "minimum": 0
           },
+          "original_query": {
+            "type": "string",
+            "description": "Search query string"
+          },
           "query": {
-            "type": "string"
+            "type": "string",
+            "description": "Search query string after any automatic query correction or completion"
           },
           "offset": {
             "type": "integer",
+            "description": "Offset of the returned search results",
             "minimum": 0
           },
           "length": {
             "type": "integer",
+            "description": "Number of requested search results",
             "minimum": 0
           },
           "count": {
             "type": "integer",
+            "description": "Number of returned search results matching the query",
             "minimum": 0
           },
           "count_total": {
             "type": "integer",
+            "description": "Total number of search results matching the query",
             "minimum": 0
           },
           "query_terms": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Vector of search query terms. Can be used e.g. for custom highlighting."
           },
           "results": {
             "type": "array",
@@ -3675,10 +3752,12 @@
               "propertyNames": {
                 "type": "string"
               }
-            }
+            },
+            "description": "Vector of search result documents"
           },
           "facets": {
             "type": "object",
+            "description": "Facets with their values and corresponding document counts",
             "additionalProperties": {
               "type": "array",
               "items": {
@@ -3703,7 +3782,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Suggestions for query correction or completion"
           }
         }
       },
@@ -3727,7 +3807,8 @@
         "type": "object",
         "description": "Defines spelling correction (fuzzy search) settings for an index.",
         "required": [
-          "max_dictionary_edit_distance"
+          "max_dictionary_edit_distance",
+          "max_dictionary_entries"
         ],
         "properties": {
           "max_dictionary_edit_distance": {
@@ -3744,7 +3825,12 @@
               "type": "integer",
               "minimum": 0
             },
-            "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+            "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):     max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+          },
+          "max_dictionary_entries": {
+            "type": "integer",
+            "description": "Maximum number of completions to generate during indexing",
+            "minimum": 0
           }
         }
       },
