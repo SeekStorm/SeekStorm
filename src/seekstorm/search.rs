@@ -170,9 +170,6 @@ pub struct ResultObject {
     pub suggestions: Vec<String>,
 }
 
-/// Create query_list and non_unique_query_list
-/// blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
-/// then the intersect_docid within a single block is executed  (=segments?)
 /// specifies how to count the frequency of numerical facet field values
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, ToSchema)]
 pub enum RangeType {
@@ -895,20 +892,17 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="+red +apple".to_string();
 /// ```
-///
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Intersection;
 /// let query_string="red apple".to_string();
 /// ```
-///
 /// Union, OR
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Union;
 /// let query_string="red apple".to_string();
 /// ```
-///
 /// Phrase `""`
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
@@ -920,7 +914,6 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Phrase;
 /// let query_string="red apple".to_string();
 /// ```
-///
 /// Except, minus, NOT `-`
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
@@ -933,8 +926,6 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="+\"the who\" +uk".to_string();
 /// ```
-///
-///
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
 ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
@@ -998,20 +989,17 @@ pub trait Search {
     /// let query_type=QueryType::Union;
     /// let query_string="+red +apple".to_string();
     /// ```
-    ///
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
     /// let query_type=QueryType::Intersection;
     /// let query_string="red apple".to_string();
     /// ```
-    ///
     /// Union, OR
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
     /// let query_type=QueryType::Union;
     /// let query_string="red apple".to_string();
     /// ```
-    ///
     /// Phrase `""`
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
@@ -1023,7 +1011,6 @@ pub trait Search {
     /// let query_type=QueryType::Phrase;
     /// let query_string="red apple".to_string();
     /// ```
-    ///
     /// Except, minus, NOT `-`
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
@@ -1036,7 +1023,6 @@ pub trait Search {
     /// let query_type=QueryType::Union;
     /// let query_string="+\"the who\" +uk".to_string();
     /// ```
-    ///
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
     ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
@@ -1082,7 +1068,6 @@ pub trait Search {
     ///   ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `meta.spelling_correction`.
     ///  
     /// Facets:
-    ///
     ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
     ///   Facets are defined in 3 different places:
     ///   the facet fields are defined in schema at create_index,
@@ -1150,116 +1135,130 @@ impl Search for IndexArc {
             };
 
         let (query_string, suggestions) = if correct.is_some() || complete.is_some() {
-            let shard = index_ref.shard_vec[0].read().await;
-            let query_terms = tokenizer_lite(&query_string, &index_ref.meta.tokenizer, &shard);
-            drop(shard);
+            let mut query_string = query_string;
+            let mut allow_loop = true;
+            let mut previous_qac: Option<(String, Vec<Suggestion>)> = None;
+            loop {
+                let shard = index_ref.shard_vec[0].read().await;
+                let query_terms = tokenizer_lite(&query_string, &index_ref.meta.tokenizer, &shard);
+                drop(shard);
 
-            if !query_terms.is_empty() {
-                let query_terms_vec: Vec<String> =
-                    query_terms.iter().map(|s| s.0.to_string()).collect();
+                let qac = if !query_terms.is_empty() {
+                    let query_terms_vec: Vec<String> =
+                        query_terms.iter().map(|s| s.0.to_string()).collect();
 
-                let suffix = if query_string.ends_with(" ") { " " } else { "" };
-                let (query_terms_prefix, query_terms_str) = if query_terms.len() + suffix.len() > 3
-                {
-                    (
-                        query_terms_vec[..query_terms.len() - 3 + suffix.len()].join(" ") + " ",
-                        query_terms_vec[query_terms.len() - 3 + suffix.len()..].join(" ") + suffix,
-                    )
-                } else {
-                    (String::new(), query_terms_vec.join(" ") + suffix)
-                };
-                let is_phrase = !query_terms.is_empty() && query_terms[0].1 == QueryType::Phrase;
-
-                let qac: Option<(String, Vec<Suggestion>)> = if let Some(completion_option) =
-                    index_ref.completion_option.as_ref()
-                    && complete.is_some()
-                    && query_string.len() >= complete.unwrap()
-                    && query_rewriting != QueryRewriting::SearchOnly
-                {
-                    let trie = completion_option.read().await;
-                    let completions =
-                        trie.lookup_completions(&query_terms_str, suggestion_length.to_owned());
-
-                    if completions.is_empty() {
-                        None
-                    } else {
-                        let mut suggestions: Vec<Suggestion> = Vec::new();
-                        for qc in completions.iter() {
-                            suggestions.push(Suggestion {
-                                term: if is_phrase {
-                                    ["\"", &query_terms_prefix, &qc.term, "\""].join("")
-                                } else {
-                                    [query_terms_prefix.as_str(), &qc.term].join("")
-                                },
-                                distance: qc.term.len() - query_string.len(),
-                                count: *qc.count,
-                            });
-                        }
-
-                        let completed_query = suggestions[0].term.to_string();
-
-                        Some((completed_query, suggestions))
-                    }
-                } else {
-                    None
-                };
-
-                let qac: Option<(String, Vec<Suggestion>)> = if let Some(symspell) =
-                    &index_ref.symspell_option
-                    && correct.is_some()
-                    && query_string.len() >= correct.unwrap()
-                    && query_rewriting != QueryRewriting::SearchOnly
-                    && qac.is_none()
-                {
-                    if let Ok(symspell) = symspell.try_read()
-                        && (term_length_threshold.is_none()
-                            || term_length_threshold.as_ref().unwrap().is_empty()
-                            || query_string.len() >= term_length_threshold.as_ref().unwrap()[0])
+                    let suffix = if query_string.ends_with(" ") { " " } else { "" };
+                    let (query_terms_prefix, query_terms_str) = if query_terms.len() + suffix.len()
+                        > 3
                     {
-                        let mut corrections = symspell.lookup_compound_vec(
-                            &query_terms_vec,
-                            edit_distance_max.to_owned(),
-                            term_length_threshold,
-                            false,
-                        );
+                        (
+                            query_terms_vec[..query_terms.len() - 3 + suffix.len()].join(" ") + " ",
+                            query_terms_vec[query_terms.len() - 3 + suffix.len()..].join(" ")
+                                + suffix,
+                        )
+                    } else {
+                        (String::new(), query_terms_vec.join(" ") + suffix)
+                    };
+                    let is_phrase =
+                        !query_terms.is_empty() && query_terms[0].1 == QueryType::Phrase;
 
-                        if corrections.is_empty() {
-                            None
+                    let qac: Option<(String, Vec<Suggestion>)> = if let Some(completion_option) =
+                        index_ref.completion_option.as_ref()
+                        && complete.is_some()
+                        && query_string.len() >= complete.unwrap()
+                        && query_rewriting != QueryRewriting::SearchOnly
+                    {
+                        let trie = completion_option.read().await;
+                        let completions =
+                            trie.lookup_completions(&query_terms_str, suggestion_length.to_owned());
+
+                        if completions.is_empty() {
+                            previous_qac.clone()
                         } else {
-                            if is_phrase {
-                                for suggestion in corrections.iter_mut() {
-                                    suggestion.term = ["\"", &suggestion.term, "\""].join("");
-                                }
+                            let mut suggestions: Vec<Suggestion> = Vec::new();
+                            for qc in completions.iter() {
+                                suggestions.push(Suggestion {
+                                    term: if is_phrase {
+                                        ["\"", &query_terms_prefix, &qc.term, "\""].join("")
+                                    } else {
+                                        [query_terms_prefix.as_str(), &qc.term].join("")
+                                    },
+                                    distance: qc.term.len() - query_string.len(),
+                                    count: *qc.count,
+                                });
                             }
 
-                            Some((corrections[0].term.clone(), corrections))
+                            let completed_query = suggestions[0].term.to_string();
+
+                            Some((completed_query, suggestions))
                         }
                     } else {
-                        None
-                    }
-                } else {
-                    qac
-                };
+                        previous_qac.clone()
+                    };
 
-                if let Some((corrected_query, suggestions)) = qac {
-                    if discriminant(&query_rewriting)
-                        == discriminant(&QueryRewriting::SearchRewrite {
-                            distance: 0,
-                            term_length_threshold: None,
-                            correct: None,
-                            complete: None,
-                            length: None,
-                        })
+                    let qac: Option<(String, Vec<Suggestion>)> = if let Some(symspell) =
+                        &index_ref.symspell_option
+                        && correct.is_some()
+                        && query_string.len() >= correct.unwrap()
+                        && query_rewriting != QueryRewriting::SearchOnly
+                        && qac.is_none()
+                        && allow_loop
                     {
-                        (corrected_query, Some(suggestions))
+                        if let Ok(symspell) = symspell.try_read()
+                            && (term_length_threshold.is_none()
+                                || term_length_threshold.as_ref().unwrap().is_empty()
+                                || query_string.len() >= term_length_threshold.as_ref().unwrap()[0])
+                        {
+                            let mut corrections = symspell.lookup_compound_vec(
+                                &query_terms_vec,
+                                edit_distance_max.to_owned(),
+                                term_length_threshold,
+                                false,
+                            );
+
+                            if corrections.is_empty() {
+                                None
+                            } else {
+                                if is_phrase {
+                                    for suggestion in corrections.iter_mut() {
+                                        suggestion.term = ["\"", &suggestion.term, "\""].join("");
+                                    }
+                                }
+
+                                query_string = corrections[0].term.clone();
+                                allow_loop = false;
+                                previous_qac = Some((corrections[0].term.clone(), corrections));
+                                continue;
+                            }
+                        } else {
+                            None
+                        }
                     } else {
-                        (query_string, Some(suggestions))
+                        qac
+                    };
+
+                    if let Some((corrected_query, suggestions)) = qac {
+                        if discriminant(&query_rewriting)
+                            == discriminant(&QueryRewriting::SearchRewrite {
+                                distance: 0,
+                                term_length_threshold: None,
+                                correct: None,
+                                complete: None,
+                                length: None,
+                            })
+                        {
+                            (corrected_query, Some(suggestions))
+                        } else {
+                            (query_string, Some(suggestions))
+                        }
+                    } else {
+                        (query_string, None)
                     }
                 } else {
                     (query_string, None)
-                }
-            } else {
-                (query_string, None)
+                };
+
+                break qac;
             }
         } else {
             (query_string, None)
@@ -1510,7 +1509,6 @@ impl Search for IndexArc {
             result_object.facets.insert(key.clone(), sum);
         }
 
-        // != count
         if aggregate_results {
             let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
             if !result_sort.is_empty() {
