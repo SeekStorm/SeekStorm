@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "1.2.3"
+version = "1.2.4"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -62,12 +62,12 @@ finl_unicode = "1.4.0"
 colored = "3.0.0"
 walkdir = "2.5.0"
 pdfium-render = { version ="0.8.37",  features = ["thread_safe","sync"], optional = true}
-chrono = "0.4.42"
+chrono = "0.4.43"
 utoipa = { version ="5.4.0",  features = ["preserve_order","preserve_path_order","yaml"]}
 num_cpus = "1.17.0"
 rust-stemmers = "1.2.0"
 csv = "1.4.0"
-symspell_complete_rs = "0.0.1"
+symspell_complete_rs = "0.0.2"
 tokio-test = "0.4.4"
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version ="0.3.9",  features = ["winbase"]}

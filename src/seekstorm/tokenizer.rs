@@ -221,6 +221,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
+
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
@@ -256,6 +257,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
+
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -298,6 +300,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
+
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -611,10 +614,9 @@ pub(crate) async fn tokenizer(
                         level_completions
                             .entry(unigram_string)
                             .and_modify(|v| {
-                                v.0 += 1;
-                                v.1 |= indexed_field_id == 0
+                                *v += 1;
                             })
-                            .or_insert((1, indexed_field_id == 0));
+                            .or_insert(1);
                     }
                 }
 
@@ -625,10 +627,9 @@ pub(crate) async fn tokenizer(
                             level_completions
                                 .entry(bigram_string)
                                 .and_modify(|v| {
-                                    v.0 += 1;
-                                    v.1 |= indexed_field_id == 0
+                                    *v += 1;
                                 })
-                                .or_insert((1, indexed_field_id == 0));
+                                .or_insert(1);
                         }
                     }
 
@@ -642,10 +643,9 @@ pub(crate) async fn tokenizer(
                             level_completions
                                 .entry(trigram_string)
                                 .and_modify(|v| {
-                                    v.0 += 1;
-                                    v.1 |= indexed_field_id == 0
+                                    *v += 1;
                                 })
-                                .or_insert((1, indexed_field_id == 0));
+                                .or_insert(1);
                         }
                     }
                 }
@@ -1419,6 +1419,7 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
+
                     _ => {
                         if start {
                             non_unique_terms_line
@@ -1553,6 +1554,7 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
+
                     '"' | '+' | '-' | '#' => {
                         if !start {
                             start_pos = char.0;

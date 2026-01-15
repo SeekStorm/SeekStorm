@@ -718,7 +718,18 @@ pub struct SpellingCorrection {
     ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
     pub term_length_threshold: Option<Vec<usize>>,
 
-    /// Maximum number of completions to generate during indexing
+    /// The minimum frequency count for dictionary words to be considered eligible for spelling correction.
+    /// Depends on the corpus size, 1..20 recommended.
+    /// If count_threshold is too high, some correct words might be missed from the dictionary and deemed misspelled,
+    /// if count_threshold is too low, some misspelled words from the corpus might be considered correct and added to the dictionary.
+    /// Dictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold),  
+    /// but the terms below count_threshold will be included in dictionary.csv too.
+    pub count_threshold: usize,
+
+    /// Limits the maximum number of dictionary entries (terms >= count_threshold) to generate during indexing, preventing excessive RAM consumption.
+    /// The number of terms in dictionary.csv will be higher, because it contains also the terms < count_threshold, to become eligible in the future during incremental dictionary updates.
+    /// Dictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold).
+    /// ⚠️ Above this threshold no new terms are added to the dictionary, causing them to be deemed incorrect during spelling correction and possibly changed to similar terms that are in the dictionary.
     pub max_dictionary_entries: usize,
 }
 
@@ -1042,7 +1053,7 @@ pub struct Shard {
     pub(crate) key_head_size: usize,
     pub(crate) level_terms: AHashMap<u32, String>,
     #[allow(clippy::type_complexity)]
-    pub(crate) level_completions: Arc<RwLock<AHashMap<Vec<String>, (usize, bool)>>>,
+    pub(crate) level_completions: Arc<RwLock<AHashMap<Vec<String>, usize>>>,
 }
 
 /// The root object of the index. It contains all levels and all segments of the index.
@@ -1439,7 +1450,7 @@ pub(crate) async fn create_index_root(
                         spelling_correction.max_dictionary_edit_distance,
                         spelling_correction.term_length_threshold,
                         7,
-                        1,
+                        spelling_correction.count_threshold,
                     ))))
                 } else {
                     None
@@ -2924,7 +2935,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                             if !mute {
                                 let index_ref = index_arc.read().await;
                                 println!(
-                                    "{} name {} id {} version {} {} shards {} ngrams {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} dictionary {} completions {} time {} s",
+                                    "{} name {} id {} version {} {} shards {} ngrams {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} dictionary {} {} completions {} time {} s",
                                     INDEX_FILENAME,
                                     index_ref.meta.name,
                                     index_ref.meta.id,
@@ -2948,6 +2959,15 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                             .read()
                                             .await
                                             .get_dictionary_size()
+                                            .to_formatted_string(&Locale::en)
+                                    } else {
+                                        "None".to_string()
+                                    },
+                                    if let Some(symspell) = index_ref.symspell_option.as_ref() {
+                                        symspell
+                                            .read()
+                                            .await
+                                            .get_candidates_size()
                                             .to_formatted_string(&Locale::en)
                                     } else {
                                         "None".to_string()
@@ -3764,7 +3784,7 @@ impl Index {
                 spelling_correction.max_dictionary_edit_distance,
                 spelling_correction.term_length_threshold.clone(),
                 7,
-                1,
+                spelling_correction.count_threshold,
             ))));
         }
 

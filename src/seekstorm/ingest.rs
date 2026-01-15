@@ -607,7 +607,7 @@ impl IngestJson for IndexArc {
                 let index_ref = self.read().await;
 
                 println!(
-                    "{}: {} shards {} levels {} ngrams {:08b}  docs {}  docs/sec {}  docs/day {} dictionary {} completions {} minutes {:.2} seconds {}",
+                    "{}: {} shards {} levels {} ngrams {:08b}  docs {}  docs/sec {}  docs/day {} dictionary {} {} completions {} minutes {:.2} seconds {}",
                     "Indexing finished".green(),
                     date.format("%D"),
                     index_ref.shard_count().await,
@@ -622,6 +622,15 @@ impl IngestJson for IndexArc {
                             .read()
                             .await
                             .get_dictionary_size()
+                            .to_formatted_string(&Locale::en)
+                    } else {
+                        "None".to_string()
+                    },
+                    if let Some(symspell) = index_ref.symspell_option.as_ref() {
+                        symspell
+                            .read()
+                            .await
+                            .get_candidates_size()
                             .to_formatted_string(&Locale::en)
                     } else {
                         "None".to_string()

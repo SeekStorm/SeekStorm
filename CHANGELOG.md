@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-01-15
+
+### Added
+
+- New `SpellingCorrection.count_threshold`: The minimum frequency count per index for dictionary words to be eligible for spelling correction can now be set by the user for more control over the dictionary generation.
+  If count_threshold is too high, some correct words might be missed from the dictionary and deemed misspelled, 
+  if count_threshold too low, some misspelled words from the corpus might be considered correct and added to the dictionary.
+  Dictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold),  
+  but the terms below count_threshold will be included in dictionary.csv too. 
+
+### Improved
+
+- Better auto-generated dictionary for spelling correction
+  - `SpellingCorrection.max_dictionary_entries` now limits the number of words in the dictionary with a frequency count >= count_threshold (previously including words with a frequency count < count_threshold).  
+  - For spelling correction, numbers are now always ignored and not added to the dictionary. The are always deemed correct during spelling correction.
+  - For spelling correction, internal count_threshold per level removed, to allow uniform distributed terms to reach the dictionary.
+  - For spelling correction, internal count_threshold per doc decreased from 2 to 1, allowing to derive terms when only a single, short field is enabled with `SchemaField.dictionary_source`.
+
 ## [1.2.3] - 2026-01-11
 
 ### Changed
@@ -40,12 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - prevents inconsistencies between completions and index content.  
       Query logs contains invalid queries: because its sourced from a different index or because users don't know the content of your index.
     - Works for the long tail of queries, that never made it to a log.
-    - SchemaField completion_source : if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.
-    - SchemaField dictionary_source : if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.
+    - SchemaField.completion_source : if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.
+    - SchemaField.dictionary_source : if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.
     - create_index QueryCompletion    max_completion_entries: Maximum number of completion entries to generate during indexing
     - create_index SpellingCorrection max_dictionary_entries: Maximum number of dictionary entries to generate during indexing
-    - If schema `completion_source=false` for all fields, then a manually generated completion list can be used: {index_path}/completions.csv
-    - If schema `dictionary_source=false` for all fields, then a manually generated dictionary can be used: {index_path}/dictionary.csv
+    - If `SchemaField.completion_source=false` for all fields, then a manually generated completion list can be used: {index_path}/completions.csv
+    - If `SchemaField.dictionary_source=false` for all fields, then a manually generated dictionary can be used: {index_path}/dictionary.csv
   - Completion prevents spelling errors and saves time.
   - Language-, content- and domain independent.
   - Additionally allows to use hand crafted completion files.

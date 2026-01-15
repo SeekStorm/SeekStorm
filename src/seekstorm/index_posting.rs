@@ -40,7 +40,7 @@ impl Shard {
                 .filter(|&x| self.indexed_schema_vec[x.0].dictionary_source)
                 .map(|field| field.1.len())
                 .sum();
-            if sum > 1 {
+            if sum > 0 {
                 _ = self
                     .level_terms
                     .entry((term.key_hash >> 32) as u32)

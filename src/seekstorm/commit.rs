@@ -1,6 +1,7 @@
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
+
 use std::{
     fs::File,
     io::{Seek, SeekFrom, Write},
@@ -339,7 +340,6 @@ impl Shard {
 
         update_list_max_impact_score(self);
 
-        let delta_doc_count = indexed_doc_count.saturating_sub(self.committed_doc_count);
         self.committed_doc_count = indexed_doc_count;
         self.is_last_level_incomplete =
             !(self.committed_doc_count).is_multiple_of(ROARING_BLOCK_SIZE);
@@ -351,31 +351,32 @@ impl Shard {
                 let mut root_completions = root_completion_option.write().await;
                 for completion in self.level_completions.read().await.iter() {
                     if root_completions.len() < root_index.max_completion_entries {
-                        root_completions.add_completion(&completion.0.join(" "), completion.1.0);
+                        root_completions.add_completion(&completion.0.join(" "), *completion.1);
                     }
                 }
+
                 self.level_completions.write().await.clear();
             }
 
             if let Some(symspell) = root_index.symspell_option.as_ref() {
-                let threshold = delta_doc_count >> 13;
-                for key0 in 0..self.segment_number1 {
-                    for key in self.segments_level0[key0].segment.keys() {
-                        let plo = self.segments_level0[key0].segment.get(key).unwrap();
-                        if self.meta.spelling_correction.is_some()
-                            && symspell.read().await.get_dictionary_size()
-                                < root_index.max_dictionary_entries
-                            && key & 7 == 0
-                            && plo.posting_count > threshold
-                            && let Some(term) = self.level_terms.get(&((key >> 32) as u32))
-                        {
-                            let mut symspell = symspell.write().await;
-                            symspell.create_dictionary_entry(term.clone(), plo.posting_count);
-                            drop(symspell);
-                        };
+                if symspell.read().await.get_dictionary_size() < root_index.max_dictionary_entries {
+                    for key0 in 0..self.segment_number1 {
+                        for key in self.segments_level0[key0].segment.keys() {
+                            let plo = self.segments_level0[key0].segment.get(key).unwrap();
+
+                            if self.meta.spelling_correction.is_some()
+                                && symspell.read().await.get_dictionary_size()
+                                    < root_index.max_dictionary_entries
+                                && key & 7 == 0
+                                && let Some(term) = self.level_terms.get(&((key >> 32) as u32))
+                            {
+                                let mut symspell = symspell.write().await;
+                                symspell.create_dictionary_entry(term.clone(), plo.posting_count);
+                                drop(symspell);
+                            };
+                        }
                     }
                 }
-
                 self.level_terms.clear();
             };
         };
