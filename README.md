@@ -1171,6 +1171,27 @@ See roadmap below.
 
 ---
 
+## Blog Posts
+
+- Search
+  - [N-gram index for faster phrase search: latency vs. size](https://seekstorm.com/blog/n-gram-indexing-for-faster-phrase-search/)
+  - [SeekStorm sharded index architecture - using a multi-core processor like a miniature data center](https://seekstorm.com/blog/SeekStorm-sharded-index-architecture/)
+  - [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
+  - [What is faceted search?](https://seekstorm.com/blog/what-is-faceted-search/)
+  - [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/)
+  - [Tail latencies and percentiles](https://seekstorm.com/blog/tail-latencies-and-percentiles/)
+- Query auto-completion
+  - [Typo-tolerant Query auto-completion (QAC) - derived from indexed documents](https://seekstorm.com/blog/query-auto-completion-(QAC)/)
+  - [The Pruning Radix Trie — a Radix Trie on steroids]()
+- Query spelling correction
+  - [Sub-millisecond compound aware automatic spelling correction](https://seekstorm.com/blog/sub-millisecond-compound-aware-automatic.spelling-correction/)
+  - [SymSpell vs. BK-tree: 100x faster fuzzy string search & spell checking]()
+  - [1000x Faster Spelling Correction algorithm](https://seekstorm.com/blog/1000x-spelling-correction/)
+- Chinese word segmentation
+  - [Fast Word Segmentation of Noisy Text](https://seekstorm.com/blog/fast-word-segmentation-noisy-text/)
+
+---
+
 ## Roadmap
 
 The Rust port is not yet feature complete. The following features are currently ported or added.
