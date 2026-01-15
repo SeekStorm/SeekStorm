@@ -1182,10 +1182,10 @@ See roadmap below.
   - [Tail latencies and percentiles](https://seekstorm.com/blog/tail-latencies-and-percentiles/)
 - Query auto-completion
   - [Typo-tolerant Query auto-completion (QAC) - derived from indexed documents](https://seekstorm.com/blog/query-auto-completion-(QAC)/)
-  - [The Pruning Radix Trie — a Radix Trie on steroids]()
+  - [The Pruning Radix Trie — a Radix Trie on steroids](https://seekstorm.com/blog/pruning-radix-trie/)
 - Query spelling correction
   - [Sub-millisecond compound aware automatic spelling correction](https://seekstorm.com/blog/sub-millisecond-compound-aware-automatic.spelling-correction/)
-  - [SymSpell vs. BK-tree: 100x faster fuzzy string search & spell checking]()
+  - [SymSpell vs. BK-tree: 100x faster fuzzy string search & spell checking](https://seekstorm.com/blog/symspell-vs-bk-tree/)
   - [1000x Faster Spelling Correction algorithm](https://seekstorm.com/blog/1000x-spelling-correction/)
 - Chinese word segmentation
   - [Fast Word Segmentation of Noisy Text](https://seekstorm.com/blog/fast-word-segmentation-noisy-text/)
