@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.2.3"
+    "version": "1.2.4"
   },
   "servers": [
     {
@@ -3823,6 +3823,7 @@
         "description": "Defines spelling correction (fuzzy search) settings for an index.",
         "required": [
           "max_dictionary_edit_distance",
+          "count_threshold",
           "max_dictionary_entries"
         ],
         "properties": {
@@ -3842,9 +3843,14 @@
             },
             "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):     max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
           },
+          "count_threshold": {
+            "type": "integer",
+            "description": "The minimum frequency count for dictionary words to be considered eligible for spelling correction.\nDepends on the corpus size, 1..20 recommended.\nIf count_threshold is too high, some correct words might be missed from the dictionary and deemed misspelled,\nif count_threshold is too low, some misspelled words from the corpus might be considered correct and added to the dictionary.\nDictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold),\nbut the terms below count_threshold will be included in dictionary.csv too.",
+            "minimum": 0
+          },
           "max_dictionary_entries": {
             "type": "integer",
-            "description": "Maximum number of completions to generate during indexing",
+            "description": "Limits the maximum number of dictionary entries (terms >= count_threshold) to generate during indexing, preventing excessive RAM consumption.\nThe number of terms in dictionary.csv will be higher, because it contains also the terms < count_threshold, to become eligible in the future during incremental dictionary updates.\nDictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold).\n⚠️ Above this threshold no new terms are added to the dictionary, causing them to be deemed incorrect during spelling correction and possibly changed to similar terms that are in the dictionary.",
             "minimum": 0
           }
         }
