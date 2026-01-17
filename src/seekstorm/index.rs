@@ -714,7 +714,7 @@ pub struct SpellingCorrection {
     pub max_dictionary_edit_distance: usize,
     /// Term length thresholds for each edit distance.
     ///   None:    max_dictionary_edit_distance for all terms lengths
-    ///   Some(\[4\]):     max_dictionary_edit_distance for all terms lengths >= 4,
+    ///   Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
     ///   Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
     pub term_length_threshold: Option<Vec<usize>>,
 
@@ -1052,7 +1052,6 @@ pub struct Shard {
     pub(crate) frequent_hashset: AHashSet<u64>,
     pub(crate) key_head_size: usize,
     pub(crate) level_terms: AHashMap<u32, String>,
-    #[allow(clippy::type_complexity)]
     pub(crate) level_completions: Arc<RwLock<AHashMap<Vec<String>, usize>>>,
 }
 
@@ -1103,6 +1102,8 @@ pub struct Index {
 
     pub(crate) max_completion_entries: usize,
     pub(crate) completion_option: Option<Arc<RwLock<PruningRadixTrie>>>,
+
+    pub(crate) frequent_hashset: AHashSet<u64>,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -1250,6 +1251,15 @@ pub(crate) async fn create_index_root(
     mute: bool,
     force_shard_number: Option<usize>,
 ) -> Result<IndexArc, String> {
+    let frequent_hashset: AHashSet<u64> = match &meta.frequent_words {
+        FrequentwordType::None => AHashSet::new(),
+        FrequentwordType::English => FREQUENT_EN.lines().map(|x| hash64(x.as_bytes())).collect(),
+        FrequentwordType::German => FREQUENT_EN.lines().map(|x| hash64(x.as_bytes())).collect(),
+        FrequentwordType::French => FREQUENT_FR.lines().map(|x| hash64(x.as_bytes())).collect(),
+        FrequentwordType::Spanish => FREQUENT_ES.lines().map(|x| hash64(x.as_bytes())).collect(),
+        FrequentwordType::Custom { terms } => terms.iter().map(|x| hash64(x.as_bytes())).collect(),
+    };
+
     let segment_number1 = 1usize << segment_number_bits1;
     let segment_number_mask1 = (1u32 << segment_number_bits1) - 1;
 
@@ -1466,6 +1476,8 @@ pub(crate) async fn create_index_root(
                     .query_completion
                     .as_ref()
                     .map(|_query_completion| Arc::new(RwLock::new(PruningRadixTrie::new()))),
+
+                frequent_hashset,
             };
 
             let file_len = index.index_file.metadata().unwrap().len();

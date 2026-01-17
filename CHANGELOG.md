@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-01-17
+
+### Added
+
+- [Early query completion expansion](https://seekstorm.com/blog/query-auto-completion-(QAC)/#sliding-window-completion-expansion): if a query with >=2 terms returns less than max_completion_entries, but a completion with 3 terms is returned, it is expanded with more query terms.  
+  Previously, only the last incomplete term of a query was completed, now the completion is expanded early to look one more term ahead. The intended full query is reached earlier, saving even more time.  
+  Previously: `united states ol` -> `united states olympic`  
+  Now:        `united states ol` -> `united states olympic`, `united states olympic trials`, `united states olympic curling`, `united states olympic basketball`, `united states olympic committee`
+
 ## [1.2.4] - 2026-01-15
 
 ### Added
@@ -12,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `SpellingCorrection.count_threshold`: The minimum frequency count per index for dictionary words to be eligible for spelling correction can now be set by the user for more control over the dictionary generation.
   If count_threshold is too high, some correct words might be missed from the dictionary and deemed misspelled, 
   if count_threshold too low, some misspelled words from the corpus might be considered correct and added to the dictionary.
-  Dictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold),  
+  Dictionary terms eligible for spelling correction (frequency count >= count_threshold) consume much more RAM, than the candidates (frequency count < count_threshold), 
   but the terms below count_threshold will be included in dictionary.csv too. 
 
 ### Improved

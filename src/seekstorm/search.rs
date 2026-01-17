@@ -1,7 +1,7 @@
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
 use crate::index::{
     DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
-    ShardArc,
+    ShardArc, hash64,
 };
 use crate::min_heap::{Result, result_ordering_root};
 use crate::tokenizer::{tokenizer, tokenizer_lite};
@@ -1186,6 +1186,69 @@ impl Search for IndexArc {
                                     distance: qc.term.len() - query_string.len(),
                                     count: *qc.count,
                                 });
+                            }
+
+                            if let Some(suggestion_length) = suggestion_length.as_ref()
+                                && suggestions.len() < *suggestion_length
+                                && query_terms.len() >= 2
+                            {
+                                let mut position = 0;
+                                let mut completion_term_vec = Vec::new();
+                                for (i, completion) in completions.iter().enumerate() {
+                                    completion_term_vec =
+                                        completion.term.split(" ").collect::<Vec<_>>();
+                                    if completion_term_vec.len() >= 3 {
+                                        position = i + 1;
+                                        break;
+                                    }
+                                }
+
+                                if completion_term_vec.len() >= 3 {
+                                    let completion_term_str =
+                                        completion_term_vec[1..].join(" ") + " ";
+                                    let additional_completions = trie.lookup_completions(
+                                        &completion_term_str,
+                                        Some(suggestion_length - suggestions.len() + 5),
+                                    );
+
+                                    let query_terms_prefix = query_terms_vec[..query_terms.len()
+                                        - if query_terms.len() == 2 { 1 } else { 2 }]
+                                        .join(" ")
+                                        + " ";
+
+                                    let mut j = 0;
+                                    for qc in additional_completions.iter() {
+                                        if let Some(p) = qc.term.rfind(' ')
+                                            && p + 1 < qc.term.len()
+                                        {
+                                            let suffix = qc.term[p + 1..].to_string();
+                                            let hash = hash64(suffix.as_bytes());
+                                            if index_ref.frequent_hashset.contains(&hash) {
+                                                continue;
+                                            }
+                                        };
+
+                                        suggestions.insert(
+                                            position + j,
+                                            Suggestion {
+                                                term: if is_phrase {
+                                                    ["\"", &query_terms_prefix, &qc.term, "\""]
+                                                        .join("")
+                                                } else {
+                                                    [query_terms_prefix.as_str(), &qc.term].join("")
+                                                },
+                                                distance: qc.term.len() - query_string.len(),
+                                                count: *qc.count,
+                                            },
+                                        );
+
+                                        j += 1;
+
+                                        if suggestions.len() >= *suggestion_length {
+                                            break;
+                                        }
+                                    }
+                                }
                             }
 
                             let completed_query = suggestions[0].term.to_string();
