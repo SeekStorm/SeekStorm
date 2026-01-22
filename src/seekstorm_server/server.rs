@@ -264,7 +264,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         Vec::new(),
                                                         None,
                                                         apikey_object,
-                                                        Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries: 500_000 }),
+                                                        Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20, max_dictionary_entries: 500_000 }),
                                                         Some(QueryCompletion {max_completion_entries:10_000_000_000})
                                                     ).await
                                                 } else {
@@ -386,10 +386,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             drop(apikey_list_mut);
                         },
 
-                        "list" =>
-                        {
-                            println!("delete indices");
-                        },
 
                         "openapi" =>
                         {

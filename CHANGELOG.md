@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-01-22
+
+### Added
+
+- Document ID iterator API `get_docid`, both for SeekStorm library and server. 
+  Allows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.  
+  Allows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.  
+  Ensures without invoking search, that only valid document IDs are returned, even though document ID are not guaranteed to be continuous and gapless!  
+  The returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.  
+  Taking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).  
+ 
+  Explanation of non-continuous docid:  
+  In SeekStorm, the document IDs are **eventually** continuous.
+  In the multi-sharded index, each shard manages its own document ID.
+  Due to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously. When calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.  
+  That's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.
+
+  - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
+  - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
+  - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.
+  - docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.
+
+### Changed
+
+- The calculation of the global document ID from the shard document ID during aggregation has been changed from a bit-shift operation to a modulo operation to ensure gapless document IDs 
+  (apart from document IDs in the last incomplete index level of each shard), even if the number of shards is not a power of 2.
+- Due to sharding document IDs are not guaranteed to be continuous and gapless! Always use `search` or the new iterator API `get_docid` first to obtain a valid document IDs! 
+  Added a warning hereof to the documentation of get_document and delete_document for both the library API and REST API.
+- Index format (`INDEX_FORMAT_VERSION_MAJOR`) changed: different document ID calculation. 
+- Query auto-completion implementation simplified.
+
+### Fixed
+
+- Fixed typo in `include_uncommitted` parameter.
+- Fixed an issue with query auto-completion if the input contained spaces.
+- ReadmeDoctests fixed!
+- The changed document ID calculation together with the new Document ID iterator API `get_docid` fixes #54 .
+
 ## [1.2.5] - 2026-01-17
 
 ### Added

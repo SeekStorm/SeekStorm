@@ -45,7 +45,7 @@ content-type: application/json
     },
     {
         "field": "url", 
-        "field_type": "String", 
+        "field_type": "String32", 
         "stored": true, 
         "indexed": false
     }], 
@@ -246,7 +246,7 @@ content-type: application/json
     },
     {
         "field": "url", 
-        "field_type": "String", 
+        "field_type": "String32", 
         "stored": true, 
         "indexed": false
     },
@@ -316,4 +316,52 @@ content-type: application/json
 	"ranges":[["1996",820450800],["1997",852073200],["1998",883609200],["1999",915145200],["2000",946681200],["2001",978303600],["2002",1009839600],["2003",1041375600],["2004",1072911600],["2005",1104534000],["2006",1136070000],["2007",1167606000],["2008",1199142000],["2009",1230764400],["2010",1262300400],["2011",1293836400],["2012",1325372400],["2013",1356994800],["2014",1388530800],["2015",1420066800],["2016",1451602800],["2017",1483225200],["2018",1514761200],["2019",1546297200],["2020",1577833200],["2021",1609455600],["2022",1640991600],["2023",1672527600],["2024",1704063600]
     ]}}],
     "facet_filter": [{"Timestamp": {"field": "date","filter": [820450800,1577833200]}}]
+}      
+
+### get first document ID
+GET http://127.0.0.1/api/v1/index/0/doc_id/
+apikey: {{api_key}}
+content-type: application/json
+
+//request body
+{
+    "document_id": null,
+    "skip": 0,
+    "take": 1
+}
+
+### get last document ID
+GET http://127.0.0.1/api/v1/index/0/doc_id/
+apikey: {{api_key}}
+content-type: application/json
+
+//request body
+{
+    "document_id": null,
+    "skip": 0,
+    "take": -1
+}
+
+### get next document ID
+GET http://127.0.0.1/api/v1/index/0/doc_id/
+apikey: {{api_key}}
+content-type: application/json
+
+//request body
+{
+    "document_id": 0,
+    "skip": 1,
+    "take": 1
+}
+
+### get previous document ID
+GET http://127.0.0.1/api/v1/index/0/doc_id/
+apikey: {{api_key}}
+content-type: application/json
+
+//request body
+{
+    "document_id": 1,
+    "skip": 1,
+    "take": -1
 }

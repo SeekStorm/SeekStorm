@@ -43,6 +43,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets (with Histogram/Bucket & Min/Max aggregation)
 * Result sorting by any field, ascending or descending, multiple fields combined by "tie-breaking". 
 * Geo proximity search, filtering and sorting.
+* Document ID iterator API to iterate through all documents of the whole index, in both directions, e.g., for index export and inspection.  
 * 6 tokenizers, including Chinese word segmentation.
 * Typo tolerance / Fuzzy queries / Query spelling correction: return results if the query contains spelling errors.
 * Typo-tolerant Query Auto-Completion (QAC) and Instant search.
@@ -353,7 +354,7 @@ let meta = IndexMetaObject {
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries:500_000 }),
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
 };
 
@@ -644,7 +645,7 @@ let meta = IndexMetaObject {
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries:500_000 }),
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
 };
 
@@ -704,7 +705,7 @@ let meta = IndexMetaObject {
     frequent_words:FrequentwordType::English,
     ngram_indexing:NgramSet::NgramFF as u8,
     access_type: AccessType::Mmap,
-    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),max_dictionary_entries:500_000 }),
+    spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
 };
 
@@ -815,6 +816,51 @@ index_arc.write().await.delete_index();
 
 # });
 ```
+
+
+iterate through document ID of an index
+```rust ,no_run
+# tokio_test::block_on(async {
+
+use seekstorm::index::{open_index,GetDocid};
+use std::path::Path;
+
+let index_path=Path::new("C:/index/");
+let mut index_arc=open_index(index_path,false).await.unwrap();
+
+//display min_docid: the min_docid is NOT always 0, if the first shards are empty!
+let min_docid_tuple=index_arc.get_docid(None,0,1).await;
+println!("min doc_id: {}",min_docid_tuple.1.first().unwrap());
+
+//display max_docid
+let max_docid_tuple=index_arc.get_docid(None,0,-1).await;
+println!("max doc_id: {}",max_docid_tuple.1.first().unwrap());
+
+//iterate doc_id ascending, display the lowest 10 and then every 10_000th document ID
+let mut docid_tuple=index_arc.get_docid(None,0,1).await;
+let mut i=0;
+if !docid_tuple.1.is_empty() {println!("$ i: {} doc_id: {}",i,docid_tuple.1.first().unwrap());}
+while !docid_tuple.1.is_empty() {           
+    docid_tuple=index_arc.get_docid(Some(*docid_tuple.1.first().unwrap()),1,1).await;                              
+    i+=1;
+    if !docid_tuple.1.is_empty() && ( i % 10_000 ==0 || i<=10 )  {println!("i: {} doc_id: {}",i,docid_tuple.1.first().unwrap());}
+}
+
+//iterate doc_id descending, display the highest 10 and then every 10_000th document ID
+let mut docid_tuple=index_arc.get_docid(None,0,-1).await;
+let mut i=0;
+if !docid_tuple.1.is_empty() {println!("$ i: {} doc_id: {}",i,docid_tuple.1.first().unwrap());}
+while !docid_tuple.1.is_empty() {           
+    docid_tuple=index_arc.get_docid(Some(*docid_tuple.1.first().unwrap()),1,-1).await;                              
+    i+=1;
+    if !docid_tuple.1.is_empty() && ( i % 10_000 ==0 || i<=10 )  {println!("i: {} doc_id: {}",i,docid_tuple.1.first().unwrap());}
+}
+
+index_arc.write().await.delete_index();
+
+# });
+```
+
 
 close index
 ```rust ,no_run

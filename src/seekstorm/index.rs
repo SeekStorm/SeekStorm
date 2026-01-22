@@ -64,7 +64,7 @@ pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const INDEX_HEADER_SIZE: u64 = 4;
 /// Incompatible index  format change: new library can't open old format, and old library can't open new format
-pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 5;
+pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 6;
 /// Backward compatible format change: new library can open old format, but old library can't open new format
 pub const INDEX_FORMAT_VERSION_MINOR: u16 = 0;
 
@@ -954,7 +954,7 @@ pub struct Shard {
 
     /// Number of indexed documents
     pub(crate) indexed_doc_count: usize,
-    /// Number of comitted documents
+    /// Number of committed documents
     pub(crate) committed_doc_count: usize,
     /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents, or once commit is invoked manually.
     pub(crate) uncommitted: bool,
@@ -1093,7 +1093,6 @@ pub struct Index {
     pub(crate) synonyms_map: AHashMap<u64, SynonymItem>,
 
     pub(crate) shard_number: usize,
-    pub(crate) shard_bits: usize,
     pub(crate) shard_vec: Vec<Arc<RwLock<Shard>>>,
     pub(crate) shard_queue: Arc<RwLock<VecDeque<usize>>>,
 
@@ -1103,7 +1102,7 @@ pub struct Index {
     pub(crate) max_completion_entries: usize,
     pub(crate) completion_option: Option<Arc<RwLock<PruningRadixTrie>>>,
 
-    pub(crate) frequent_hashset: AHashSet<u64>,
+    pub(crate) frequent_hashset: AHashSet<String>,
 }
 
 ///SynonymItem is a vector of tuples: (synonym term, (64-bit synonym term hash, 64-bit synonym term hash))
@@ -1251,13 +1250,13 @@ pub(crate) async fn create_index_root(
     mute: bool,
     force_shard_number: Option<usize>,
 ) -> Result<IndexArc, String> {
-    let frequent_hashset: AHashSet<u64> = match &meta.frequent_words {
+    let frequent_hashset: AHashSet<String> = match &meta.frequent_words {
         FrequentwordType::None => AHashSet::new(),
-        FrequentwordType::English => FREQUENT_EN.lines().map(|x| hash64(x.as_bytes())).collect(),
-        FrequentwordType::German => FREQUENT_EN.lines().map(|x| hash64(x.as_bytes())).collect(),
-        FrequentwordType::French => FREQUENT_FR.lines().map(|x| hash64(x.as_bytes())).collect(),
-        FrequentwordType::Spanish => FREQUENT_ES.lines().map(|x| hash64(x.as_bytes())).collect(),
-        FrequentwordType::Custom { terms } => terms.iter().map(|x| hash64(x.as_bytes())).collect(),
+        FrequentwordType::English => FREQUENT_EN.lines().map(|x| x.to_string()).collect(),
+        FrequentwordType::German => FREQUENT_EN.lines().map(|x| x.to_string()).collect(),
+        FrequentwordType::French => FREQUENT_FR.lines().map(|x| x.to_string()).collect(),
+        FrequentwordType::Spanish => FREQUENT_ES.lines().map(|x| x.to_string()).collect(),
+        FrequentwordType::Custom { terms } => terms.iter().map(|x| x.to_string()).collect(),
     };
 
     let segment_number1 = 1usize << segment_number_bits1;
@@ -1379,11 +1378,6 @@ pub(crate) async fn create_index_root(
             } else {
                 num_cpus::get_physical()
             };
-            let shard_bits = if serialize_schema {
-                (usize::BITS - (shard_number - 1).leading_zeros()) as usize
-            } else {
-                0
-            };
 
             let mut shard_vec: Vec<Arc<RwLock<Shard>>> = Vec::new();
             let mut shard_queue = VecDeque::<usize>::new();
@@ -1444,7 +1438,6 @@ pub(crate) async fn create_index_root(
                 synonyms_map,
 
                 shard_number,
-                shard_bits,
                 shard_vec,
                 shard_queue: shard_queue_arc,
 
@@ -2931,8 +2924,6 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                             }
 
                             index_arc.write().await.shard_number = shard_vec.len();
-                            index_arc.write().await.shard_bits =
-                                (usize::BITS - (shard_vec.len() - 1).leading_zeros()) as usize;
 
                             for shard in shard_vec.iter() {
                                 shard.write().await.shard_number = shard_vec.len();
@@ -3469,7 +3460,7 @@ impl Index {
         current_doc_count
     }
 
-    /// are there uncommited documents?
+    /// are there uncommitted documents?
     pub async fn uncommitted_doc_count(&self) -> usize {
         let mut uncommitted_doc_count = 0;
         for shard in self.shard_vec.iter() {
@@ -3787,7 +3778,7 @@ impl Index {
         Some(result)
     }
 
-    /// Reset index to empty, while maintaining schema
+    /// Reset the index to empty, while maintaining the schema.
     pub async fn clear_index(&mut self) {
         let index_path = Path::new(&self.index_path_string);
         let _ = fs::remove_file(index_path.join(DICTIONARY_FILENAME));
@@ -3931,7 +3922,194 @@ impl Close for IndexArc {
     }
 }
 
+/// Document ID iterator API
+///
+/// Allows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.  
+/// Allows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.   
+/// Ensures without invoking search, that only valid document IDs are returned, even though document ID are not guaranteed to be continuous and gapless!
+/// The returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.
+/// Taking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).
+///
+/// Explanation of non-continuous docid:
+/// In SeekStorm, the document IDs are **eventually** continuous.
+/// In the multi-sharded index, each shard manages its own document ID.
+/// Due to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously.
+/// When calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.
+/// That's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.
+///
+/// - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
+/// - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
+/// - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.
+/// - docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.
+/// - take=0: does not make sense, that defies the purpose of get_docid.
+/// - The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.
+/// - The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.
+///
+/// Next page:     take last  docid from previous result set, skip=1, take=+page_size
+/// Previous page: take first docid from previous result set, skip=1, take=-page_size
+///
+/// Returns a tuple of (number of actually skipped document IDs, vec of taken document IDs, sorted ascending).
+/// Detect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip
+#[allow(async_fn_in_trait)]
+pub trait GetDocid {
+    /// Document ID iterator API
+    ///
+    /// Allows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.  
+    /// Allows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.   
+    /// Ensures without invoking search, that only valid document IDs are returned, even though document ID are not guaranteed to be continuous and gapless!
+    /// The returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.
+    /// Taking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).
+    ///
+    /// Explanation of non-continuous docid:
+    /// In SeekStorm, the document IDs are **eventually** continuous.
+    /// In the multi-sharded index, each shard manages its own document ID.
+    /// Due to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously.
+    /// When calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.
+    /// That's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.
+    ///
+    /// - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
+    /// - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
+    /// - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.
+    /// - docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.
+    /// - take=0: does not make sense, that defies the purpose of get_docid.
+    /// - The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.
+    /// - The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.
+    ///
+    /// Next page:     take last  docid from previous result set, skip=1, take=+page_size
+    /// Previous page: take first docid from previous result set, skip=1, take=-page_size
+    ///
+    /// Returns a tuple of (number of actually skipped document IDs, vec of taken document IDs, sorted ascending).
+    /// Detect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip
+    async fn get_docid(&self, docid: Option<u64>, skip: usize, take: isize) -> (usize, Vec<u64>);
+}
+
+impl GetDocid for IndexArc {
+    async fn get_docid(&self, docid: Option<u64>, skip: usize, take: isize) -> (usize, Vec<u64>) {
+        if take == 0 {
+            return (skip, Vec::new());
+        }
+
+        let mut min_docid: Option<u64> = None;
+        let mut max_docid: Option<u64> = None;
+        let shard_number = self.read().await.shard_number as u64;
+        for (shard_id, shard) in self.read().await.shard_vec.iter().enumerate() {
+            let shard_ref = shard.read().await;
+            let shard_indexed_doc_count = shard_ref.indexed_doc_count as u64;
+
+            if shard_indexed_doc_count == 0 {
+                continue;
+            }
+
+            if shard_indexed_doc_count > 0 {
+                let shard_max_docid =
+                    shard_id as u64 + ((shard_indexed_doc_count - 1) * shard_number);
+
+                if min_docid.is_none() {
+                    min_docid = Some(shard_id as u64);
+                }
+
+                if max_docid.is_none() || shard_max_docid > max_docid.unwrap() {
+                    max_docid = Some(shard_max_docid);
+                }
+            }
+        }
+
+        if min_docid.is_none() || max_docid.is_none() {
+            return (skip, Vec::new());
+        }
+
+        let mut vec = Vec::new();
+        let mut skip_count = 0;
+
+        if take > 0 {
+            let mut docid = if let Some(docid_value) = docid {
+                if docid_value < min_docid.unwrap() || docid_value > max_docid.unwrap() {
+                    return (skip, Vec::new());
+                }
+                docid_value
+            } else {
+                min_docid.unwrap()
+            };
+
+            while vec.len() < take.unsigned_abs() {
+                let shard_id = docid % shard_number;
+                let docid_shard = docid / shard_number;
+
+                let shard_ref = &self.read().await.shard_vec[shard_id as usize];
+                let docid_shard_max = shard_ref.read().await.indexed_doc_count as u64;
+                if docid_shard_max == 0 || docid_shard >= docid_shard_max {
+                    if docid >= max_docid.unwrap() {
+                        break;
+                    }
+                    docid += 1;
+                    continue;
+                }
+
+                if skip_count < skip {
+                    if docid >= max_docid.unwrap() {
+                        break;
+                    }
+                    docid += 1;
+                    skip_count += 1;
+                    continue;
+                }
+
+                vec.push(docid);
+                if docid >= max_docid.unwrap() {
+                    break;
+                }
+                docid += 1;
+            }
+            (skip_count, vec)
+        } else {
+            let mut docid = if let Some(docid_value) = docid {
+                if docid_value < min_docid.unwrap() || docid_value > max_docid.unwrap() {
+                    return (skip, Vec::new());
+                }
+                docid_value
+            } else {
+                max_docid.unwrap()
+            };
+
+            while vec.len() < take.unsigned_abs() {
+                let shard_id = docid % shard_number;
+                let docid_shard = docid / shard_number;
+
+                let shard_ref = &self.read().await.shard_vec[shard_id as usize];
+                let docid_shard_max = shard_ref.read().await.indexed_doc_count as u64;
+                if docid_shard_max == 0 || docid_shard >= docid_shard_max {
+                    if docid <= min_docid.unwrap() {
+                        break;
+                    }
+                    docid -= 1;
+
+                    continue;
+                }
+
+                if skip_count < skip {
+                    if docid <= min_docid.unwrap() {
+                        break;
+                    }
+                    docid -= 1;
+                    skip_count += 1;
+                    continue;
+                }
+
+                vec.push(docid);
+                if docid <= min_docid.unwrap() {
+                    break;
+                }
+                docid -= 1;
+            }
+            vec.reverse();
+
+            (skip_count, vec)
+        }
+    }
+}
+
 /// Delete document from index by document id
+/// ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 #[allow(async_fn_in_trait)]
 pub trait DeleteDocument {
     /// Delete document from index by document id
@@ -3939,7 +4117,11 @@ pub trait DeleteDocument {
 }
 
 /// Delete document from index by document id
-/// Document ID can by obtained by search.
+///
+/// Arguments:
+/// * `doc_id`: Document ID that specifies which document to delete from the index.
+///   ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
+///
 /// Immediately effective, indpendent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
@@ -3949,8 +4131,10 @@ pub trait DeleteDocument {
 impl DeleteDocument for IndexArc {
     async fn delete_document(&self, docid: u64) {
         let index_ref = self.read().await;
-        let shard_id = docid & ((1 << index_ref.shard_bits) - 1);
-        let doc_id = docid >> index_ref.shard_bits;
+        let shard_number = index_ref.shard_number as u64;
+        let shard_id = docid % shard_number;
+        let doc_id = docid / shard_number;
+
         let mut shard_mut = index_ref.shard_vec[shard_id as usize].write().await;
 
         if doc_id as usize >= shard_mut.indexed_doc_count {
@@ -4003,7 +4187,7 @@ pub trait DeleteDocumentsByQuery {
         query_type_default: QueryType,
         offset: usize,
         length: usize,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         field_filter: Vec<String>,
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
@@ -4020,7 +4204,7 @@ impl DeleteDocumentsByQuery for IndexArc {
         query_type_default: QueryType,
         offset: usize,
         length: usize,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         field_filter: Vec<String>,
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
@@ -4032,7 +4216,7 @@ impl DeleteDocumentsByQuery for IndexArc {
                 offset,
                 length,
                 ResultType::Topk,
-                include_uncommited,
+                include_uncommitted,
                 field_filter,
                 Vec::new(),
                 facet_filter,

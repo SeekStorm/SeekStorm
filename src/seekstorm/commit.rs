@@ -1,7 +1,6 @@
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use num::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
-
 use std::{
     fs::File,
     io::{Seek, SeekFrom, Write},

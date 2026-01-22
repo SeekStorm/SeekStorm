@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 1.2.4
+  version: 2.0.0
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -403,6 +403,89 @@ paths:
           description: api_key missing
         '404':
           description: API key does not exist
+  /api/v1/index/{index_id}/doc_id:
+    get:
+      tags:
+      - Document ID
+      summary: Get previous/next document ID
+      description: |-
+        Document ID iterator API
+
+        Allows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.
+        Allows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.
+        Ensures without invoking search, that only valid document IDs are returned, even though **document ID are not guaranteed to be continuous and gapless**!
+        The returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.
+        Taking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).
+
+        Explanation of non-continuous docid:
+        In SeekStorm, the document IDs are **eventually** continuous.
+        In the multi-sharded index, each shard manages its own document ID.
+        Due to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously.
+        When calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.
+        That's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.
+
+        - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
+        - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
+        - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.
+        - docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.
+        - take=0: does not make sense, that defies the purpose of get_docid.
+        - The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.
+        - The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.
+
+        Next page:     take last  docid from previous result set, skip=1, take=+page_size
+        Previous page: take first docid from previous result set, skip=1, take=-page_size
+
+        Returns a tuple of (number of actually skipped document IDs, vec of taken document IDs, sorted ascending).
+        Detect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip
+      operationId: get_document_id_api
+      parameters:
+      - name: apikey
+        in: header
+        description: YOUR_SECRET_API_KEY
+        required: true
+        schema:
+          type: string
+        example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: index_id
+        in: path
+        description: index id
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetDocumentIdRequest'
+            example:
+              document_id: null
+              skip: 0
+              take: -1
+        required: true
+      responses:
+        '200':
+          description: Document ID found, returns a tuple, consisting of (actual skip length, list of document IDs)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: false
+                prefixItems:
+                - type: integer
+                  minimum: 0
+                - type: array
+                  items:
+                    type: integer
+                    format: int64
+                    minimum: 0
+        '400':
+          description: Request object incorrect
+        '401':
+          description: api_key missing
+        '404':
+          description: api_key does not exists
   /api/v1/index/{index_id}/doc:
     post:
       tags:
@@ -649,7 +732,9 @@ paths:
       tags:
       - Document
       summary: Get Document
-      description: Get document from index with index_id
+      description: |-
+        Get document from index with index_id
+        ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
       operationId: get_document_api
       parameters:
       - name: apikey
@@ -723,7 +808,7 @@ paths:
       summary: Delete Document
       description: |-
         Delete document by document_id from index with index_id
-        Document ID can by obtained by search.
+        ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
         Immediately effective, indpendent of commit.
         Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
         By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
@@ -774,7 +859,9 @@ paths:
       tags:
       - PDF File
       summary: Get PDF file
-      description: Get PDF file from index with index_id
+      description: |-
+        Get PDF file from index with index_id
+        ⚠️ Use search or get_docid first to obtain s valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
       operationId: get_file_api
       parameters:
       - name: apikey
@@ -1581,6 +1668,29 @@ components:
         FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.
         Adjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms).
         The lists of stop_words and frequent_words should not overlap.
+    GetDocumentIdRequest:
+      type: object
+      description: Specifies which document ID to return
+      properties:
+        document_id:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            base document ID to start the iteration from
+            Use None to start from the beginning (take>0) or the end (take<0) of the index
+            In JSON use null for None
+          minimum: 0
+        skip:
+          type: integer
+          description: the number of document IDs to skip
+          minimum: 0
+        take:
+          type: integer
+          description: |-
+            the number of document IDs to return
+            take>0: take next t document IDs, take<0: take previous t document IDs
     GetDocumentRequest:
       type: object
       description: Specifies which document and which field to return
@@ -2830,7 +2940,7 @@ components:
           description: |-
             Term length thresholds for each edit distance.
               None:    max_dictionary_edit_distance for all terms lengths
-              Some(\[4\]):     max_dictionary_edit_distance for all terms lengths >= 4,
+              Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
               Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
         count_threshold:
           type: integer
@@ -2986,6 +3096,8 @@ tags:
   description: Create and delete API keys
 - name: Index
   description: Create and delete indices
+- name: Document ID
+  description: Iterate through document IDs
 - name: Document
   description: Index, update, get and delete documents
 - name: PDF File

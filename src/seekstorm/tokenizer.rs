@@ -168,7 +168,6 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -178,7 +177,6 @@ pub(crate) async fn tokenizer(
                     };
                 }
             }
-
             TokenizerType::UnicodeAlphanumeric => {
                 text_normalized = text.to_lowercase();
                 for char in text_normalized.char_indices() {
@@ -189,7 +187,6 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -221,7 +218,6 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
                             if start {
@@ -257,7 +253,6 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -278,7 +273,6 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);
@@ -300,7 +294,6 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-
                         '"' | '+' | '-' | '#' => {
                             if !start {
                                 start_pos = char.0;
@@ -1419,7 +1412,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     _ => {
                         if start {
                             non_unique_terms_line
@@ -1440,7 +1432,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     '"' | '+' | '-' | '#' => {
                         if !start {
                             start_pos = char.0;
@@ -1473,7 +1464,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     _ => {
                         let apostroph = APOSTROPH.contains(&char.1);
                         if start {
@@ -1509,7 +1499,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     _ => {
                         if start {
                             non_unique_terms_line
@@ -1531,7 +1520,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     _ => {
                         if start {
                             non_unique_terms_line
@@ -1554,7 +1542,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     '"' | '+' | '-' | '#' => {
                         if !start {
                             start_pos = char.0;

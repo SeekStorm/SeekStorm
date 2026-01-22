@@ -1,7 +1,7 @@
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
 use crate::index::{
     DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
-    ShardArc, hash64,
+    ShardArc,
 };
 use crate::min_heap::{Result, result_ordering_root};
 use crate::tokenizer::{tokenizer, tokenizer_lite};
@@ -417,12 +417,13 @@ impl Index {
     /// Facet fields are always memory mapped, internally always stored with fixed byte length layout, regardless of string size.
     #[inline]
     pub async fn get_facet_value(self: &Index, field: &str, doc_id: usize) -> FacetValue {
-        let shard_id = doc_id & ((1 << self.shard_bits) - 1);
-        let doc_id = doc_id >> self.shard_bits;
+        let shard_id = doc_id % self.shard_number;
+        let doc_id_shard = doc_id / self.shard_number;
+
         self.shard_vec[shard_id]
             .read()
             .await
-            .get_facet_value_shard(field, doc_id)
+            .get_facet_value_shard(field, doc_id_shard)
     }
 }
 
@@ -892,17 +893,20 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="+red +apple".to_string();
 /// ```
+///
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Intersection;
 /// let query_string="red apple".to_string();
 /// ```
+///
 /// Union, OR
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Union;
 /// let query_string="red apple".to_string();
 /// ```
+///
 /// Phrase `""`
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
@@ -914,6 +918,7 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Phrase;
 /// let query_string="red apple".to_string();
 /// ```
+///
 /// Except, minus, NOT `-`
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
@@ -926,11 +931,12 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="+\"the who\" +uk".to_string();
 /// ```
+///
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
 ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
-/// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
+/// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
 /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
 /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
 ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
@@ -989,17 +995,20 @@ pub trait Search {
     /// let query_type=QueryType::Union;
     /// let query_string="+red +apple".to_string();
     /// ```
+    ///
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
     /// let query_type=QueryType::Intersection;
     /// let query_string="red apple".to_string();
     /// ```
+    ///
     /// Union, OR
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
     /// let query_type=QueryType::Union;
     /// let query_string="red apple".to_string();
     /// ```
+    ///
     /// Phrase `""`
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
@@ -1011,6 +1020,7 @@ pub trait Search {
     /// let query_type=QueryType::Phrase;
     /// let query_string="red apple".to_string();
     /// ```
+    ///
     /// Except, minus, NOT `-`
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
@@ -1023,11 +1033,13 @@ pub trait Search {
     /// let query_type=QueryType::Union;
     /// let query_string="+\"the who\" +uk".to_string();
     /// ```
+    ///
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
     ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
+    ///
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
-    /// * `include_uncommited`: true realtime search: include indexed documents which where not yet committed into search results.
+    /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
     /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
     ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
@@ -1039,6 +1051,7 @@ pub trait Search {
     ///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
     ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
     ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
+    ///
     /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
     ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
     ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
@@ -1047,6 +1060,7 @@ pub trait Search {
     ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
     ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
     ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
+    ///
     /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
     ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
     ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -1057,6 +1071,7 @@ pub trait Search {
     ///   Examples:
     ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
     ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+    ///
     /// * `query_rewriting`: Enables query rewriting features such as spelling correction and query auto-completion (QAC).
     ///   The spelling correction of multi-term query strings handles three cases:
     ///     1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`
@@ -1068,6 +1083,7 @@ pub trait Search {
     ///   ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `meta.spelling_correction`.
     ///  
     /// Facets:
+    ///
     ///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
     ///   Facets are defined in 3 different places:
     ///   the facet fields are defined in schema at create_index,
@@ -1081,7 +1097,7 @@ pub trait Search {
         offset: usize,
         length: usize,
         result_type: ResultType,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
@@ -1098,7 +1114,7 @@ impl Search for IndexArc {
         offset: usize,
         length: usize,
         result_type: ResultType,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
@@ -1222,8 +1238,7 @@ impl Search for IndexArc {
                                             && p + 1 < qc.term.len()
                                         {
                                             let suffix = qc.term[p + 1..].to_string();
-                                            let hash = hash64(suffix.as_bytes());
-                                            if index_ref.frequent_hashset.contains(&hash) {
+                                            if index_ref.frequent_hashset.contains(&suffix) {
                                                 continue;
                                             }
                                         };
@@ -1248,6 +1263,7 @@ impl Search for IndexArc {
                                             break;
                                         }
                                     }
+                                    // ! println!("sliding window completion expansion input #{}# input terms len {} completion count {}",completion_term_str,completion_term_vec.len(), additional_completions.len());
                                 }
                             }
 
@@ -1347,7 +1363,7 @@ impl Search for IndexArc {
             return result_object;
         }
 
-        if index_ref.shard_vec.len() == 1 {
+        if index_ref.shard_number == 1 {
             let mut result_object = index_ref.shard_vec[0]
                 .search_shard(
                     query_string.clone(),
@@ -1355,7 +1371,7 @@ impl Search for IndexArc {
                     offset,
                     length,
                     result_type,
-                    include_uncommited,
+                    include_uncommitted,
                     field_filter,
                     query_facets,
                     facet_filter,
@@ -1371,7 +1387,7 @@ impl Search for IndexArc {
         }
 
         let mut result_object_list = Vec::new();
-        let shard_bits = index_ref.shard_bits;
+        let shard_number = index_ref.shard_number;
         let aggregate_results = result_type != ResultType::Count;
 
         for shard in index_ref.shard_vec.iter() {
@@ -1393,7 +1409,7 @@ impl Search for IndexArc {
                         0,
                         offset + length,
                         result_type_clone,
-                        include_uncommited,
+                        include_uncommitted,
                         field_filter_clone,
                         query_facets_clone,
                         facet_filter_clone,
@@ -1403,7 +1419,7 @@ impl Search for IndexArc {
 
                 if aggregate_results {
                     for result in rlo.results.iter_mut() {
-                        result.doc_id = (result.doc_id << shard_bits) | shard_id as usize;
+                        result.doc_id = (result.doc_id * shard_number) + shard_id as usize;
                     }
                 }
 
@@ -1572,6 +1588,7 @@ impl Search for IndexArc {
             result_object.facets.insert(key.clone(), sum);
         }
 
+        // != count
         if aggregate_results {
             let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
             if !result_sort.is_empty() {
@@ -1593,13 +1610,7 @@ impl Search for IndexArc {
                     futures::future::join_all(index_ref.shard_vec.iter().map(|s| s.read())).await;
 
                 result_object.results.sort_by(|a, b| {
-                    result_ordering_root(
-                        &shard_vec,
-                        index_ref.shard_bits,
-                        &result_sort_index,
-                        *b,
-                        *a,
-                    )
+                    result_ordering_root(&shard_vec, shard_number, &result_sort_index, *b, *a)
                 });
             } else {
                 result_object
@@ -1642,7 +1653,7 @@ pub(crate) trait SearchShard {
         offset: usize,
         length: usize,
         result_type: ResultType,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
@@ -1952,7 +1963,7 @@ impl SearchShard for ShardArc {
         offset: usize,
         length: usize,
         result_type: ResultType,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
@@ -2521,7 +2532,7 @@ impl SearchShard for ShardArc {
             )
             .await;
 
-            if include_uncommited && shard_ref.uncommitted {
+            if include_uncommitted && shard_ref.uncommitted {
                 shard_ref.search_uncommitted(
                     &unique_terms,
                     &non_unique_terms,
@@ -2866,7 +2877,7 @@ impl SearchShard for ShardArc {
             let query_term_count = non_unique_terms.len();
             if query_list_len == 0 {
             } else if query_list_len == 1 {
-                if !(shard_ref.uncommitted && include_uncommited)
+                if !(shard_ref.uncommitted && include_uncommitted)
                     && offset + length <= 1000
                     && not_query_list.is_empty()
                     && field_filter_set.is_empty()

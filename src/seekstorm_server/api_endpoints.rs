@@ -16,10 +16,10 @@ use seekstorm::{
     highlighter::{Highlight, highlighter},
     index::{
         AccessType, Close, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
-        Document, Facet, FileType, FrequentwordType, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, MinMaxFieldJson, NgramSet, QueryCompletion, SchemaField, SimilarityType,
-        SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType, UpdateDocument,
-        UpdateDocuments, create_index, open_index,
+        Document, Facet, FileType, FrequentwordType, GetDocid, IndexArc, IndexDocument,
+        IndexDocuments, IndexMetaObject, MinMaxFieldJson, NgramSet, QueryCompletion, SchemaField,
+        SimilarityType, SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType,
+        UpdateDocument, UpdateDocuments, create_index, open_index,
     },
     ingest::IndexPdfBytes,
     search::{FacetFilter, QueryFacet, QueryRewriting, QueryType, ResultSort, ResultType, Search},
@@ -193,6 +193,27 @@ fn ngram_indexing_api() -> u8 {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DeleteApikeyRequest {
     pub apikey_base64: String,
+}
+
+/// Specifies which document ID to return
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct GetDocumentIdRequest {
+    /// base document ID to start the iteration from
+    /// Use None to start from the beginning (take>0) or the end (take<0) of the index
+    /// In JSON use null for None
+    #[serde(default)]
+    pub document_id: Option<u64>,
+    /// the number of document IDs to skip
+    #[serde(default)]
+    pub skip: usize,
+    /// the number of document IDs to return
+    /// take>0: take next t document IDs, take<0: take previous t document IDs
+    #[serde(default = "default_1usize")]
+    pub take: isize,
+}
+
+fn default_1usize() -> isize {
+    1
 }
 
 /// Specifies which document and which field to return
@@ -825,6 +846,7 @@ pub(crate) async fn index_file_api(
 /// Get PDF file
 ///
 /// Get PDF file from index with index_id
+/// ⚠️ Use search or get_docid first to obtain s valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 #[utoipa::path(
     get,
     tag = "PDF File",
@@ -865,6 +887,7 @@ pub(crate) async fn index_documents_api(
 /// Get Document
 ///
 /// Get document from index with index_id
+/// ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 #[utoipa::path(
     get,
     tag = "Document",
@@ -977,7 +1000,7 @@ pub(crate) async fn update_documents_api(
 /// Delete Document
 ///
 /// Delete document by document_id from index with index_id
-/// Document ID can by obtained by search.
+/// ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 /// Immediately effective, indpendent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
@@ -1085,6 +1108,68 @@ pub(crate) async fn delete_documents_by_query_api(
         .await;
 
     Ok(index_arc.read().await.indexed_doc_count().await as u64)
+}
+
+/// Get previous/next document ID
+///
+/// Document ID iterator API
+///
+/// Allows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.  
+/// Allows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.   
+/// Ensures without invoking search, that only valid document IDs are returned, even though **document ID are not guaranteed to be continuous and gapless**!
+/// The returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.
+/// Taking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).
+///
+/// Explanation of non-continuous docid:
+/// In SeekStorm, the document IDs are **eventually** continuous.
+/// In the multi-sharded index, each shard manages its own document ID.
+/// Due to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously.
+/// When calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.
+/// That's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.
+///
+/// - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
+/// - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
+/// - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.
+/// - docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.
+/// - take=0: does not make sense, that defies the purpose of get_docid.
+/// - The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.
+/// - The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.
+///
+/// Next page:     take last  docid from previous result set, skip=1, take=+page_size
+/// Previous page: take first docid from previous result set, skip=1, take=-page_size
+///
+/// Returns a tuple of (number of actually skipped document IDs, vec of taken document IDs, sorted ascending).
+/// Detect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip
+#[utoipa::path(
+    get,
+    tag = "Document ID",
+    path = "/api/v1/index/{index_id}/doc_id",
+    params(
+        ("apikey" = String, Header, description = "YOUR_SECRET_API_KEY",example="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+        ("index_id" = u64, Path, description = "index id"),
+    ),
+    request_body(content = GetDocumentIdRequest, example=json!({
+        "document_id": null,
+        "skip": 0,
+        "take": -1,
+    })),
+    responses(
+        (status = 200, description = "Document ID found, returns a tuple, consisting of (actual skip length, list of document IDs)", body = (usize, Vec<u64>)),
+        (status = BAD_REQUEST, description = "index_id invalid or missing"),
+        (status = BAD_REQUEST, description = "Request object incorrect"),
+        (status = NOT_FOUND, description = "Index id does not exist"),
+        (status = NOT_FOUND, description = "api_key does not exists"),
+        (status = UNAUTHORIZED, description = "api_key does not exists"),
+        (status = UNAUTHORIZED, description = "api_key missing"),
+    )
+)]
+pub(crate) async fn get_document_id_api(
+    index_arc: &IndexArc,
+    document_id: Option<u64>,
+    skip: usize,
+    take: isize,
+) -> (usize, Vec<u64>) {
+    index_arc.get_docid(document_id, skip, take).await
 }
 
 pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String> {
@@ -1257,6 +1342,7 @@ pub(crate) async fn query_index_api(
     get_index_info_api,
     commit_index_api,
     delete_index_api,
+    get_document_id_api,
     index_document_api,
     update_document_api,
     index_file_api,
@@ -1271,6 +1357,7 @@ tags(
     (name="Info", description="Return info about the server"),
     (name="API Key", description="Create and delete API keys"),
     (name="Index", description="Create and delete indices"),
+    (name="Document ID", description="Iterate through document IDs"),
     (name="Document", description="Index, update, get and delete documents"),
     (name="PDF File", description="Index, and get PDF file"),
     (name="Query", description="Query an index"),

@@ -33,17 +33,17 @@ pub(crate) struct MinHeap<'a> {
 #[inline]
 pub(crate) fn result_ordering_root(
     shard_vec: &[RwLockReadGuard<'_, Shard>],
-    shard_bits: usize,
+    shard_number: usize,
     result_sort: &Vec<ResultSortIndex<'_>>,
     result1: Result,
     result2: Result,
 ) -> core::cmp::Ordering {
-    let shard_id1 = result1.doc_id & ((1 << shard_bits) - 1);
-    let doc_id1 = result1.doc_id >> shard_bits;
+    let shard_id1 = result1.doc_id % shard_number;
+    let doc_id1 = result1.doc_id / shard_number;
     let shard1 = &shard_vec[shard_id1];
 
-    let shard_id2 = result2.doc_id & ((1 << shard_bits) - 1);
-    let doc_id2 = result2.doc_id >> shard_bits;
+    let shard_id2 = result2.doc_id % shard_number;
+    let doc_id2 = result2.doc_id / shard_number;
     let shard2 = &shard_vec[shard_id2];
 
     for field in result_sort.iter() {

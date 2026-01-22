@@ -901,7 +901,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 }
 
 impl Shard {
-    pub(crate) fn get_posting_count_uncommited(&self, term_string: &str) -> usize {
+    pub(crate) fn get_posting_count_uncommitted(&self, term_string: &str) -> usize {
         let term_bytes = term_string.as_bytes();
         let key0 = hash32(term_bytes) & self.segment_number_mask1;
         let key_hash = hash64(term_bytes);
@@ -995,7 +995,8 @@ impl Shard {
                                     posting_count.1
                                 } else {
                                     0
-                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_1)
+                                } + self
+                                    .get_posting_count_uncommitted(&non_unique_term.term_ngram_1)
                                     as u32;
 
                             let posting_count_ngram_2 =
@@ -1003,7 +1004,8 @@ impl Shard {
                                     posting_count.2
                                 } else {
                                     0
-                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_0)
+                                } + self
+                                    .get_posting_count_uncommitted(&non_unique_term.term_ngram_0)
                                     as u32;
 
                             idf_ngram1 = (((self.indexed_doc_count as f32
@@ -1025,7 +1027,8 @@ impl Shard {
                                     posting_count.1
                                 } else {
                                     0
-                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_1)
+                                } + self
+                                    .get_posting_count_uncommitted(&non_unique_term.term_ngram_1)
                                     as u32;
 
                             let posting_count_ngram_2 =
@@ -1033,7 +1036,8 @@ impl Shard {
                                     posting_count.2
                                 } else {
                                     0
-                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_0)
+                                } + self
+                                    .get_posting_count_uncommitted(&non_unique_term.term_ngram_0)
                                     as u32;
 
                             let posting_count_ngram_3 =
@@ -1041,7 +1045,8 @@ impl Shard {
                                     posting_count.3
                                 } else {
                                     0
-                                } + self.get_posting_count_uncommited(&non_unique_term.term_ngram_0)
+                                } + self
+                                    .get_posting_count_uncommitted(&non_unique_term.term_ngram_0)
                                     as u32;
 
                             idf_ngram1 = (((self.indexed_doc_count as f32

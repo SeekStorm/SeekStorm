@@ -37,6 +37,9 @@ use base64::{Engine as _, engine::general_purpose};
 use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
 use crate::api_endpoints::update_documents_api;
+use crate::api_endpoints::{
+    GetDocumentIdRequest, get_document_id_api, hello_api, update_document_api,
+};
 use crate::api_endpoints::{GetDocumentRequest, delete_apikey_api};
 use crate::api_endpoints::{SearchRequestObject, create_index_api};
 use crate::api_endpoints::{add_synonyms_api, get_index_info_api, set_synonyms_api};
@@ -49,7 +52,6 @@ use crate::api_endpoints::{delete_documents_by_object_api, delete_documents_by_q
 use crate::api_endpoints::{delete_index_api, get_file_api};
 use crate::api_endpoints::{get_apikey_indices_info_api, index_file_api};
 use crate::api_endpoints::{get_document_api, get_synonyms_api};
-use crate::api_endpoints::{hello_api, update_document_api};
 use crate::api_endpoints::{index_document_api, query_index_api_get, query_index_api_post};
 use crate::multi_tenancy::ApikeyObject;
 use crate::multi_tenancy::get_apikey_hash;
@@ -963,6 +965,59 @@ pub(crate) async fn http_request_handler(
                     }
                 }
             }
+        }
+
+        ("api", "v1", "index", _, "doc_id", "", &Method::GET) => {
+            let Some(apikey) = apikey_header else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Some(apikey_hash) = get_apikey_hash(apikey, &apikey_list).await else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Ok(index_id) = parts[3].parse() else {
+                return HttpServerError::BadRequest("index_id invalid or missing".to_string())
+                    .into();
+            };
+
+            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+
+            let get_document_id_request = if !request_bytes.is_empty() {
+                let get_document_id_request: GetDocumentIdRequest =
+                    match serde_json::from_slice(&request_bytes) {
+                        Ok(document_id_object) => document_id_object,
+                        Err(e) => {
+                            return HttpServerError::BadRequest(e.to_string()).into();
+                        }
+                    };
+                get_document_id_request
+            } else {
+                GetDocumentIdRequest {
+                    document_id: None,
+                    skip: 0,
+                    take: -1,
+                }
+            };
+
+            let apikey_list_ref = apikey_list.read().await;
+            let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Some(index_arc) = apikey_object.index_list.get(&index_id) else {
+                return HttpServerError::IndexNotFound.into();
+            };
+            let status_object = get_document_id_api(
+                index_arc,
+                get_document_id_request.document_id,
+                get_document_id_request.skip,
+                get_document_id_request.take,
+            )
+            .await;
+            drop(apikey_list_ref);
+
+            let status_object_json = serde_json::to_vec(&status_object).unwrap();
+            Ok(Response::new(BoxBody::new(Full::new(
+                status_object_json.into(),
+            ))))
         }
 
         ("api", "v1", "apikey", "", "", "", &Method::POST) => {

@@ -29,7 +29,7 @@ impl Shard {
     pub(crate) fn get_document_shard(
         &self,
         doc_id: usize,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         highlighter_option: &Option<Highlighter>,
         fields: &HashSet<String>,
         distance_fields: &[DistanceField],
@@ -44,7 +44,7 @@ impl Shard {
         let block_id = doc_id >> 16;
 
         let is_uncommitted = doc_id >= self.committed_doc_count;
-        if is_uncommitted && !(include_uncommited && self.uncommitted) {
+        if is_uncommitted && !(include_uncommitted && self.uncommitted) {
             return Err("not found".to_owned());
         }
 
@@ -312,21 +312,27 @@ impl Shard {
 impl Index {
     /// Get file for document id
     /// Arguments:
-    /// * `doc_id`: Specifies which document to load from the document store of the index.
+    /// * `doc_id`: Document ID that specifies which file to load from the document store of the index.
+    ///   ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
     ///
     /// Returns:
     /// * `Vec<u8>`: The file content as a byte vector.
     ///
     pub async fn get_file(&self, doc_id: usize) -> Result<Vec<u8>, String> {
-        let shard_id = doc_id & ((1 << self.shard_bits) - 1);
-        let doc_id = doc_id >> self.shard_bits;
-        self.shard_vec[shard_id].read().await.get_file_shard(doc_id)
+        let shard_id = doc_id % self.shard_number;
+        let doc_id_shard = doc_id / self.shard_number;
+
+        self.shard_vec[shard_id]
+            .read()
+            .await
+            .get_file_shard(doc_id_shard)
     }
 
     /// Get document for document id
     /// Arguments:
-    /// * `doc_id`: Specifies which document to load from the document store of the index.
-    /// * `include_uncommited`: Return also documents which have not yet been committed.
+    /// * `doc_id`: Document ID that specifies which document to load from the document store of the index.
+    ///   ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
+    /// * `include_uncommitted`: Return also documents which have not yet been committed.
     /// * `highlighter_option`: Specifies the extraction of keyword-in-context (KWIC) fragments from fields in documents, and the highlighting of the query terms within.
     /// * `fields`: Specifies which of the stored fields to return with each document. Default: If empty return all stored fields
     /// * `distance_fields`: insert distance fields into result documents, calculating the distance between a specified facet field of type Point and a base Point, in kilometers or miles.
@@ -334,17 +340,17 @@ impl Index {
     pub async fn get_document(
         &self,
         doc_id: usize,
-        include_uncommited: bool,
+        include_uncommitted: bool,
         highlighter_option: &Option<Highlighter>,
         fields: &HashSet<String>,
         distance_fields: &[DistanceField],
     ) -> Result<Document, String> {
-        let shard_id = doc_id & ((1 << self.shard_bits) - 1);
-        let doc_id_shard = doc_id >> self.shard_bits;
+        let shard_id = doc_id % self.shard_number;
+        let doc_id_shard = doc_id / self.shard_number;
 
         self.shard_vec[shard_id].read().await.get_document_shard(
             doc_id_shard,
-            include_uncommited,
+            include_uncommitted,
             highlighter_option,
             fields,
             distance_fields,
