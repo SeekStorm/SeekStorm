@@ -8,7 +8,10 @@ use seekstorm::index::{
     IndexMetaObject, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType,
     create_index, open_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search};
+use seekstorm::iterator::GetIterator;
+use seekstorm::search::{
+    FacetValue, QueryRewriting, QueryType, ResultSort, ResultType, Search, SortOrder,
+};
 use std::collections::HashSet;
 use std::{fs, path::Path};
 
@@ -88,8 +91,50 @@ async fn test_02_index_document() {
 }
 
 #[tokio::test]
+/// get iterator
+async fn test_03_get_iterator() {
+    // open index
+    let index_path = Path::new("tests/index_test/");
+    let index_arc = open_index(index_path, false).await.unwrap();
+
+    let result = index_arc.read().await.indexed_doc_count().await;
+    assert_eq!(result, 4);
+
+    // min doc_id
+    let iterator = index_arc
+        .get_iterator(None, 0, 1, false, false, vec![])
+        .await;
+    let result = iterator.results.first().unwrap().doc_id;
+    assert_eq!(result, 0);
+
+    // max doc_id
+    let iterator = index_arc
+        .get_iterator(None, 0, -1, false, false, vec![])
+        .await;
+    let result = iterator.results.first().unwrap().doc_id;
+    assert_eq!(result, 3);
+
+    // previous doc_id
+    let iterator = index_arc
+        .get_iterator(Some(3), 1, -1, false, false, vec![])
+        .await;
+
+    let result = iterator.results.first().unwrap().doc_id;
+    assert_eq!(result, 2);
+
+    // next doc_id
+    let iterator = index_arc
+        .get_iterator(Some(0), 1, 1, false, false, vec![])
+        .await;
+    let result = iterator.results.first().unwrap().doc_id;
+    assert_eq!(result, 1);
+
+    index_arc.close().await;
+}
+
+#[tokio::test]
 /// query index
-async fn test_03_query_index() {
+async fn test_04_query_index() {
     // open index
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
@@ -102,6 +147,7 @@ async fn test_03_query_index() {
         .search(
             query,
             QueryType::Intersection,
+            false,
             0,
             10,
             ResultType::TopkCount,
@@ -130,6 +176,7 @@ async fn test_03_query_index() {
         .search(
             query,
             QueryType::Union,
+            false,
             0,
             10,
             ResultType::Count,
@@ -155,8 +202,126 @@ async fn test_03_query_index() {
 }
 
 #[tokio::test]
+/// empty query
+async fn test_05_empty_query() {
+    // open index
+    let index_path = Path::new("tests/index_test/");
+    let index_arc = open_index(index_path, false).await.unwrap();
+
+    let result = index_arc.read().await.indexed_doc_count().await;
+    assert_eq!(result, 4);
+
+    // default (descending)
+
+    let result_object = index_arc
+        .search(
+            "".into(),
+            QueryType::Intersection,
+            true,
+            0,
+            10,
+            ResultType::TopkCount,
+            false,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            QueryRewriting::SearchOnly,
+        )
+        .await;
+
+    let result = result_object.results.first().unwrap().doc_id;
+    assert_eq!(result, 3);
+
+    let result = result_object.results.len();
+    assert_eq!(result, 4);
+
+    let result = result_object.result_count;
+    assert_eq!(result, 4);
+
+    let result = result_object.result_count_total;
+    assert_eq!(result, 4);
+
+    // descending
+
+    let result_sort = vec![ResultSort {
+        field: "_id".into(),
+        order: SortOrder::Descending,
+        base: FacetValue::None,
+    }];
+
+    let result_object = index_arc
+        .search(
+            "".into(),
+            QueryType::Union,
+            true,
+            0,
+            10,
+            ResultType::TopkCount,
+            false,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            result_sort,
+            QueryRewriting::SearchOnly,
+        )
+        .await;
+
+    let result = result_object.results.first().unwrap().doc_id;
+    assert_eq!(result, 3);
+
+    let result = result_object.results.len();
+    assert_eq!(result, 4);
+
+    let result = result_object.result_count;
+    assert_eq!(result, 4);
+
+    let result = result_object.result_count_total;
+    assert_eq!(result, 4);
+
+    // ascending
+
+    let result_sort = vec![ResultSort {
+        field: "_id".into(),
+        order: SortOrder::Ascending,
+        base: FacetValue::None,
+    }];
+
+    let result_object = index_arc
+        .search(
+            "".into(),
+            QueryType::Union,
+            true,
+            0,
+            10,
+            ResultType::TopkCount,
+            false,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            result_sort,
+            QueryRewriting::SearchOnly,
+        )
+        .await;
+
+    let result = result_object.results.first().unwrap().doc_id;
+    assert_eq!(result, 0);
+
+    let result = result_object.results.len();
+    assert_eq!(result, 4);
+
+    let result = result_object.result_count;
+    assert_eq!(result, 4);
+
+    let result = result_object.result_count_total;
+    assert_eq!(result, 4);
+
+    index_arc.close().await;
+}
+
+#[tokio::test]
 /// clear index
-async fn test_04_clear_index() {
+async fn test_06_clear_index() {
     // open index
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
@@ -189,6 +354,7 @@ async fn test_04_clear_index() {
         .search(
             query,
             QueryType::Union,
+            false,
             0,
             10,
             ResultType::TopkCount,
@@ -213,7 +379,7 @@ async fn test_04_clear_index() {
 
 #[tokio::test]
 /// get document
-async fn test_05_get_document() {
+async fn test_07_get_document() {
     // open index
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
@@ -246,7 +412,7 @@ async fn test_05_get_document() {
 
 #[tokio::test]
 /// delete document
-async fn test_06_delete_document() {
+async fn test_08_delete_document() {
     // open index
     let index_path = Path::new("tests/index_test/");
     let index_arc = open_index(index_path, false).await.unwrap();
@@ -260,6 +426,7 @@ async fn test_06_delete_document() {
         .search(
             query,
             QueryType::Union,
+            false,
             0,
             10,
             ResultType::TopkCount,
@@ -286,6 +453,7 @@ async fn test_06_delete_document() {
         .search(
             query,
             QueryType::Union,
+            false,
             0,
             10,
             ResultType::TopkCount,

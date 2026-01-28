@@ -226,7 +226,7 @@ pub(crate) fn top_fragments_from_field(
                 highlight.fragment_number
             };
             let result_sort = Vec::new();
-            let mut topk_candidates = MinHeap::new(fragment_number, shard, &result_sort);
+            let mut topk_candidates = MinHeap::new(fragment_number, shard, false, &result_sort);
 
             if let Some(schema_field) = shard.schema_map.get(&highlight.field) {
                 let text = match schema_field.field_type {

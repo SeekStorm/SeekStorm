@@ -313,7 +313,7 @@ impl Index {
     /// Get file for document id
     /// Arguments:
     /// * `doc_id`: Document ID that specifies which file to load from the document store of the index.
-    ///   ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
+    ///   ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
     ///
     /// Returns:
     /// * `Vec<u8>`: The file content as a byte vector.
@@ -331,7 +331,7 @@ impl Index {
     /// Get document for document id
     /// Arguments:
     /// * `doc_id`: Document ID that specifies which document to load from the document store of the index.
-    ///   ⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
+    ///   ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
     /// * `include_uncommitted`: Return also documents which have not yet been committed.
     /// * `highlighter_option`: Specifies the extraction of keyword-in-context (KWIC) fragments from fields in documents, and the highlighting of the query terms within.
     /// * `fields`: Specifies which of the stored fields to return with each document. Default: If empty return all stored fields

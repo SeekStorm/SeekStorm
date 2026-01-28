@@ -161,6 +161,7 @@
 //! use seekstorm::search::{Search, QueryType, ResultType, QueryRewriting};
 //!
 //! let query="test".to_string();
+//! let enable_empty_query=false;
 //! let offset=10;
 //! let length=10;
 //! let query_type=QueryType::Intersection;
@@ -170,7 +171,7 @@
 //! let query_facets=Vec::new();
 //! let facet_filter=Vec::new();
 //! let result_sort=Vec::new();
-//! let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
+//! let result_object = index_arc.search(query, query_type,  enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
 //!
 //! // ### display results
 //!
@@ -432,6 +433,7 @@
 //! use seekstorm::search::{QueryType, ResultType, QueryFacet, FacetFilter, QueryRewriting,Search};
 //!
 //! let query="test".to_string();
+//! let enable_empty_query=false;
 //! let offset=0;
 //! let length=10;
 //! let query_type=QueryType::Intersection;
@@ -442,7 +444,7 @@
 //! let facet_filter=Vec::new();
 //! //let facet_filter = vec![FacetFilter {field: "town".to_string(),   filter:Filter::String(vec!["Berlin".to_string()])}];
 //! let result_sort=Vec::new();
-//! let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
+//! let result_object = index_arc.search(query, query_type,  enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
 //!
 //! // ### display results
 //!
@@ -502,6 +504,8 @@ pub(crate) mod index_posting;
 pub mod ingest;
 pub(crate) mod intersection;
 pub(crate) mod intersection_simd;
+/// Iterator over all documents, also for search with empty query.
+pub mod iterator;
 pub(crate) mod min_heap;
 pub(crate) mod realtime_search;
 /// Search the index for all indexed documents, both for committed and uncommitted documents.

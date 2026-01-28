@@ -3,6 +3,7 @@ use crate::index::{
     DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
     ShardArc,
 };
+use crate::iterator::{search_iterator_index, search_iterator_shard};
 use crate::min_heap::{Result, result_ordering_root};
 use crate::tokenizer::{tokenizer, tokenizer_lite};
 use crate::union::{union_docid_2, union_docid_3};
@@ -170,6 +171,9 @@ pub struct ResultObject {
     pub suggestions: Vec<String>,
 }
 
+/// Create query_list and non_unique_query_list
+/// blockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,
+/// then the intersect_docid within a single block is executed  (=segments?)
 /// specifies how to count the frequency of numerical facet field values
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, ToSchema)]
 pub enum RangeType {
@@ -373,7 +377,7 @@ pub enum Ranges {
 }
 
 /// FacetValue: Facet field value types
-#[derive(Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, ToSchema, Debug)]
 pub enum FacetValue {
     /// Boolean value
     Bool(bool),
@@ -845,7 +849,7 @@ pub enum SortOrder {
 }
 
 /// Specifies the sort order for the search results.
-#[derive(Clone, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Deserialize, Serialize, ToSchema, Debug)]
 pub struct ResultSort {
     /// name of the facet field to sort by
     pub field: String,
@@ -1094,6 +1098,7 @@ pub trait Search {
         &self,
         query_string: String,
         query_type_default: QueryType,
+        enable_empty_query: bool,
         offset: usize,
         length: usize,
         result_type: ResultType,
@@ -1111,6 +1116,7 @@ impl Search for IndexArc {
         &self,
         query_string: String,
         query_type_default: QueryType,
+        enable_empty_query: bool,
         offset: usize,
         length: usize,
         result_type: ResultType,
@@ -1263,7 +1269,6 @@ impl Search for IndexArc {
                                             break;
                                         }
                                     }
-                                    // ! println!("sliding window completion expansion input #{}# input terms len {} completion count {}",completion_term_str,completion_term_vec.len(), additional_completions.len());
                                 }
                             }
 
@@ -1363,11 +1368,32 @@ impl Search for IndexArc {
             return result_object;
         }
 
+        if enable_empty_query
+            && query_string.is_empty()
+            && query_facets.is_empty()
+            && facet_filter.is_empty()
+            && (result_sort.is_empty()
+                || (result_sort.len() == 1
+                    && (result_sort.first().unwrap().field == "_id"
+                        || result_sort.first().unwrap().field == "_score")))
+        {
+            return search_iterator_index(
+                self,
+                offset,
+                length,
+                result_type,
+                include_uncommitted,
+                result_sort,
+            )
+            .await;
+        }
+
         if index_ref.shard_number == 1 {
             let mut result_object = index_ref.shard_vec[0]
                 .search_shard(
                     query_string.clone(),
                     query_type_default,
+                    enable_empty_query,
                     offset,
                     length,
                     result_type,
@@ -1406,6 +1432,7 @@ impl Search for IndexArc {
                     .search_shard(
                         query_string_clone,
                         query_type_clone,
+                        enable_empty_query,
                         0,
                         offset + length,
                         result_type_clone,
@@ -1588,11 +1615,27 @@ impl Search for IndexArc {
             result_object.facets.insert(key.clone(), sum);
         }
 
-        // != count
         if aggregate_results {
             let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
             if !result_sort.is_empty() {
                 for rs in result_sort.iter() {
+                    if rs.field == "_id" {
+                        result_sort_index.push(ResultSortIndex {
+                            idx: usize::MAX,
+                            order: rs.order.clone(),
+                            base: &rs.base,
+                        });
+                        continue;
+                    }
+                    if rs.field == "_score" {
+                        result_sort_index.push(ResultSortIndex {
+                            idx: usize::MAX - 1,
+                            order: rs.order.clone(),
+                            base: &rs.base,
+                        });
+                        continue;
+                    }
+
                     if let Some(idx) = index_ref.shard_vec[0]
                         .read()
                         .await
@@ -1610,8 +1653,19 @@ impl Search for IndexArc {
                     futures::future::join_all(index_ref.shard_vec.iter().map(|s| s.read())).await;
 
                 result_object.results.sort_by(|a, b| {
-                    result_ordering_root(&shard_vec, shard_number, &result_sort_index, *b, *a)
+                    result_ordering_root(
+                        &shard_vec,
+                        shard_number,
+                        query_string.is_empty(),
+                        &result_sort_index,
+                        *b,
+                        *a,
+                    )
                 });
+            } else if query_string.is_empty() {
+                result_object
+                    .results
+                    .sort_by(|a, b| b.doc_id.cmp(&a.doc_id));
             } else {
                 result_object
                     .results
@@ -1641,24 +1695,6 @@ impl Search for IndexArc {
 
         result_object
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-#[allow(async_fn_in_trait)]
-pub(crate) trait SearchShard {
-    async fn search_shard(
-        &self,
-        query_string: String,
-        query_type_default: QueryType,
-        offset: usize,
-        length: usize,
-        result_type: ResultType,
-        include_uncommitted: bool,
-        field_filter: Vec<String>,
-        query_facets: Vec<QueryFacet>,
-        facet_filter: Vec<FacetFilter>,
-        result_sort: Vec<ResultSort>,
-    ) -> ResultObject;
 }
 
 /// Non-recursive binary search of non-consecutive u64 values in a slice of bytes
@@ -1955,11 +1991,31 @@ pub(crate) fn decode_posting_list_object(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+#[allow(async_fn_in_trait)]
+pub(crate) trait SearchShard {
+    async fn search_shard(
+        &self,
+        query_string: String,
+        query_type_default: QueryType,
+        enable_empty_query: bool,
+        offset: usize,
+        length: usize,
+        result_type: ResultType,
+        include_uncommitted: bool,
+        field_filter: Vec<String>,
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
+        result_sort: Vec<ResultSort>,
+    ) -> ResultObject;
+}
+
 impl SearchShard for ShardArc {
     async fn search_shard(
         &self,
         query_string: String,
         query_type_default: QueryType,
+        enable_empty_query: bool,
         offset: usize,
         length: usize,
         result_type: ResultType,
@@ -2009,6 +2065,23 @@ impl SearchShard for ShardArc {
         let mut result_sort_index: Vec<ResultSortIndex> = Vec::new();
         if !result_sort.is_empty() && result_type != ResultType::Count {
             for rs in result_sort.iter() {
+                if rs.field == "_id" {
+                    result_sort_index.push(ResultSortIndex {
+                        idx: usize::MAX,
+                        order: rs.order.clone(),
+                        base: &rs.base,
+                    });
+                    continue;
+                }
+                if rs.field == "_score" {
+                    result_sort_index.push(ResultSortIndex {
+                        idx: usize::MAX - 1,
+                        order: rs.order.clone(),
+                        base: &rs.base,
+                    });
+                    continue;
+                }
+
                 if let Some(idx) = shard_ref.facets_map.get(&rs.field) {
                     result_sort_index.push(ResultSortIndex {
                         idx: *idx,
@@ -2025,7 +2098,12 @@ impl SearchShard for ShardArc {
             0
         };
         let mut search_result = SearchResult {
-            topk_candidates: MinHeap::new(heap_size, &shard_ref, &result_sort_index),
+            topk_candidates: MinHeap::new(
+                heap_size,
+                &shard_ref,
+                query_string.is_empty(),
+                &result_sort_index,
+            ),
             query_facets: Vec::new(),
             skip_facet_count: false,
         };
@@ -2876,6 +2954,18 @@ impl SearchShard for ShardArc {
             let mut matching_blocks: i32 = 0;
             let query_term_count = non_unique_terms.len();
             if query_list_len == 0 {
+                if enable_empty_query && query_string.is_empty() {
+                    search_iterator_shard(
+                        &shard_ref,
+                        result_type,
+                        include_uncommitted,
+                        &result_count_arc,
+                        &mut search_result,
+                        offset + length,
+                        &facet_filter_sparse,
+                    )
+                    .await;
+                }
             } else if query_list_len == 1 {
                 if !(shard_ref.uncommitted && include_uncommitted)
                     && offset + length <= 1000
@@ -3067,9 +3157,21 @@ impl SearchShard for ShardArc {
                     .truncate(search_result.topk_candidates.current_heap_size);
             }
 
-            result_object
-                .results
-                .sort_by(|a, b| search_result.topk_candidates.result_ordering_shard(*b, *a));
+            if result_sort.is_empty() {
+                if query_string.is_empty() {
+                    result_object
+                        .results
+                        .sort_by(|a, b| b.doc_id.cmp(&a.doc_id));
+                } else {
+                    result_object
+                        .results
+                        .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                }
+            } else {
+                result_object
+                    .results
+                    .sort_by(|a, b| search_result.topk_candidates.result_ordering_shard(*b, *a));
+            }
 
             if offset > 0 {
                 result_object.results.drain(..offset);

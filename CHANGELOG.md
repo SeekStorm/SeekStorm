@@ -5,22 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-01-28
+
+### Added
+
+- `search` now supports an **empty query**: similar to an iterator across all indexed documents, but **all search parameters** are supported, apart from query and field_filter:
+  - result_type: ResultType,
+  - include_uncommitted: bool,
+  - query_facets: Vec<QueryFacet>, 
+  - facet_filter: Vec<FacetFilter>, 
+  - result_sort: Vec<ResultSort>,  
+    For search **with empty query**, if no sort field is specified, then the search results are sorted by `_id` in `descending` order per default (newest first).  
+    For search **with query** the sort default is `_score`.  
+    If `result_sort` is used with any other than the special field `_id`, then a min-heap consumes RAM proportional to **offset + length**.  
+    Per default or if sort field `_id` is specified, the consumed RAM is proportional to **length**.  
+- Added search parameter `enable_empty_query`: if `true`, then for an empty query, the results are returned from the iterator; otherwise, for an empty query, no results are returned.
+  - With an empty query, the **embedded Web UI** now allows to browse page-wise through the whole index. Try, e.g., our [Wikipedia Demo](https://github.com/SeekStorm/SeekStorm?tab=readme-ov-file#demo-time).
+- Now it is possible to sort results by two special fields _id, and _score, ascending and descending, both for search with query and with empty query.
+	- no need to set those field in schema as facet=true, in order to sort them, unlike with other fields.
+	- the two special fields are also automatically injected in the result documents.
+	- if the one of the two special fields is set in result_sort, all other sort fields after this are ignored for sorting (tie-break after a field where no two elemands are the same just doesnt make sense)
+- default sort, if no sort_field ist specified, or sort after last tie-break: 
+	- empty query: docid descending
+	- with query: score descending
+- Iterator adds new `include_deleted` parameter: if true, also deleted document IDs are included in the result.
+- Iterator adds new `include_document` parameter: if true, the documents are also returned along with their document IDs.
+- Iterator adds a new `fields` parameter: a list of field names that specifies which fields to return, if include_document is true.  
+  If the fields parameter is empty or not present, then all stored fields are returned.
+- Added unit tests for get_iterator and search with empty query.
+
+### Changed
+- Iterator API changed: in addition to document IDs, now optionally the documents themselves are returned. Optionally, a list of field names specifies which document fields to return.
+  - method: `get_docid(Option<doc_id:u64>,skip:usize,take:isize)` -> `get_iterator(Option<doc_id:u64>,skip:usize,take:isize,include_doc:bool)` 
+  - return object: `tuple (skip,Vec<doc_id>)` -> `IteratorResult {skip:usize, results: Vec<IteratorResultItem>}` and `IteratorResultItem{doc_id:u64, doc: Option<Document>}`
+- Iterator REST API changed: Instead of `GET` with `request object` there are now two alternative options:
+  - `GET` with `query parameters` (in the URL after the question mark '?').
+  - `POST` with `request object`.
+- Spelling correction dictionary and completion list are only saved, if the index has been modified AND if auto-creation was enabled  (SchemaField.completion_source=true, SchemaField.dictionary_source=true).
+  If auto-creation is disabled then any static completion lists and spelling correction dictionaries are not overwritten.
+- Skip any invoked commit if no uncommitted documents (per index and per shard).
+
 ## [2.0.0] - 2026-01-22
 
 ### Added
 
-- Document ID iterator API `get_docid`, both for SeekStorm library and server. 
-  Allows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.  
-  Allows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.  
-  Ensures without invoking search, that only valid document IDs are returned, even though document ID are not guaranteed to be continuous and gapless!  
-  The returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.  
-  Taking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).  
- 
-  Explanation of non-continuous docid:  
-  In SeekStorm, the document IDs are **eventually** continuous.
-  In the multi-sharded index, each shard manages its own document ID.
-  Due to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously. When calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.  
-  That's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.
+- Document ID iterator `get_docid`, both for SeekStorm library and server. 
+  The document ID iterator allows to iterate over all document IDs and documents in the entire index, forward or backward. 
+  It enables efficient sequential access to every document, even in very large indexes, without running a search. 
+  Paging through the index works without collecting document IDs to Min-heap in size-limited RAM first.
+  The iterator guarantees that only valid document IDs are returned, even though document IDs are not strictly continuous. 
+  Document IDs can also be fetched in batches, reducing round trips and significantly improving performance, especially when using the REST API.
+  Typical use cases include index export, conversion, analytics, audits, and inspection.
+
+  Explanation of "eventually continuous" docid:
+  In SeekStorm, document IDs become continuous over time. In a multi-sharded index, each shard maintains its own document ID space. 
+  Because documents are distributed across shards in a non-deterministic, load-dependent way, shard-local document IDs advance at different rates. 
+  When these are mapped to global document IDs, temporary gaps can appear.
+  As a result, simply iterating from 0 to the total document count may encounter invalid IDs near the end. 
+  The Document ID Iterator abstracts this complexity and reliably returns only valid document IDs.
 
   - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
   - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
@@ -31,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The calculation of the global document ID from the shard document ID during aggregation has been changed from a bit-shift operation to a modulo operation to ensure gapless document IDs 
   (apart from document IDs in the last incomplete index level of each shard), even if the number of shards is not a power of 2.
-- Due to sharding document IDs are not guaranteed to be continuous and gapless! Always use `search` or the new iterator API `get_docid` first to obtain a valid document IDs! 
+- Due to sharding document IDs are not guaranteed to be continuous and gapless! Always use `search` or the new iterator `get_docid` first to obtain a valid document IDs! 
   Added a warning hereof to the documentation of get_document and delete_document for both the library API and REST API.
 - Index format (`INDEX_FORMAT_VERSION_MAJOR`) changed: different document ID calculation. 
 - Query auto-completion implementation simplified.
@@ -41,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed typo in `include_uncommitted` parameter.
 - Fixed an issue with query auto-completion if the input contained spaces.
 - ReadmeDoctests fixed!
-- The changed document ID calculation together with the new Document ID iterator API `get_docid` fixes #54 .
+- The changed document ID calculation together with the new Document ID iterator `get_docid` fixes #54 .
 
 ## [1.2.5] - 2026-01-17
 

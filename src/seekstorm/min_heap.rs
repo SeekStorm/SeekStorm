@@ -27,6 +27,7 @@ pub(crate) struct MinHeap<'a> {
     pub docid_hashset: AHashMap<usize, f32>,
 
     pub index: &'a Shard,
+    pub empty_query: bool,
     pub result_sort: &'a Vec<ResultSortIndex<'a>>,
 }
 
@@ -34,6 +35,7 @@ pub(crate) struct MinHeap<'a> {
 pub(crate) fn result_ordering_root(
     shard_vec: &[RwLockReadGuard<'_, Shard>],
     shard_number: usize,
+    empty_query: bool,
     result_sort: &Vec<ResultSortIndex<'_>>,
     result1: Result,
     result2: Result,
@@ -47,6 +49,32 @@ pub(crate) fn result_ordering_root(
     let shard2 = &shard_vec[shard_id2];
 
     for field in result_sort.iter() {
+        if field.idx == usize::MAX {
+            let order = if field.order == SortOrder::Descending {
+                result1.doc_id.cmp(&result2.doc_id)
+            } else {
+                result2.doc_id.cmp(&result1.doc_id)
+            };
+
+            return order;
+        }
+
+        if field.idx == usize::MAX - 1 {
+            let order = if field.order == SortOrder::Descending {
+                result1
+                    .score
+                    .partial_cmp(&result2.score)
+                    .unwrap_or(core::cmp::Ordering::Equal)
+            } else {
+                result2
+                    .score
+                    .partial_cmp(&result1.score)
+                    .unwrap_or(core::cmp::Ordering::Equal)
+            };
+
+            return order;
+        }
+
         match shard1.facets[field.idx].field_type {
             FieldType::U8 => {
                 let offset = shard1.facets[field.idx].offset;
@@ -483,10 +511,14 @@ pub(crate) fn result_ordering_root(
         }
     }
 
-    result1
-        .score
-        .partial_cmp(&result2.score)
-        .unwrap_or(core::cmp::Ordering::Equal)
+    if empty_query {
+        result1.doc_id.cmp(&result2.doc_id)
+    } else {
+        result1
+            .score
+            .partial_cmp(&result2.score)
+            .unwrap_or(core::cmp::Ordering::Equal)
+    }
 }
 
 impl<'a> MinHeap<'a> {
@@ -494,6 +526,7 @@ impl<'a> MinHeap<'a> {
     pub(crate) fn new(
         size: usize,
         index: &'a Shard,
+        empty_query: bool,
         result_sort: &'a Vec<ResultSortIndex>,
     ) -> MinHeap<'a> {
         MinHeap {
@@ -507,6 +540,7 @@ impl<'a> MinHeap<'a> {
                 size
             ],
             index,
+            empty_query,
             result_sort,
         }
     }
@@ -518,6 +552,32 @@ impl<'a> MinHeap<'a> {
         result2: Result,
     ) -> core::cmp::Ordering {
         for field in self.result_sort.iter() {
+            if field.idx == usize::MAX {
+                let order = if field.order == SortOrder::Descending {
+                    result1.doc_id.cmp(&result2.doc_id)
+                } else {
+                    result2.doc_id.cmp(&result1.doc_id)
+                };
+
+                return order;
+            }
+
+            if field.idx == usize::MAX - 1 {
+                let order = if field.order == SortOrder::Descending {
+                    result1
+                        .score
+                        .partial_cmp(&result2.score)
+                        .unwrap_or(core::cmp::Ordering::Equal)
+                } else {
+                    result2
+                        .score
+                        .partial_cmp(&result1.score)
+                        .unwrap_or(core::cmp::Ordering::Equal)
+                };
+
+                return order;
+            }
+
             match self.index.facets[field.idx].field_type {
                 FieldType::U8 => {
                     let offset = self.index.facets[field.idx].offset;
@@ -955,10 +1015,14 @@ impl<'a> MinHeap<'a> {
             }
         }
 
-        result1
-            .score
-            .partial_cmp(&result2.score)
-            .unwrap_or(core::cmp::Ordering::Equal)
+        if self.empty_query {
+            result1.doc_id.cmp(&result2.doc_id)
+        } else {
+            result1
+                .score
+                .partial_cmp(&result2.score)
+                .unwrap_or(core::cmp::Ordering::Equal)
+        }
     }
 
     #[inline(always)]

@@ -107,38 +107,45 @@ impl Commit for IndexArc {
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
     async fn commit(&self) {
         let index_ref = self.read().await;
-        let uncommitted_doc_count = index_ref.uncommitted_doc_count().await;
 
+        let mut uncommitted_doc_count = 0;
         for shard in index_ref.shard_vec.iter() {
             let p = shard.read().await.permits.clone();
             let permit = p.acquire().await.unwrap();
 
-            let indexed_doc_count = shard.read().await.indexed_doc_count;
-            shard.write().await.commit(indexed_doc_count).await;
-            warmup(shard).await;
+            if shard.read().await.uncommitted {
+                let indexed_doc_count = shard.read().await.indexed_doc_count;
+                uncommitted_doc_count += indexed_doc_count - shard.read().await.committed_doc_count;
+                shard.write().await.commit(indexed_doc_count).await;
+                warmup(shard).await;
+            }
+
             drop(permit);
         }
 
         if !index_ref.mute {
-            println!(
-                "commit index {} level {} committed documents {} {}",
-                index_ref.meta.id,
-                index_ref.level_count().await,
-                uncommitted_doc_count,
-                index_ref.indexed_doc_count().await,
-            );
+            if uncommitted_doc_count == 0 {
+                println!(
+                    "commit index {} level {} no uncommitted documents, skipping commit",
+                    index_ref.meta.id,
+                    index_ref.level_count().await,
+                );
+            } else {
+                println!(
+                    "commit index {} level {} committed documents {} {}",
+                    index_ref.meta.id,
+                    index_ref.level_count().await,
+                    uncommitted_doc_count,
+                    index_ref.indexed_doc_count().await,
+                );
+            }
         }
-
         drop(index_ref);
     }
 }
 
 impl Shard {
     pub(crate) async fn commit(&mut self, indexed_doc_count: usize) {
-        if !self.uncommitted {
-            return;
-        }
-
         let is_last_level_incomplete = self.is_last_level_incomplete;
         if self.is_last_level_incomplete {
             self.merge_incomplete_index_level_to_level0();
@@ -389,6 +396,8 @@ impl Shard {
         for segment in self.segments_level0.iter_mut() {
             segment.segment.clear();
         }
+
+        self.modified = true;
 
         self.uncommitted = false;
     }

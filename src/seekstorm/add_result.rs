@@ -233,6 +233,7 @@ pub(crate) fn add_result_singleterm_multifield(
         ResultType::Topk => {
             if SPEEDUP_FLAG
                 && search_result.topk_candidates.result_sort.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -292,6 +293,7 @@ pub(crate) fn add_result_singleterm_multifield(
 
             if SPEEDUP_FLAG
                 && search_result.topk_candidates.result_sort.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -300,7 +302,7 @@ pub(crate) fn add_result_singleterm_multifield(
         }
     }
 
-    if field_filter_set.is_empty() {
+    if field_filter_set.is_empty() && !search_result.topk_candidates.empty_query {
         decode_positions_singleterm_multifield(
             shard,
             plo_single,
@@ -311,15 +313,19 @@ pub(crate) fn add_result_singleterm_multifield(
         );
     }
 
-    let bm25f = get_bm25f_singleterm_multifield(
-        shard,
-        docid,
-        plo_single,
-        field_vec,
-        field_vec_ngram1,
-        field_vec_ngram2,
-        field_vec_ngram3,
-    );
+    let bm25f = if !search_result.topk_candidates.empty_query {
+        get_bm25f_singleterm_multifield(
+            shard,
+            docid,
+            plo_single,
+            field_vec,
+            field_vec_ngram1,
+            field_vec_ngram2,
+            field_vec_ngram3,
+        )
+    } else {
+        0.0
+    };
 
     search_result.topk_candidates.add_topk(
         min_heap::Result {
@@ -759,6 +765,7 @@ pub(crate) fn add_result_singleterm_singlefield(
         ResultType::Topk => {
             if SPEEDUP_FLAG
                 && search_result.topk_candidates.result_sort.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -813,6 +820,7 @@ pub(crate) fn add_result_singleterm_singlefield(
 
             if SPEEDUP_FLAG
                 && search_result.topk_candidates.result_sort.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -821,7 +829,7 @@ pub(crate) fn add_result_singleterm_singlefield(
         }
     }
 
-    if field_filter_set.is_empty() {
+    if field_filter_set.is_empty() && !search_result.topk_candidates.empty_query {
         decode_positions_singleterm_singlefield(
             plo_single,
             &mut tf_ngram1,
@@ -831,15 +839,19 @@ pub(crate) fn add_result_singleterm_singlefield(
         );
     }
 
-    let bm25f = get_bm25f_singleterm_singlefield(
-        shard,
-        docid,
-        plo_single,
-        tf_ngram1,
-        tf_ngram2,
-        tf_ngram3,
-        positions_count,
-    );
+    let bm25f = if !search_result.topk_candidates.empty_query {
+        get_bm25f_singleterm_singlefield(
+            shard,
+            docid,
+            plo_single,
+            tf_ngram1,
+            tf_ngram2,
+            tf_ngram3,
+            positions_count,
+        )
+    } else {
+        0.0
+    };
 
     search_result.topk_candidates.add_topk(
         min_heap::Result {
@@ -3062,6 +3074,7 @@ pub(crate) fn add_result_multiterm_multifield(
         ResultType::Topk => {
             if SPEEDUP_FLAG
                 && search_result.topk_candidates.result_sort.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -3073,6 +3086,7 @@ pub(crate) fn add_result_multiterm_multifield(
                 && search_result.topk_candidates.result_sort.is_empty()
                 && !phrase_query
                 && field_filter_set.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -3124,6 +3138,7 @@ pub(crate) fn add_result_multiterm_multifield(
 
         if SPEEDUP_FLAG
             && search_result.topk_candidates.result_sort.is_empty()
+            && !search_result.topk_candidates.empty_query
             && search_result.topk_candidates.current_heap_size >= top_k
             && bm25 <= search_result.topk_candidates._elements[0].score
         {
@@ -3493,6 +3508,7 @@ pub(crate) fn add_result_multiterm_singlefield(
         ResultType::Topk => {
             if SPEEDUP_FLAG
                 && search_result.topk_candidates.result_sort.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -3504,6 +3520,7 @@ pub(crate) fn add_result_multiterm_singlefield(
                 && search_result.topk_candidates.result_sort.is_empty()
                 && !phrase_query
                 && field_filter_set.is_empty()
+                && !search_result.topk_candidates.empty_query
                 && search_result.topk_candidates.current_heap_size >= top_k
                 && block_score <= search_result.topk_candidates._elements[0].score
             {
@@ -3554,6 +3571,7 @@ pub(crate) fn add_result_multiterm_singlefield(
 
         if SPEEDUP_FLAG
             && search_result.topk_candidates.result_sort.is_empty()
+            && !search_result.topk_candidates.empty_query
             && search_result.topk_candidates.current_heap_size >= top_k
             && bm25 <= search_result.topk_candidates._elements[0].score
         {

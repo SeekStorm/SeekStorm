@@ -318,8 +318,15 @@ content-type: application/json
     "facet_filter": [{"Timestamp": {"field": "date","filter": [820450800,1577833200]}}]
 }      
 
-### get first document ID
-GET http://127.0.0.1/api/v1/index/0/doc_id/
+
+
+### iterator: get first 2 documents
+GET http://127.0.0.1/api/v1/index/0/doc_id/?document_id=null&skip=0&take=2&include_document=true&fields=["title","body"]
+apikey: {{api_key}}
+content-type: application/json
+
+### iterator: get first 2 documents
+POST http://127.0.0.1/api/v1/index/0/doc_id/
 apikey: {{api_key}}
 content-type: application/json
 
@@ -327,11 +334,13 @@ content-type: application/json
 {
     "document_id": null,
     "skip": 0,
-    "take": 1
+    "take": 2,
+    "include_document": true,
+    "fields": []
 }
 
-### get last document ID
-GET http://127.0.0.1/api/v1/index/0/doc_id/
+### iterator: get last 2 documents
+POST http://127.0.0.1/api/v1/index/0/doc_id/
 apikey: {{api_key}}
 content-type: application/json
 
@@ -339,11 +348,13 @@ content-type: application/json
 {
     "document_id": null,
     "skip": 0,
-    "take": -1
+    "take": -2,
+    "include_document": true,
+    "fields": []
 }
 
-### get next document ID
-GET http://127.0.0.1/api/v1/index/0/doc_id/
+### iterator: get next document
+POST http://127.0.0.1/api/v1/index/0/doc_id/
 apikey: {{api_key}}
 content-type: application/json
 
@@ -351,11 +362,13 @@ content-type: application/json
 {
     "document_id": 0,
     "skip": 1,
-    "take": 1
+    "take": 1,
+    "include_document": true,
+    "fields": []
 }
 
-### get previous document ID
-GET http://127.0.0.1/api/v1/index/0/doc_id/
+### iterator: get previous document
+POST http://127.0.0.1/api/v1/index/0/doc_id/
 apikey: {{api_key}}
 content-type: application/json
 
@@ -363,5 +376,48 @@ content-type: application/json
 {
     "document_id": 1,
     "skip": 1,
-    "take": -1
+    "take": -1,
+    "include_document": true,
+    "fields": []
 }
+
+### search enable_empty_query: default (descending)
+POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"",
+    "enable_empty_query": true,
+    "offset":0,
+    "length":10,
+    "realtime":false
+} 
+
+### search enable_empty_query: descending 
+POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"",
+    "enable_empty_query": true,
+    "offset":0,
+    "length":10,
+    "realtime":false,
+    "result_sort":[{"field": "_id", "order": "Descending", "base": "None" }]
+} 
+
+### search enable_empty_query: ascending 
+POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"",
+    "enable_empty_query": true,
+    "offset":0,
+    "length":10,
+    "realtime":false,
+    "result_sort":[{"field": "_id", "order": "Ascending", "base": "None" }]
+} 

@@ -37,10 +37,10 @@ use base64::{Engine as _, engine::general_purpose};
 use crate::api_endpoints::CreateIndexRequest;
 use crate::api_endpoints::DeleteApikeyRequest;
 use crate::api_endpoints::update_documents_api;
-use crate::api_endpoints::{
-    GetDocumentIdRequest, get_document_id_api, hello_api, update_document_api,
-};
 use crate::api_endpoints::{GetDocumentRequest, delete_apikey_api};
+use crate::api_endpoints::{
+    GetIteratorRequest, get_iterator_api_get, get_iterator_api_post, hello_api, update_document_api,
+};
 use crate::api_endpoints::{SearchRequestObject, create_index_api};
 use crate::api_endpoints::{add_synonyms_api, get_index_info_api, set_synonyms_api};
 use crate::api_endpoints::{clear_index_api, close_index_api};
@@ -258,7 +258,7 @@ pub(crate) async fn http_request_handler(
                 let offset = if let Some(value) = params.get("offset") {
                     let Ok(api_offset) = value.parse::<usize>() else {
                         return HttpServerError::BadRequest(
-                            "api_offset invalid or missing".to_string(),
+                            "offset invalid or missing".to_string(),
                         )
                         .into();
                     };
@@ -270,7 +270,7 @@ pub(crate) async fn http_request_handler(
                 let length = if let Some(value) = params.get("length") {
                     let Ok(api_length) = value.parse::<usize>() else {
                         return HttpServerError::BadRequest(
-                            "api_length invalid or missing".to_string(),
+                            "length invalid or missing".to_string(),
                         )
                         .into();
                     };
@@ -282,7 +282,7 @@ pub(crate) async fn http_request_handler(
                 let realtime = if let Some(value) = params.get("realtime") {
                     let Ok(realtime) = value.parse::<bool>() else {
                         return HttpServerError::BadRequest(
-                            "api_length invalid or missing".to_string(),
+                            "realtime invalid or missing".to_string(),
                         )
                         .into();
                     };
@@ -291,8 +291,21 @@ pub(crate) async fn http_request_handler(
                     true
                 };
 
+                let enable_empty_query = if let Some(value) = params.get("enable_empty_query") {
+                    let Ok(enable_empty_query) = value.parse::<bool>() else {
+                        return HttpServerError::BadRequest(
+                            "enable_empty_query invalid or missing".to_string(),
+                        )
+                        .into();
+                    };
+                    enable_empty_query
+                } else {
+                    true
+                };
+
                 SearchRequestObject {
                     query_string,
+                    enable_empty_query,
                     offset,
                     length,
                     result_type: ResultType::default(),
@@ -967,7 +980,7 @@ pub(crate) async fn http_request_handler(
             }
         }
 
-        ("api", "v1", "index", _, "doc_id", "", &Method::GET) => {
+        ("api", "v1", "index", _, "doc_id", "", &Method::POST) => {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -981,21 +994,17 @@ pub(crate) async fn http_request_handler(
 
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
-            let get_document_id_request = if !request_bytes.is_empty() {
-                let get_document_id_request: GetDocumentIdRequest =
+            let get_iterator_request = if !request_bytes.is_empty() {
+                let get_iterator_request: GetIteratorRequest =
                     match serde_json::from_slice(&request_bytes) {
                         Ok(document_id_object) => document_id_object,
                         Err(e) => {
                             return HttpServerError::BadRequest(e.to_string()).into();
                         }
                     };
-                get_document_id_request
+                get_iterator_request
             } else {
-                GetDocumentIdRequest {
-                    document_id: None,
-                    skip: 0,
-                    take: -1,
-                }
+                return HttpServerError::BadRequest("Request body is empty".to_string()).into();
             };
 
             let apikey_list_ref = apikey_list.read().await;
@@ -1005,11 +1014,129 @@ pub(crate) async fn http_request_handler(
             let Some(index_arc) = apikey_object.index_list.get(&index_id) else {
                 return HttpServerError::IndexNotFound.into();
             };
-            let status_object = get_document_id_api(
+            let status_object = get_iterator_api_post(
                 index_arc,
-                get_document_id_request.document_id,
-                get_document_id_request.skip,
-                get_document_id_request.take,
+                get_iterator_request.document_id,
+                get_iterator_request.skip,
+                get_iterator_request.take,
+                get_iterator_request.include_deleted,
+                get_iterator_request.include_document,
+                get_iterator_request.fields.clone(),
+            )
+            .await;
+            drop(apikey_list_ref);
+
+            let status_object_json = serde_json::to_vec(&status_object).unwrap();
+            Ok(Response::new(BoxBody::new(Full::new(
+                status_object_json.into(),
+            ))))
+        }
+
+        ("api", "v1", "index", _, "doc_id", "", &Method::GET) => {
+            let Some(apikey) = apikey_header else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Some(apikey_hash) = get_apikey_hash(apikey, &apikey_list).await else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Ok(index_id) = parts[3].parse() else {
+                return HttpServerError::BadRequest("index_id invalid or missing".to_string())
+                    .into();
+            };
+
+            let params: HashMap<String, String> = req
+                .uri()
+                .query()
+                .map(|v| {
+                    url::form_urlencoded::parse(v.as_bytes())
+                        .into_owned()
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let document_id = if let Some(doc_id) = params.get("document_id") {
+                doc_id.parse::<u64>().ok()
+            } else {
+                None
+            };
+
+            let skip = if let Some(skip_str) = params.get("skip") {
+                match skip_str.parse::<usize>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return HttpServerError::BadRequest("skip is invalid".to_string()).into();
+                    }
+                }
+            } else {
+                0
+            };
+
+            let take = if let Some(take_str) = params.get("take") {
+                match take_str.parse::<isize>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return HttpServerError::BadRequest("take is invalid".to_string()).into();
+                    }
+                }
+            } else {
+                1
+            };
+
+            let include_deleted = if let Some(include_deleted_str) = params.get("include_deleted") {
+                match include_deleted_str.parse::<bool>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return HttpServerError::BadRequest(
+                            "include_deleted is invalid".to_string(),
+                        )
+                        .into();
+                    }
+                }
+            } else {
+                false
+            };
+
+            let include_document =
+                if let Some(include_document_str) = params.get("include_document") {
+                    match include_document_str.parse::<bool>() {
+                        Ok(value) => value,
+                        Err(_) => {
+                            return HttpServerError::BadRequest(
+                                "include_document is invalid".to_string(),
+                            )
+                            .into();
+                        }
+                    }
+                } else {
+                    false
+                };
+
+            let fields = if let Some(fields_str) = params.get("fields") {
+                match serde_json::from_str::<Vec<String>>(fields_str) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return HttpServerError::BadRequest("fields is invalid".to_string()).into();
+                    }
+                }
+            } else {
+                vec![]
+            };
+
+            let apikey_list_ref = apikey_list.read().await;
+            let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Some(index_arc) = apikey_object.index_list.get(&index_id) else {
+                return HttpServerError::IndexNotFound.into();
+            };
+            let status_object = get_iterator_api_get(
+                index_arc,
+                document_id,
+                skip,
+                take,
+                include_deleted,
+                include_document,
+                fields,
             )
             .await;
             drop(apikey_list_ref);

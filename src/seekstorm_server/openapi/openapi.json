@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "servers": [
     {
@@ -543,11 +543,135 @@
     "/api/v1/index/{index_id}/doc_id": {
       "get": {
         "tags": [
-          "Document ID"
+          "Iterator"
         ],
-        "summary": "Get previous/next document ID",
-        "description": "Document ID iterator API\n\nAllows to iterate through all documents ID (and with get_document through all documents) of the whole index, in both directions.\nAllows to sequentially retrieve all documents even from large collections without collecting them to size-limited RAM first, e.g., for index export and inspection.\nEnsures without invoking search, that only valid document IDs are returned, even though **document ID are not guaranteed to be continuous and gapless**!\nThe returned docid are always monotonically increasing, and are the closest valid document IDs to the given docid in the requested direction.\nTaking multiple document IDs at once allows to reduce the number of calls and thus increases performance (especially over REST).\n\nExplanation of non-continuous docid:\nIn SeekStorm, the document IDs are **eventually** continuous.\nIn the multi-sharded index, each shard manages its own document ID.\nDue to the non-deterministic, load-dependent distribution of documents across the shards, the docid within the shards increases asynchronously.\nWhen calculating a global docid from the local docid from different shards, there are temporary gaps between docid origination from shards with different numbers of indexed documents.\nThat's why when you just iterate from 0 to the number of globally indexed documents, there are gaps of invalid document ID towards the end. The get_docid iterator takes care of that and returns only valid document IDs.\n\n- docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.\n- docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.\n- docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.\n- docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.\n- take=0: does not make sense, that defies the purpose of get_docid.\n- The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.\n- The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.\n\nNext page:     take last  docid from previous result set, skip=1, take=+page_size\nPrevious page: take first docid from previous result set, skip=1, take=-page_size\n\nReturns a tuple of (number of actually skipped document IDs, vec of taken document IDs, sorted ascending).\nDetect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip",
-        "operationId": "get_document_id_api",
+        "summary": "Document iterator",
+        "description": "Document iterator via GET and POST are identical, only the way parameters are passed differ.\nThe document iterator allows to iterate over all document IDs and documents in the entire index, forward or backward.\nIt enables efficient sequential access to every document, even in very large indexes, without running a search.\nPaging through the index works without collecting document IDs to Min-heap in size-limited RAM first.\nThe iterator guarantees that only valid document IDs are returned, even though document IDs are not strictly continuous.\nDocument IDs can also be fetched in batches, reducing round trips and significantly improving performance, especially when using the REST API.\nTypical use cases include index export, conversion, analytics, audits, and inspection.\nExplanation of \"eventually continuous\" docid:\nIn SeekStorm, document IDs become continuous over time. In a multi-sharded index, each shard maintains its own document ID space.\nBecause documents are distributed across shards in a non-deterministic, load-dependent way, shard-local document IDs advance at different rates.\nWhen these are mapped to global document IDs, temporary gaps can appear.\nAs a result, simply iterating from 0 to the total document count may encounter invalid IDs near the end.\nThe Document Iterator abstracts this complexity and reliably returns only valid document IDs.\n\n# Parameters\n- docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.\n- docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.\n- docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.\n- docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.\n- take=0: does not make sense, that defies the purpose of get_iterator.\n- The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.\n- The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.\n- include_document: if true, the documents are also retrieved along with their document IDs.\n\nNext page:     take last  docid from previous result set, skip=1, take=+page_size\nPrevious page: take first docid from previous result set, skip=1, take=-page_size\n\nReturns an IteratorResult, consisting of the number of actually skipped document IDs, and a list of taken document IDs and documents, sorted ascending).\nDetect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip",
+        "operationId": "get_iterator_api_get",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "header",
+            "description": "YOUR_SECRET_API_KEY",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          },
+          {
+            "name": "index_id",
+            "in": "path",
+            "description": "index id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "example": 0
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "description": "document id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "description": "skip document IDs",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "example": 0
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "description": "take document IDs",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "example": -1
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "description": "include deleted document IDs in results",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            },
+            "example": false
+          },
+          {
+            "name": "include_document",
+            "in": "query",
+            "description": "include documents in results",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            },
+            "example": false
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "fields to include in document. If not specified, all fields are included",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "example": [
+              "title",
+              "body"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document ID found, returning an IteratorResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IteratorResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request object incorrect"
+          },
+          "401": {
+            "description": "api_key missing"
+          },
+          "404": {
+            "description": "api_key does not exists"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Iterator"
+        ],
+        "summary": "Document iterator",
+        "description": "Document iterator via GET and POST are identical, only the way parameters are passed differ.\nThe document iterator allows to iterate over all document IDs and documents in the entire index, forward or backward.\nIt enables efficient sequential access to every document, even in very large indexes, without running a search.\nPaging through the index works without collecting document IDs to Min-heap in size-limited RAM first.\nThe iterator guarantees that only valid document IDs are returned, even though document IDs are not strictly continuous.\nDocument IDs can also be fetched in batches, reducing round trips and significantly improving performance, especially when using the REST API.\nTypical use cases include index export, conversion, analytics, audits, and inspection.\nExplanation of \"eventually continuous\" docid:\nIn SeekStorm, document IDs become continuous over time. In a multi-sharded index, each shard maintains its own document ID space.\nBecause documents are distributed across shards in a non-deterministic, load-dependent way, shard-local document IDs advance at different rates.\nWhen these are mapped to global document IDs, temporary gaps can appear.\nAs a result, simply iterating from 0 to the total document count may encounter invalid IDs near the end.\nThe Document Iterator abstracts this complexity and reliably returns only valid document IDs.\n\n# Parameters\n- docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.\n- docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.\n- docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.\n- docid=Some, take<0: **skip previous s document IDs**, then **take previous t document IDs**, relative to a given document ID, with start-of-index indicator.\n- take=0: does not make sense, that defies the purpose of get_iterator.\n- The sign of take indicates the direction of iteration: positive take for forward iteration, negative take for backward iteration.\n- The skip parameter is always positive, indicating the number of document IDs to skip before taking document IDs. The skip direction is determined by the sign of take too.\n- include_document: if true, the documents are also retrieved along with their document IDs.\n\nNext page:     take last  docid from previous result set, skip=1, take=+page_size\nPrevious page: take first docid from previous result set, skip=1, take=-page_size\n\nReturns an IteratorResult, consisting of the number of actually skipped document IDs, and a list of taken document IDs and documents, sorted ascending).\nDetect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip",
+        "operationId": "get_iterator_api_post",
         "parameters": [
           {
             "name": "apikey",
@@ -575,7 +699,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GetDocumentIdRequest"
+                "$ref": "#/components/schemas/GetIteratorRequest"
               },
               "example": {
                 "document_id": null,
@@ -588,26 +712,11 @@
         },
         "responses": {
           "200": {
-            "description": "Document ID found, returns a tuple, consisting of (actual skip length, list of document IDs)",
+            "description": "Document ID found, returning an IteratorResult",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": false,
-                  "prefixItems": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "integer",
-                        "format": "int64",
-                        "minimum": 0
-                      }
-                    }
-                  ]
+                  "$ref": "#/components/schemas/IteratorResult"
                 }
               }
             }
@@ -954,7 +1063,7 @@
           "Document"
         ],
         "summary": "Get Document",
-        "description": "Get document from index with index_id\n⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!",
+        "description": "Get document from index with index_id\n⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!",
         "operationId": "get_document_api",
         "parameters": [
           {
@@ -1061,7 +1170,7 @@
           "Document"
         ],
         "summary": "Delete Document",
-        "description": "Delete document by document_id from index with index_id\n⚠️ Use search or get_docid first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.",
+        "description": "Delete document by document_id from index with index_id\n⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.",
         "operationId": "delete_document_by_parameter_api",
         "parameters": [
           {
@@ -1127,7 +1236,7 @@
           "PDF File"
         ],
         "summary": "Get PDF file",
-        "description": "Get PDF file from index with index_id\n⚠️ Use search or get_docid first to obtain s valid doc_id. Document IDs are not guaranteed to be continuous and gapless!",
+        "description": "Get PDF file from index with index_id\n⚠️ Use search or get_iterator first to obtain s valid doc_id. Document IDs are not guaranteed to be continuous and gapless!",
         "operationId": "get_file_api",
         "parameters": [
           {
@@ -1265,6 +1374,16 @@
               "type": "boolean"
             },
             "example": false
+          },
+          {
+            "name": "enable_empty_query",
+            "in": "query",
+            "description": "allow empty query",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            },
+            "example": false
           }
         ],
         "responses": {
@@ -1332,6 +1451,12 @@
                   "query": {
                     "type": "string",
                     "description": "Query string, search operators + - \"\" are recognized."
+                  },
+                  "enable_empty_query": {
+                    "type": "boolean",
+                    "description": "Enable empty query: if true, an empty query string iterates through all indexed documents, supporting the query parameters: offset, length, query_facets, facet_filter, result_sort,\notherwise an empty query string returns no results.\nTypical use cases include index browsing, index export, conversion, analytics, audits, and inspection.",
+                    "default": false,
+                    "example": false
                   },
                   "offset": {
                     "type": "integer",
@@ -2283,30 +2408,6 @@
         ],
         "description": "FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.\nAdjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms).\nThe lists of stop_words and frequent_words should not overlap."
       },
-      "GetDocumentIdRequest": {
-        "type": "object",
-        "description": "Specifies which document ID to return",
-        "properties": {
-          "document_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "base document ID to start the iteration from\nUse None to start from the beginning (take>0) or the end (take<0) of the index\nIn JSON use null for None",
-            "minimum": 0
-          },
-          "skip": {
-            "type": "integer",
-            "description": "the number of document IDs to skip",
-            "minimum": 0
-          },
-          "take": {
-            "type": "integer",
-            "description": "the number of document IDs to return\ntake>0: take next t document IDs, take<0: take previous t document IDs"
-          }
-        }
-      },
       "GetDocumentRequest": {
         "type": "object",
         "description": "Specifies which document and which field to return",
@@ -2338,6 +2439,45 @@
               "$ref": "#/components/schemas/DistanceField"
             },
             "description": "which distance fields to derive and return"
+          }
+        }
+      },
+      "GetIteratorRequest": {
+        "type": "object",
+        "description": "Specifies which document ID to return",
+        "properties": {
+          "document_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "base document ID to start the iteration from\nUse None to start from the beginning (take>0) or the end (take<0) of the index\nIn JSON use null for None",
+            "minimum": 0
+          },
+          "skip": {
+            "type": "integer",
+            "description": "the number of document IDs to skip",
+            "minimum": 0
+          },
+          "take": {
+            "type": "integer",
+            "description": "the number of document IDs to return\ntake>0: take next t document IDs, take<0: take previous t document IDs"
+          },
+          "include_deleted": {
+            "type": "boolean",
+            "description": "if true, also deleted document IDs are included in the result"
+          },
+          "include_document": {
+            "type": "boolean",
+            "description": "if true, the documents are also retrieved along with their document IDs"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "which fields to return (if include_document is true, if empty then return all stored fields)"
           }
         }
       },
@@ -2487,6 +2627,54 @@
                 "max": 1730901447,
                 "min": 831306011
               }
+            }
+          }
+        }
+      },
+      "IteratorResult": {
+        "type": "object",
+        "description": "Iterator",
+        "required": [
+          "skip",
+          "results"
+        ],
+        "properties": {
+          "skip": {
+            "type": "integer",
+            "description": "number of actually skipped documents",
+            "minimum": 0
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IteratorResultItem"
+            },
+            "description": "document IDs, and optionally the documents themselves"
+          }
+        }
+      },
+      "IteratorResultItem": {
+        "type": "object",
+        "description": "Iterator result",
+        "required": [
+          "doc_id"
+        ],
+        "properties": {
+          "doc_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "document ID",
+            "minimum": 0
+          },
+          "doc": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "document",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
             }
           }
         }
@@ -3541,7 +3729,7 @@
       },
       "RangeType": {
         "type": "string",
-        "description": "specifies how to count the frequency of numerical facet field values",
+        "description": "Create query_list and non_unique_query_list\nblockwise intersection : if the corresponding blocks with a 65k docid range for each term have at least a single docid,\nthen the intersect_docid within a single block is executed  (=segments?)\nspecifies how to count the frequency of numerical facet field values",
         "enum": [
           "CountWithinRange",
           "CountAboveRange",
@@ -3727,6 +3915,12 @@
           "query": {
             "type": "string",
             "description": "Query string, search operators + - \"\" are recognized."
+          },
+          "enable_empty_query": {
+            "type": "boolean",
+            "description": "Enable empty query: if true, an empty query string iterates through all indexed documents, supporting the query parameters: offset, length, query_facets, facet_filter, result_sort,\notherwise an empty query string returns no results.\nTypical use cases include index browsing, index export, conversion, analytics, audits, and inspection.",
+            "default": false,
+            "example": false
           },
           "offset": {
             "type": "integer",
@@ -4108,8 +4302,8 @@
       "description": "Create and delete indices"
     },
     {
-      "name": "Document ID",
-      "description": "Iterate through document IDs"
+      "name": "Iterator",
+      "description": "Iterate through document IDs and documents"
     },
     {
       "name": "Document",

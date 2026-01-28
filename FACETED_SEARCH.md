@@ -302,7 +302,7 @@ let query_facets = vec![QueryFacet::String16 {field: "age".into(),prefix: "".int
 let facet_filter=Vec::new();
 let result_sort=Vec::new();
 
-let result_object = index_arc.search(query, query_type, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
+let result_object = index_arc.search(query, query_type, false, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
 
 
 // **display results**

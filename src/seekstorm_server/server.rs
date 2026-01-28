@@ -260,7 +260,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         StemmerType::None,
                                                         StopwordType::None,
                                                         FrequentwordType::English,
-                                                        NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
+                                                        NgramSet::NgramFF as u8 ,
                                                         Vec::new(),
                                                         None,
                                                         apikey_object,
@@ -385,7 +385,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             let _ = delete_apikey_api(&index_path, &mut apikey_list_mut, apikey_hash);
                             drop(apikey_list_mut);
                         },
-
 
                         "openapi" =>
                         {
