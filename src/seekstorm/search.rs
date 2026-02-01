@@ -929,6 +929,7 @@ pub type Point = Vec<f64>;
 /// let query_type=QueryType::Union;
 /// let query_string="apple -red".to_string();
 /// ```
+/// 
 /// Mixed phrase and intersection
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
@@ -1041,7 +1042,7 @@ pub trait Search {
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
     ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-    ///
+    /// 
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -1055,7 +1056,7 @@ pub trait Search {
     ///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
     ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
     ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
-    ///
+    /// 
     /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
     ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
     ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
@@ -1064,7 +1065,7 @@ pub trait Search {
     ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
     ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
     ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
-    ///
+    /// 
     /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
     ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
     ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -1075,7 +1076,7 @@ pub trait Search {
     ///   Examples:
     ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
     ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
-    ///
+    /// 
     /// * `query_rewriting`: Enables query rewriting features such as spelling correction and query auto-completion (QAC).
     ///   The spelling correction of multi-term query strings handles three cases:
     ///     1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`

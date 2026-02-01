@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     ffi::OsStr,
     fs::{File, metadata},
     io::{self, BufReader, Read},
@@ -375,7 +374,7 @@ impl IndexPdf for IndexArc {
                 creation_timestamp = file_date;
             }
 
-            let document: Document = HashMap::from([
+            let document = Document::from([
                 ("title".to_string(), json!(title)),
                 ("body".to_string(), json!(text)),
                 ("url".to_string(), json!(&file_path.display().to_string())),
@@ -605,11 +604,11 @@ impl IngestJson for IndexArc {
                 let date: DateTime<Utc> = DateTime::from(SystemTime::now());
 
                 let index_ref = self.read().await;
-
                 println!(
-                    "{}: {} shards {} levels {} ngrams {:08b}  docs {}  docs/sec {}  docs/day {} dictionary {} {} completions {} minutes {:.2} seconds {}",
+                    "{}: {} compression {:?}  shards {}  levels {}  ngrams {:08b}  docs {}  docs/sec {}  docs/day {} dictionary {} {} completions {} minutes {:.2} seconds {}",
                     "Indexing finished".green(),
                     date.format("%D"),
+                    index_ref.meta.document_compression,
                     index_ref.shard_count().await,
                     index_ref.shard_vec[0].read().await.level_index.len(),
                     index_ref.meta.ngram_indexing,
@@ -722,7 +721,7 @@ impl IngestCsv for IndexArc {
                         i += 1;
                         continue;
                     }
-                    let mut document: Document = HashMap::new();
+                    let mut document = Document::new();
                     for (i, element) in record.iter().enumerate() {
                         document.insert(schema_vec[i].clone(), json!(element));
                     }

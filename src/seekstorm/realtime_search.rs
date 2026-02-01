@@ -949,6 +949,15 @@ impl Shard {
 
             match self.segments_level0[key0 as usize].segment.get(&key_hash) {
                 Some(value1) => {
+                    if value1.posting_count == 0 {
+                        if non_unique_term.op == QueryType::Intersection
+                            || non_unique_term.op == QueryType::Phrase
+                        {
+                            return;
+                        }
+                        continue;
+                    }
+
                     let mut idf = 0.0;
                     let mut idf_ngram1 = 0.0;
                     let mut idf_ngram2 = 0.0;

@@ -162,7 +162,10 @@ impl WordSegmentationTM {
             for i in 0..(input_chars.len() - 1) {
                 if (segmented_space_bits[circular_index][i >> 6] & (1usize << (i & 0x3f))) > 0 {
                     if !result_array.is_empty() && ['+', '-'].contains(&input_chars[last]) {
-                        result_array.push(input_chars[last..(i + 1)].iter().skip(1).collect());
+                        let token: String = input_chars[last..(i + 1)].iter().skip(1).collect();
+                        if !token.is_empty() {
+                            result_array.push(token);
+                        }
                     } else {
                         result_array.push(input_chars[last..(i + 1)].iter().collect());
                     }
@@ -172,7 +175,10 @@ impl WordSegmentationTM {
             }
 
             if !result_array.is_empty() && ['+', '-'].contains(&input_chars[last]) {
-                result_array.push(input_chars[last..].iter().skip(1).collect());
+                let token: String = input_chars[last..].iter().skip(1).collect();
+                if !token.is_empty() {
+                    result_array.push(token);
+                }
             } else {
                 result_array.push(input_chars[last..].iter().collect());
             }

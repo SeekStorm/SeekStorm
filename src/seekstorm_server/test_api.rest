@@ -421,3 +421,74 @@ content-type: application/json
     "realtime":false,
     "result_sort":[{"field": "_id", "order": "Ascending", "base": "None" }]
 } 
+
+//---- JSON Object field
+
+### create index
+POST http://127.0.0.1:80/api/v1/index HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "schema":[{
+        "field": "title", 
+        "field_type": "Text", 
+        "stored": true, 
+        "indexed": true
+    },
+        {
+        "field": "body",
+        "field_type": "Text", 
+        "stored": true, 
+        "indexed": true,
+        "longest": true
+    },
+    {
+        "field": "json", 
+        "field_type": "Json", 
+        "stored": true, 
+        "indexed": true
+    }], 
+    "index_name": "test_index",
+    "similarity": "Bm25fProximity",
+    "tokenizer": "UnicodeAlphanumeric"
+}
+
+### index document
+POST http://127.0.0.1:80/api/v1/index/0/doc HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "title":"title1 test",
+    "body":"body1",
+    "json":{ 
+        "region": "US",
+        "manager": {
+            "age":     30,
+            "name": {
+            "first": "John",
+            "last":  "Smith"
+            },
+            "regions": ["north", "west", "south"]
+        }
+    }
+}
+
+### commit index
+PATCH http://127.0.0.1/api/v1/index/0 HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+### query index POST
+POST http://127.0.0.1/api/v1/index/0/query HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "query":"\"John Smith\"",
+    "offset":0,
+    "length":10,
+    "result_type": "TopkCount",
+    "realtime": true
+}

@@ -1,7 +1,10 @@
-use crate::index::{Document, FieldType, IndexArc, Shard, hash64};
+use crate::index::{
+    Document, FieldType, IndexArc, Shard, hash64, object_values_to_string_vec_recursive,
+};
 use crate::min_heap::{self, MinHeap};
 use aho_corasick::{AhoCorasick, MatchKind};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use utoipa::ToSchema;
 
 /// Specifies the number and size of fragments (snippets, summaries) to generate from each specified field to provide a "keyword in context" (KWIC) functionality.
@@ -230,6 +233,16 @@ pub(crate) fn top_fragments_from_field(
 
             if let Some(schema_field) = shard.schema_map.get(&highlight.field) {
                 let text = match schema_field.field_type {
+                    FieldType::Json => {
+                        if matches!(value, Value::Object { .. }) {
+                            let mut strings_vec: Vec<String> = Vec::new();
+                            object_values_to_string_vec_recursive(value, &mut strings_vec);
+                            strings_vec.join(" ")
+                        } else {
+                            serde_json::from_value::<String>(value.clone())
+                                .unwrap_or(value.to_string())
+                        }
+                    }
                     FieldType::Text | FieldType::String16 | FieldType::String32 => {
                         serde_json::from_value::<String>(value.clone()).unwrap_or(value.to_string())
                     }

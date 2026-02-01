@@ -16,10 +16,10 @@ use seekstorm::{
     highlighter::{Highlight, highlighter},
     index::{
         AccessType, Close, DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, DistanceField,
-        Document, Facet, FileType, FrequentwordType, IndexArc, IndexDocument, IndexDocuments,
-        IndexMetaObject, MinMaxFieldJson, NgramSet, QueryCompletion, SchemaField, SimilarityType,
-        SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType, UpdateDocument,
-        UpdateDocuments, create_index, open_index,
+        Document, DocumentCompression, Facet, FileType, FrequentwordType, IndexArc, IndexDocument,
+        IndexDocuments, IndexMetaObject, MinMaxFieldJson, NgramSet, QueryCompletion, SchemaField,
+        SimilarityType, SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType,
+        UpdateDocument, UpdateDocuments, create_index, open_index,
     },
     ingest::IndexPdfBytes,
     iterator::{GetIterator, IteratorResult},
@@ -161,6 +161,8 @@ pub struct CreateIndexRequest {
     pub frequent_words: FrequentwordType,
     #[serde(default = "ngram_indexing_api")]
     pub ngram_indexing: u8,
+    #[serde(default = "document_compression_api")]
+    pub document_compression: DocumentCompression,
     #[schema(required = true, example = json!([{"terms":["berry","lingonberry","blueberry","gooseberry"],"multiway":false}]))]
     #[serde(default)]
     pub synonyms: Vec<Synonym>,
@@ -195,6 +197,10 @@ fn tokenizer_type_api() -> TokenizerType {
 
 fn ngram_indexing_api() -> u8 {
     NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8
+}
+
+fn document_compression_api() -> DocumentCompression {
+    DocumentCompression::Snappy
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -531,6 +537,7 @@ pub(crate) async fn create_index_api<'a>(
     stop_words: StopwordType,
     frequent_words: FrequentwordType,
     ngram_indexing: u8,
+    document_compression: DocumentCompression,
     synonyms: Vec<Synonym>,
     force_shard_number: Option<usize>,
     apikey_object: &'a mut ApikeyObject,
@@ -560,6 +567,7 @@ pub(crate) async fn create_index_api<'a>(
         stop_words,
         frequent_words,
         ngram_indexing,
+        document_compression,
         access_type: AccessType::Mmap,
         spelling_correction,
         query_completion,

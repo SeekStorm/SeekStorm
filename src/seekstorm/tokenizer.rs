@@ -480,7 +480,8 @@ pub(crate) async fn tokenizer(
                     .segment(first_part, true);
                 non_unique_terms_line_string.extend(result.0);
             } else {
-                non_unique_terms_line.push(&text_normalized[start_pos..text_normalized.len()]);
+                non_unique_terms_line_string
+                    .push(text_normalized[start_pos..text_normalized.len()].to_string());
                 let result = index
                     .word_segmentation_option
                     .as_ref()
@@ -1432,6 +1433,7 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
+
                     '"' | '+' | '-' | '#' => {
                         if !start {
                             start_pos = char.0;

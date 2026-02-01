@@ -12,6 +12,7 @@ use num_format::{Locale, ToFormattedString};
 use rust_stemmers::{Algorithm, Stemmer};
 use search::{QueryType, Search};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use smallvec::SmallVec;
 use std::{
     collections::{HashMap, VecDeque},
@@ -66,7 +67,7 @@ const INDEX_HEADER_SIZE: u64 = 4;
 /// Incompatible index  format change: new library can't open old format, and old library can't open new format
 pub const INDEX_FORMAT_VERSION_MAJOR: u16 = 6;
 /// Backward compatible format change: new library can open old format, but old library can't open new format
-pub const INDEX_FORMAT_VERSION_MINOR: u16 = 0;
+pub const INDEX_FORMAT_VERSION_MINOR: u16 = 1;
 
 /// Maximum processed positions per term per document: default=65_536. E.g. 65,536 * 'the' per document, exceeding positions are ignored for search.
 pub const MAX_POSITIONS_PER_TERM: usize = 65_536;
@@ -84,7 +85,7 @@ pub(crate) const MAX_QUERY_TERM_NUMBER: usize = 100;
 pub(crate) const SEGMENT_KEY_CAPACITY: usize = 1000;
 
 /// A document is a flattened, single level of key-value pairs, where key is an arbitrary string, and value represents any valid JSON value.
-pub type Document = HashMap<String, serde_json::Value>;
+pub type Document = IndexMap<String, Value>;
 
 /// File type for storing documents: Path, Bytes, None.
 #[derive(Clone, PartialEq)]
@@ -95,6 +96,19 @@ pub enum FileType {
     Bytes(Box<Path>, Box<[u8]>),
     /// No file
     None,
+}
+
+/// Compression type for document store
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, ToSchema)]
+pub enum DocumentCompression {
+    /// No compression: fastest, largest size
+    None,
+    /// lz4 compression: fast compression/decompression (faster than snappy), medium size (larger than snappy)
+    Lz4,
+    /// snappy compression: fast compression/decompression (slower than lz4), medium size (smaller than lz4)
+    Snappy,
+    /// zstd compression level 1: slowest compression/decompression, smallest size
+    Zstd,
 }
 
 /// Defines where the index resides during search:
@@ -510,6 +524,12 @@ pub enum FieldType {
     Point,
     /// Text is a text field, that will be tokenized by the selected Tokenizer into string tokens.
     Text,
+    /// Hierarchical JSON Object, that will be tokenized by the selected Tokenizer into string tokens.
+    /// The text is extracted from all levels of the JSON object and combined into a single text string (values only, not keys).
+    /// In that respect, it is similar to combined fields in other search engines.
+    /// Despite being indexed as a single text string, the hierarchical structure of an JSON object is preserved in the stored document, so that it can be retrieved in the search results.
+    /// When using search with highlighting, make sure to use a `name` different from `field`, otherwise the Json `field` in the results will be overwritten with the highlight (snippet) text.
+    Json,
 }
 
 /// Defines synonyms for terms per index.
@@ -792,6 +812,10 @@ pub struct IndexMetaObject {
     #[serde(default = "ngram_indexing_default")]
     pub ngram_indexing: u8,
 
+    /// Compression algorithm for document store: None, Snappy, Lz4,Zstd
+    #[serde(default = "doc_store_compression_default")]
+    pub document_compression: DocumentCompression,
+
     /// AccessType defines where the index resides during search: Ram or Mmap
     pub access_type: AccessType,
     /// Enable spelling correction for search queries using the SymSpell algorithm.
@@ -819,6 +843,10 @@ pub struct IndexMetaObject {
 
 fn ngram_indexing_default() -> u8 {
     NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8
+}
+
+fn doc_store_compression_default() -> DocumentCompression {
+    DocumentCompression::Snappy
 }
 
 #[derive(Debug, Clone, Default)]
@@ -876,9 +904,9 @@ pub struct MinMaxField {
 #[derive(Deserialize, Serialize, Debug, Clone, Default, ToSchema)]
 pub struct MinMaxFieldJson {
     /// minimum value of the field
-    pub min: serde_json::Value,
+    pub min: Value,
     /// maximum value of the field
-    pub max: serde_json::Value,
+    pub max: Value,
 }
 
 /// Value type for a field: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, point, none.
@@ -1504,6 +1532,10 @@ pub(crate) async fn create_index_root(
                         + " "
                         + &index.index_format_version_major.to_string());
                 };
+
+                if index.index_format_version_major == 6 && index.index_format_version_minor == 0 {
+                    index.meta.document_compression = DocumentCompression::Zstd;
+                }
             }
 
             index.segment_number1 = segment_number1;
@@ -1925,6 +1957,10 @@ pub(crate) fn create_shard(
                         + " "
                         + &index.index_format_version_major.to_string());
                 };
+
+                if index.index_format_version_major == 6 && index.index_format_version_minor == 0 {
+                    index.meta.document_compression = DocumentCompression::Zstd;
+                }
             }
 
             index.segment_number1 = segment_number1;
@@ -2941,7 +2977,7 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                             if !mute {
                                 let index_ref = index_arc.read().await;
                                 println!(
-                                    "{} name {} id {} version {} {} shards {} ngrams {:08b} level {} fields {} {} facets {} docs {} deleted {} segments {} dictionary {} {} completions {} time {} s",
+                                    "{} name {} id {} version {} {} compression {:?} shards {} level {} ngrams {:08b} fields {} {} facets {} docs {} deleted {} segments {} dictionary {} {} completions {} time {} s",
                                     INDEX_FILENAME,
                                     index_ref.meta.name,
                                     index_ref.meta.id,
@@ -2951,9 +2987,10 @@ pub async fn open_index(index_path: &Path, mute: bool) -> Result<IndexArc, Strin
                                     INDEX_FORMAT_VERSION_MAJOR.to_string()
                                         + "."
                                         + &INDEX_FORMAT_VERSION_MINOR.to_string(),
+                                    index_ref.meta.document_compression,
                                     index_ref.shard_count().await,
-                                    index_ref.meta.ngram_indexing,
                                     level_count,
+                                    index_ref.meta.ngram_indexing,
                                     index_ref.indexed_field_vec.len(),
                                     index_ref.schema_map.len(),
                                     index_ref.facets.len(),
@@ -4198,6 +4235,25 @@ pub(crate) trait IndexDocumentShard {
     async fn index_document_shard(&self, document: Document, file: FileType);
 }
 
+/// Recursively extract strings from a serde_json::Value and append them to a vector of Strings.
+/// Only value, not field names.
+pub(crate) fn object_values_to_string_vec_recursive(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::String(s) => out.push(s.clone()),
+        Value::Array(arr) => {
+            for v in arr {
+                object_values_to_string_vec_recursive(v, out);
+            }
+        }
+        Value::Object(map) => {
+            for v in map.values() {
+                object_values_to_string_vec_recursive(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 impl IndexDocumentShard for ShardArc {
     /// Index document
     /// May block, if the threshold of documents indexed in parallel is exceeded.
@@ -4228,10 +4284,21 @@ impl IndexDocumentShard for ShardArc {
                 let mut nonunique_terms_count = 0u32;
 
                 let text = match schema_field.field_type {
+                    FieldType::Json => {
+                        if matches!(field_value, Value::Object { .. }) {
+                            let mut strings_vec: Vec<String> = Vec::new();
+                            object_values_to_string_vec_recursive(field_value, &mut strings_vec);
+                            strings_vec.join(" ")
+                        } else {
+                            serde_json::from_value::<String>(field_value.clone())
+                                .unwrap_or(field_value.to_string())
+                        }
+                    }
                     FieldType::Text | FieldType::String16 | FieldType::String32 => {
                         serde_json::from_value::<String>(field_value.clone())
                             .unwrap_or(field_value.to_string())
                     }
+
                     _ => field_value.to_string(),
                 };
 

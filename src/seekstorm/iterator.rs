@@ -1,11 +1,10 @@
 use ahash::{AHashMap, AHashSet};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use serde_json::Value;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
@@ -23,7 +22,7 @@ pub struct IteratorResultItem {
     /// document ID
     pub doc_id: u64,
     /// document
-    pub doc: Option<HashMap<String, serde_json::Value>>,
+    pub doc: Option<IndexMap<String, Value>>,
 }
 
 /// Iterator

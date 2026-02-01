@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-01-30
+
+### Added
+
+- Multiple `document_compression` methods: `None`, `Snappy`, `Lz4`, `Zstd`.  
+  **Faster search (200% median, 110% mean)** and **50% faster indexing** with Snappy, compared to Zstandard, **if documents are stored and loaded** from the document store.  
+  Now **you have control** over the best balance of index size, indexing speed, and query latency **for your use case**.  
+  Some search benchmarks measure only pure search performance, but **real-world usage almost always includes loading documents** from the document store as well.
+
+  | Compression | indexing speed | index size | query latency (mean) | query latency (median) |
+  | :---------- | -------------: | ---------: | -------------------: | ---------------------: |
+  | Snappy      |  24 docs/sec   | 10,535 MB  |              0.45 ms |                0.24 ms |
+  | Zstandard   |  16 docs/sec   |  9,026 MB  |              0.95 ms |                0.72 ms |
+
+  *Benchmark: 5 million Wikipedia documents, 3 fields stored and returned, 2 fields indexed and searched*
+
+- Added `FieldType::Json` that supports hierarchical JSON Objects. Fixes issue #55 .
+  - The text is extracted from all levels of the JSON object and combined into a single text string (values only, not keys) for indexing and highlighting.  
+  - In that respect, it is similar to combined fields in other search engines.  
+  - Despite being indexed as a single text string, the hierarchical structure of an JSON object is preserved in the stored document, so that it can be retrieved in the search results.  
+  - When using search with highlighting, make sure to use a `name` different from `field`, otherwise the Json `field` in the results will be overwritten with the highlight (snippet) text.
+
+### Changed
+
+- The order of fields in the Json document is now preserved between indexing and query.
+  - `Document` has been changed from `HashMap<String, Value>` to `IndexMap<String, Value>`.
+  - `utoipa` now uses `features = ["indexmap"]`.
+  - `serde_json` now uses `features = ["preserve_order"]`.  
+
+### Fixed
+
+- Fixed issue #57 with word segmentation in `TokenizerType::UnicodeAlphanumericZH`.
+
 ## [2.1.0] - 2026-01-28
 
 ### Added

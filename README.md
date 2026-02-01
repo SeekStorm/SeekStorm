@@ -38,6 +38,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Unlimited field number, field length & index size
 * Compressed document store: ZStandard
 * Boolean queries: AND, OR, PHRASE, NOT
+* Field types: U8..U64, I8..I64, F32, F64, Timestamp, Bool, String, StringSet, Text, Point, Json
 * BM25F and BM25F_Proximity ranking
 * Field filtering
 * [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets (with Histogram/Bucket & Min/Max aggregation)
@@ -335,7 +336,7 @@ create index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
 
 let index_path=Path::new("C:/index/");
 
@@ -348,12 +349,13 @@ let schema= vec![
 let meta = IndexMetaObject {
     id: 0,
     name: "test_index".into(),
-    similarity:SimilarityType::Bm25f,
-    tokenizer:TokenizerType::UnicodeAlphanumeric,
-    stemmer:StemmerType::None,
+    similarity: SimilarityType::Bm25f,
+    tokenizer: TokenizerType::UnicodeAlphanumeric,
+    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
-    frequent_words:FrequentwordType::English,
-    ngram_indexing:NgramSet::NgramFF as u8,
+    frequent_words: FrequentwordType::English,
+    ngram_indexing: NgramSet::NgramFF as u8,
+    document_compression: DocumentCompression::Snappy,
     access_type: AccessType::Mmap,
     spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
@@ -626,7 +628,7 @@ First, you need to create an index with a schema matching the JSON file fields t
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
 
 let index_path=Path::new("C:/index/");
 
@@ -640,12 +642,13 @@ let schema= vec![
 let meta = IndexMetaObject {
     id: 0,
     name: "wikipedia_index".into(),
-    similarity:SimilarityType::Bm25f,
-    tokenizer:TokenizerType::UnicodeAlphanumeric,
-    stemmer:StemmerType::None,
+    similarity: SimilarityType::Bm25f,
+    tokenizer: TokenizerType::UnicodeAlphanumeric,
+    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
-    frequent_words:FrequentwordType::English,
-    ngram_indexing:NgramSet::NgramFF as u8,
+    frequent_words: FrequentwordType::English,
+    ngram_indexing: NgramSet::NgramFF as u8,
+    document_compression: DocumentCompression::Snappy,
     access_type: AccessType::Mmap,
     spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
@@ -685,7 +688,7 @@ First, you need to create an index with the following PDF specific schema (index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
 
 let index_path=Path::new("C:/index/");
 
@@ -700,12 +703,13 @@ let schema= vec![
 let meta = IndexMetaObject {
     id: 0,
     name: "pdf_index".into(),
-    similarity:SimilarityType::Bm25fProximity,
-    tokenizer:TokenizerType::UnicodeAlphanumeric,
-    stemmer:StemmerType::None,
+    similarity: SimilarityType::Bm25fProximity,
+    tokenizer: TokenizerType::UnicodeAlphanumeric,
+    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
-    frequent_words:FrequentwordType::English,
-    ngram_indexing:NgramSet::NgramFF as u8,
+    frequent_words: FrequentwordType::English,
+    ngram_indexing: NgramSet::NgramFF as u8,
+    document_compression: DocumentCompression::Snappy,
     access_type: AccessType::Mmap,
     spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
@@ -924,7 +928,7 @@ create index
 
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
 
 let index_path=Path::new("C:/index/");//x
 
@@ -938,12 +942,13 @@ let schema=serde_json::from_str(schema_json).unwrap();
 let meta = IndexMetaObject {
     id: 0,
     name: "test_index".into(),
-    similarity:SimilarityType::Bm25f,
-    tokenizer:TokenizerType::AsciiAlphabetic,
-    stemmer:StemmerType::None,
+    similarity: SimilarityType::Bm25f,
+    tokenizer: TokenizerType::AsciiAlphabetic,
+    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
-    frequent_words:FrequentwordType::English,
-    ngram_indexing:NgramSet::NgramFF as u8,
+    frequent_words: FrequentwordType::English,
+    ngram_indexing: NgramSet::NgramFF as u8,
+    document_compression: DocumentCompression::Snappy,
     access_type: AccessType::Mmap,
     spelling_correction: None,
     query_completion: None,

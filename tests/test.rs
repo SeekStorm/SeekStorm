@@ -4,9 +4,9 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, Close, DeleteDocument, FileType, FrequentwordType, IndexDocument, IndexDocuments,
-    IndexMetaObject, NgramSet, SimilarityType, StemmerType, StopwordType, TokenizerType,
-    create_index, open_index,
+    AccessType, Close, DeleteDocument, DocumentCompression, FileType, FrequentwordType,
+    IndexDocument, IndexDocuments, IndexMetaObject, NgramSet, SimilarityType, StemmerType,
+    StopwordType, TokenizerType, create_index, open_index,
 };
 use seekstorm::iterator::GetIterator;
 use seekstorm::search::{
@@ -36,6 +36,7 @@ async fn test_01_create_index() {
         stop_words: StopwordType::None,
         frequent_words: FrequentwordType::English,
         ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
+        document_compression: DocumentCompression::Snappy,
         access_type: AccessType::Mmap,
         spelling_correction: None,
         query_completion: None,

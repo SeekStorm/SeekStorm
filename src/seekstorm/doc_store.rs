@@ -1,6 +1,6 @@
 use memmap2::Mmap;
-use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet, VecDeque};
+use serde_json::json;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::io::{self, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -8,7 +8,8 @@ use std::path::Path;
 use crate::geo_search::euclidian_distance;
 use crate::highlighter::{Highlighter, top_fragments_from_field};
 use crate::index::{
-    AccessType, DistanceField, Document, FILE_PATH, FieldType, Index, ROARING_BLOCK_SIZE, Shard,
+    AccessType, DistanceField, Document, DocumentCompression, FILE_PATH, FieldType, Index,
+    ROARING_BLOCK_SIZE, Shard,
 };
 use crate::search::FacetValue;
 use crate::utils::{read_u32, write_u32};
@@ -75,10 +76,31 @@ impl Shard {
             }
 
             let compressed_doc = &docstore_pointer_docs[previous_pointer..pointer];
-            let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
-            let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
 
-            doc
+            match self.meta.document_compression {
+                DocumentCompression::None => {
+                    let doc: Document = serde_json::from_slice(compressed_doc).unwrap();
+                    doc
+                }
+                DocumentCompression::Snappy => {
+                    let decompressed_doc = snap::raw::Decoder::new()
+                        .decompress_vec(compressed_doc)
+                        .unwrap();
+                    let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                    doc
+                }
+                DocumentCompression::Lz4 => {
+                    let decompressed_doc =
+                        lz4_flex::decompress_size_prepended(compressed_doc).unwrap();
+                    let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                    doc
+                }
+                DocumentCompression::Zstd => {
+                    let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
+                    let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                    doc
+                }
+            }
         } else {
             let level = doc_id >> 16;
 
@@ -104,10 +126,30 @@ impl Shard {
                 + previous_pointer)
                 ..(self.level_index[level].docstore_pointer_docs_pointer + pointer)];
 
-            let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
-            let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
-
-            doc
+            match self.meta.document_compression {
+                DocumentCompression::None => {
+                    let doc: Document = serde_json::from_slice(compressed_doc).unwrap();
+                    doc
+                }
+                DocumentCompression::Snappy => {
+                    let decompressed_doc = snap::raw::Decoder::new()
+                        .decompress_vec(compressed_doc)
+                        .unwrap();
+                    let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                    doc
+                }
+                DocumentCompression::Lz4 => {
+                    let decompressed_doc =
+                        lz4_flex::decompress_size_prepended(compressed_doc).unwrap();
+                    let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                    doc
+                }
+                DocumentCompression::Zstd => {
+                    let decompressed_doc = zstd::decode_all(compressed_doc).unwrap();
+                    let doc: Document = serde_json::from_slice(&decompressed_doc).unwrap();
+                    doc
+                }
+            }
         };
 
         if let Some(highlighter) = highlighter_option {
@@ -149,7 +191,7 @@ impl Shard {
         if !fields.is_empty() {
             for key in self.stored_field_names.iter() {
                 if !fields.contains(key) {
-                    doc.remove(key);
+                    doc.shift_remove(key);
                 }
             }
         }
@@ -185,13 +227,13 @@ impl Shard {
         Ok(file_bytes.len() as u64)
     }
 
-    pub(crate) fn store_document(&mut self, doc_id: usize, document: HashMap<String, Value>) {
+    pub(crate) fn store_document(&mut self, doc_id: usize, document: Document) {
         let mut document = document;
 
         let keys: Vec<String> = document.keys().cloned().collect();
         for key in keys.into_iter() {
             if !self.schema_map.contains_key(&key) || !self.schema_map.get(&key).unwrap().stored {
-                document.remove(&key);
+                document.shift_remove(&key);
             }
         }
 
@@ -199,9 +241,21 @@ impl Shard {
             return;
         }
 
-        let document_string = serde_json::to_string(&document).unwrap();
-
-        let mut compressed = zstd::encode_all(document_string.as_bytes(), 1).unwrap();
+        let mut compressed = match self.meta.document_compression {
+            DocumentCompression::None => serde_json::to_vec(&document).unwrap(),
+            DocumentCompression::Snappy => {
+                let serialized = serde_json::to_vec(&document).unwrap();
+                snap::raw::Encoder::new().compress_vec(&serialized).unwrap()
+            }
+            DocumentCompression::Lz4 => {
+                let serialized = serde_json::to_vec(&document).unwrap();
+                lz4_flex::compress_prepend_size(&serialized)
+            }
+            DocumentCompression::Zstd => {
+                let serialized = serde_json::to_vec(&document).unwrap();
+                zstd::encode_all(serialized.as_slice(), 1).unwrap()
+            }
+        };
 
         self.compressed_docstore_segment_block_buffer
             .append(&mut compressed);

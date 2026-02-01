@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "2.1.0"
+    "version": "2.2.0"
   },
   "servers": [
     {
@@ -253,31 +253,31 @@
                     },
                     "example": [
                       {
-                        "boost": 10.0,
                         "field": "title",
                         "field_type": "Text",
+                        "stored": true,
                         "indexed": true,
-                        "stored": true
+                        "boost": 10.0
                       },
                       {
                         "field": "body",
                         "field_type": "Text",
+                        "stored": true,
                         "indexed": true,
-                        "longest": true,
-                        "stored": true
+                        "longest": true
                       },
                       {
                         "field": "url",
                         "field_type": "Text",
-                        "indexed": false,
-                        "stored": true
+                        "stored": true,
+                        "indexed": false
                       },
                       {
-                        "facet": true,
                         "field": "date",
                         "field_type": "Timestamp",
+                        "stored": true,
                         "indexed": false,
-                        "stored": true
+                        "facet": true
                       }
                     ]
                   },
@@ -301,6 +301,9 @@
                     "format": "int32",
                     "minimum": 0
                   },
+                  "document_compression": {
+                    "$ref": "#/components/schemas/DocumentCompression"
+                  },
                   "synonyms": {
                     "type": "array",
                     "items": {
@@ -308,13 +311,13 @@
                     },
                     "example": [
                       {
-                        "multiway": false,
                         "terms": [
                           "berry",
                           "lingonberry",
                           "blueberry",
                           "gooseberry"
-                        ]
+                        ],
+                        "multiway": false
                       }
                     ]
                   },
@@ -776,8 +779,8 @@
                 }
               },
               "example": {
-                "body": "body1",
                 "title": "title1 test",
+                "body": "body1",
                 "url": "url1"
               }
             }
@@ -845,14 +848,14 @@
                 "$ref": "#/components/schemas/SearchRequestObject"
               },
               "example": {
+                "query": "test",
+                "offset": 0,
+                "length": 10,
+                "realtime": false,
                 "field_filter": [
                   "title",
                   "body"
-                ],
-                "length": 10,
-                "offset": 0,
-                "query": "test",
-                "realtime": false
+                ]
               }
             }
           },
@@ -936,8 +939,8 @@
               "example": [
                 0,
                 {
-                  "body": "body1",
                   "title": "title1 test",
+                  "body": "body1",
                   "url": "url1"
                 }
               ]
@@ -1106,6 +1109,9 @@
                 "$ref": "#/components/schemas/GetDocumentRequest"
               },
               "example": {
+                "query_terms": [
+                  "test"
+                ],
                 "fields": [
                   "title",
                   "body"
@@ -1125,14 +1131,11 @@
                   },
                   {
                     "field": "body",
+                    "name": "body2",
                     "fragment_number": 0,
                     "fragment_size": 4000,
-                    "highlight_markup": true,
-                    "name": "body2"
+                    "highlight_markup": true
                   }
-                ],
-                "query_terms": [
-                  "test"
                 ]
               }
             }
@@ -1527,9 +1530,9 @@
                     "description": "Sort field and order:\nSearch results are sorted by the specified facet field, either in ascending or descending order.\nIf no sort field is specified, then the search results are sorted by rank in descending order per default.\nMultiple sort fields are combined by a \"sort by, then sort by\"-method (\"tie-breaking\"-algorithm).\nThe results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,\nuntil the n-th field value is either not equal or the last field is reached.\nA special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.\nSort is only enabled on facet fields that are defined in schema at create_index!\nExamples:\n- result_sort = vec![ResultSort {field: \"price\".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: \"language\".into(), order: SortOrder::Ascending, base: FacetValue::None}];\n- result_sort = vec![ResultSort {field: \"location\".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];",
                     "example": [
                       {
-                        "base": "None",
                         "field": "date",
-                        "order": "Ascending"
+                        "order": "Ascending",
+                        "base": "None"
                       }
                     ]
                   },
@@ -1605,6 +1608,16 @@
         "enum": [
           "Kilometers",
           "Miles"
+        ]
+      },
+      "DocumentCompression": {
+        "type": "string",
+        "description": "Compression type for document store",
+        "enum": [
+          "None",
+          "Lz4",
+          "Snappy",
+          "Zstd"
         ]
       },
       "FacetFilter": {
@@ -2340,7 +2353,8 @@
           "StringSet16",
           "StringSet32",
           "Point",
-          "Text"
+          "Text",
+          "Json"
         ]
       },
       "FrequentwordType": {
@@ -2554,35 +2568,35 @@
               "type": "string"
             },
             "example": {
+              "title": {
+                "field": "title",
+                "stored": true,
+                "indexed": true,
+                "field_type": "Text",
+                "boost": 10.0,
+                "field_id": 0
+              },
               "body": {
                 "field": "body",
-                "field_id": 1,
-                "field_type": "Text",
+                "stored": true,
                 "indexed": true,
-                "stored": true
-              },
-              "date": {
-                "facet": true,
-                "field": "date",
-                "field_id": 3,
-                "field_type": "Timestamp",
-                "indexed": false,
-                "stored": true
-              },
-              "title": {
-                "boost": 10.0,
-                "field": "title",
-                "field_id": 0,
                 "field_type": "Text",
-                "indexed": true,
-                "stored": true
+                "field_id": 1
               },
               "url": {
                 "field": "url",
-                "field_id": 2,
-                "field_type": "Text",
+                "stored": true,
                 "indexed": false,
-                "stored": true
+                "field_type": "Text",
+                "field_id": 2
+              },
+              "date": {
+                "field": "date",
+                "stored": true,
+                "indexed": false,
+                "field_type": "Timestamp",
+                "facet": true,
+                "field_id": 3
               }
             }
           },
@@ -2624,8 +2638,8 @@
             },
             "example": {
               "date": {
-                "max": 1730901447,
-                "min": 831306011
+                "min": 831306011,
+                "max": 1730901447
               }
             }
           }
@@ -3991,9 +4005,9 @@
             "description": "Sort field and order:\nSearch results are sorted by the specified facet field, either in ascending or descending order.\nIf no sort field is specified, then the search results are sorted by rank in descending order per default.\nMultiple sort fields are combined by a \"sort by, then sort by\"-method (\"tie-breaking\"-algorithm).\nThe results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,\nuntil the n-th field value is either not equal or the last field is reached.\nA special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.\nSort is only enabled on facet fields that are defined in schema at create_index!\nExamples:\n- result_sort = vec![ResultSort {field: \"price\".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: \"language\".into(), order: SortOrder::Ascending, base: FacetValue::None}];\n- result_sort = vec![ResultSort {field: \"location\".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];",
             "example": [
               {
-                "base": "None",
                 "field": "date",
-                "order": "Ascending"
+                "order": "Ascending",
+                "base": "None"
               }
             ]
           },

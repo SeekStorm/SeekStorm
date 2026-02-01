@@ -170,6 +170,16 @@ impl Shard {
                             + (posting_pointer_size_sum_previous + compressed_docid_previous) as u32
                     };
 
+                    if rank_position_pointer_range < position_range_previous {
+                        println!(
+                            "index_posting error {} {} {:?} {:?}",
+                            term.term,
+                            term.term.len(),
+                            term.field_positions_vec,
+                            term.ngram_type
+                        );
+                    }
+
                     value.size_compressed_positions_key =
                         (rank_position_pointer_range - position_range_previous) as usize;
                 }

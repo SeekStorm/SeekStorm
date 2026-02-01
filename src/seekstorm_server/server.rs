@@ -3,8 +3,8 @@ use colored::Colorize;
 use crossbeam_channel::{Receiver, bounded, select};
 use seekstorm::{
     index::{
-        Close, FrequentwordType, NgramSet, QueryCompletion, SimilarityType, SpellingCorrection,
-        StemmerType, StopwordType, TokenizerType,
+        Close, DocumentCompression, FrequentwordType, NgramSet, QueryCompletion, SimilarityType,
+        SpellingCorrection, StemmerType, StopwordType, TokenizerType,
     },
     ingest::{IngestCsv, IngestJson, IngestPdf},
 };
@@ -156,7 +156,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                     return;
                 }
 
-
                 recv(receiver_commandline) -> message => {
 
                     if let Ok(m) = message {
@@ -261,6 +260,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         StopwordType::None,
                                                         FrequentwordType::English,
                                                         NgramSet::NgramFF as u8 ,
+                                                        DocumentCompression::Snappy,
                                                         Vec::new(),
                                                         None,
                                                         apikey_object,

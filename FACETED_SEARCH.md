@@ -120,7 +120,7 @@ Setting a numerical field to "facet":true is also the precondition for sorting t
 
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,create_index};
+use seekstorm::index::{IndexMetaObject, SimilarityType,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
 
 let index_path=Path::new("C:/index/");//x
 
@@ -134,12 +134,13 @@ let schema=serde_json::from_str(schema_json).unwrap();
 let meta = IndexMetaObject {
     id: 0,
     name: "test_index".to_string(),
-    similarity:SimilarityType::Bm25f,
-    tokenizer:TokenizerType::AsciiAlphabetic,
-    stemmer:StemmerType::None,
+    similarity: SimilarityType::Bm25f,
+    tokenizer: TokenizerType::AsciiAlphabetic,
+    stemmer: StemmerType::None,
     stop_words: StopwordType::None,
-    frequent_words:FrequentwordType::English,
-    ngram_indexing:NgramSet::NgramFF as u8,
+    frequent_words: FrequentwordType::English,
+    ngram_indexing: NgramSet::NgramFF as u8,
+    document_compression: DocumentCompression::Snappy,
     access_type: AccessType::Mmap,
     spelling_correction: None,
     query_completion: None,
