@@ -766,7 +766,13 @@ pub(crate) async fn http_request_handler(
             drop(apikey_list_ref);
 
             let is_doc_vector = if let Some(pos) = request_string.find('[') {
-                request_string[pos + 1..].find('[').is_some()
+                if pos + 1 >= request_string.len() {
+                    false
+                } else {
+                    let p1 = request_string[pos + 1..].find('[');
+                    let p2 = request_string[pos + 1..].find('{');
+                    p1.is_some() && (p2.is_some() && p1.unwrap() < p2.unwrap())
+                }
             } else {
                 return HttpServerError::BadRequest(String::new()).into();
             };
