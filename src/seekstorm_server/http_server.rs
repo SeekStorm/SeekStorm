@@ -765,13 +765,13 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            let is_doc_vector = if let Some(pos) = request_string.find('[') {
-                if pos + 1 >= request_string.len() {
-                    false
+            let is_doc_vector = if let Some(p0) = request_string.find('[') {
+                if p0 + 1 < request_string.len()
+                    && let Some(p1) = request_string[p0 + 1..].find('{')
+                {
+                    request_string[p0 + 1..p1].find('[').is_some()
                 } else {
-                    let p1 = request_string[pos + 1..].find('[');
-                    let p2 = request_string[pos + 1..].find('{');
-                    p1.is_some() && (p2.is_some() && p1.unwrap() < p2.unwrap())
+                    false
                 }
             } else {
                 return HttpServerError::BadRequest(String::new()).into();
