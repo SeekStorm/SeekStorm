@@ -135,7 +135,7 @@ impl Shard {
                             };
 
                         let compression_type_pointer_previous =
-                            read_u32(byte_array_keys, key_address + 18 - self.key_head_size);
+                            read_u32(byte_array_keys, key_address- 4);
                         let rank_position_pointer_range_previous = compression_type_pointer_previous
                             & 0b0011_1111_1111_1111_1111_1111_1111_1111;
                         let compression_type_previous: CompressionType = FromPrimitive::from_i32(
