@@ -754,7 +754,8 @@ pub(crate) async fn http_request_handler(
                     .into();
             };
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
-            let request_string = from_utf8(&request_bytes).unwrap();
+            let request_string = from_utf8(&request_bytes).unwrap().trim();
+
             let apikey_list_ref = apikey_list.read().await;
             let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
                 return HttpServerError::Unauthorized.into();

@@ -227,7 +227,7 @@ impl Shard {
 
         if !self.mute {
             println!(
-                "commit index {} level {} indexed documents {}",
+                "commit shard {} level {} indexed documents {}",
                 self.meta.id,
                 self.level_index.len(),
                 indexed_doc_count.to_formatted_string(&Locale::en),
@@ -533,10 +533,9 @@ impl Shard {
 
                         let rank_position_pointer_range_previous = compression_type_pointer_previous
                             & 0b0011_1111_1111_1111_1111_1111_1111_1111;
-                        let compression_type_previous: CompressionType = FromPrimitive::from_i32(
-                            (compression_type_pointer_previous >> 30) as i32,
-                        )
-                        .unwrap();
+                        let compression_type_previous: CompressionType =
+                            FromPrimitive::from_u32(compression_type_pointer_previous >> 30)
+                                .unwrap();
 
                         let compressed_docid_previous = match compression_type_previous {
                             CompressionType::Array => posting_count_previous * 2,
@@ -796,7 +795,7 @@ impl Shard {
         posting_count_ngram_3_compressed: u8,
     ) {
         let compression_type: CompressionType =
-            FromPrimitive::from_i32((compression_type_pointer >> 30) as i32).unwrap();
+            FromPrimitive::from_u32(compression_type_pointer >> 30).unwrap();
 
         let rank_position_pointer_range: u32 =
             compression_type_pointer & 0b0011_1111_1111_1111_1111_1111_1111_1111;

@@ -362,8 +362,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             }
                         },
 
-
-
                         "create" =>
                         {
                             println!("create demo api_key");

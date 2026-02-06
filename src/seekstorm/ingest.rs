@@ -552,7 +552,6 @@ impl IngestJson for IndexArc {
                 let index_ref = index_arc_clone2.read().await;
                 drop(index_ref);
 
-                let index_arc_clone = self.clone();
                 let file = File::open(data_path).unwrap();
                 let mut reader = BufReader::new(file);
 
@@ -563,25 +562,20 @@ impl IngestJson for IndexArc {
                     reader.seek_relative(-1).unwrap();
 
                     for doc_object in Deserializer::from_reader(reader).into_iter::<Document>() {
-                        let index_arc_clone_clone = index_arc_clone.clone();
-
-                        index_arc_clone_clone
-                            .index_document(doc_object.unwrap(), FileType::None)
+                        self.index_document(doc_object.unwrap(), FileType::None)
                             .await;
                         docid += 1;
                     }
                 } else {
                     println!("JSON detected");
 
-                    let index_arc_clone_clone = index_arc_clone.clone();
                     loop {
                         let next_obj = Deserializer::from_reader(reader.by_ref())
                             .into_iter::<Document>()
                             .next();
                         match next_obj {
                             Some(doc_object) => {
-                                index_arc_clone_clone
-                                    .index_document(doc_object.unwrap(), FileType::None)
+                                self.index_document(doc_object.unwrap(), FileType::None)
                                     .await
                             }
                             None => break,

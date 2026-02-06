@@ -1433,7 +1433,6 @@ pub fn tokenizer_lite(
                         }
                         true
                     }
-
                     '"' | '+' | '-' | '#' => {
                         if !start {
                             start_pos = char.0;

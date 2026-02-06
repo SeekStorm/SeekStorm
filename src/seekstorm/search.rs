@@ -45,7 +45,7 @@ use symspell_complete_rs::Suggestion;
 /// - **Intersection** (AND, conjunction),
 /// - **Phrase** (""),
 /// - **Not** (-).
-///
+/// 
 /// The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
 #[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum QueryType {

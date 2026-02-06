@@ -303,14 +303,12 @@ pub(crate) struct PostingListObject0 {
 }
 
 /// Type of posting list compression.
-#[derive(Default, Debug, Deserialize, Serialize, Clone, PartialEq, FromPrimitive)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, FromPrimitive)]
 pub(crate) enum CompressionType {
     Delta = 0,
     Array = 1,
     Bitmap = 2,
     Rle = 3,
-    #[default]
-    Error = 4,
 }
 
 pub(crate) struct QueueObject<'a> {
@@ -393,7 +391,7 @@ impl Default for PostingListObjectQuery<'_> {
             blocks_index: 0,
             term: "".to_string(),
             key0: 0,
-            compression_type: CompressionType::Error,
+            compression_type: CompressionType::Delta,
             rank_position_pointer_range: 0,
             compressed_doc_id_range: 0,
             pointer_pivot_p_docid: 0,
@@ -504,7 +502,6 @@ pub enum FieldType {
     Bool,
     /// String16
     /// allows a maximum cardinality of 65_535 (16 bit) distinct values, is space-saving.
-    #[default]
     String16,
     /// String32
     /// allows a maximum cardinality of 4_294_967_295 (32 bit) distinct values
@@ -523,6 +520,7 @@ pub enum FieldType {
     /// The conversion between longitude/latitude coordinates and Morton code is lossy due to rounding errors.
     Point,
     /// Text is a text field, that will be tokenized by the selected Tokenizer into string tokens.
+    #[default]
     Text,
     /// Hierarchical JSON Object, that will be tokenized by the selected Tokenizer into string tokens.
     /// The text is extracted from all levels of the JSON object and combined into a single text string (values only, not keys).
@@ -2771,10 +2769,8 @@ pub(crate) async fn open_shard(index_path: &Path, mute: bool) -> Result<ShardArc
 
                                                     let rank_position_pointer_range_previous= compression_type_pointer_previous & 0b0011_1111_1111_1111_1111_1111_1111_1111;
                                                     let compression_type_previous: CompressionType =
-                                                        FromPrimitive::from_i32(
-                                                            (compression_type_pointer_previous
-                                                                >> 30)
-                                                                as i32,
+                                                        FromPrimitive::from_u32(
+                                                            compression_type_pointer_previous >> 30,
                                                         )
                                                         .unwrap();
 

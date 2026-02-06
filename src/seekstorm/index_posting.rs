@@ -135,13 +135,12 @@ impl Shard {
                             };
 
                         let compression_type_pointer_previous =
-                            read_u32(byte_array_keys, key_address- 4);
+                            read_u32(byte_array_keys, key_address - 4);
                         let rank_position_pointer_range_previous = compression_type_pointer_previous
                             & 0b0011_1111_1111_1111_1111_1111_1111_1111;
-                        let compression_type_previous: CompressionType = FromPrimitive::from_i32(
-                            (compression_type_pointer_previous >> 30) as i32,
-                        )
-                        .unwrap();
+                        let compression_type_previous: CompressionType =
+                            FromPrimitive::from_u32(compression_type_pointer_previous >> 30)
+                                .unwrap();
 
                         let compressed_docid_previous = match compression_type_previous {
                             CompressionType::Array => posting_count_previous * 2,
@@ -169,16 +168,6 @@ impl Shard {
                         rank_position_pointer_range_previous
                             + (posting_pointer_size_sum_previous + compressed_docid_previous) as u32
                     };
-
-                    if rank_position_pointer_range < position_range_previous {
-                        println!(
-                            "index_posting error {} {} {:?} {:?}",
-                            term.term,
-                            term.term.len(),
-                            term.field_positions_vec,
-                            term.ngram_type
-                        );
-                    }
 
                     value.size_compressed_positions_key =
                         (rank_position_pointer_range - position_range_previous) as usize;

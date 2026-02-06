@@ -244,7 +244,7 @@ pub(crate) fn compress_postinglist(
     shard.docid_count += plo.posting_count;
     shard.postinglist_count += 1;
     shard.position_count += plo.position_count;
-    let mut compression_type_pointer = CompressionType::Error as u32;
+    let mut compression_type_pointer = CompressionType::Delta as u32;
 
     let mut runs_count: u16 = 0;
 
@@ -719,7 +719,6 @@ pub(crate) fn compress_postinglist_array(
     let mut size_compressed_positions_key = 0;
 
     let count_byte = plo.posting_count * 2;
-
     plo.compression_type_pointer = key_body_offset | ((CompressionType::Array as u32) << 30);
     *compression_type_pointer = plo.compression_type_pointer;
 

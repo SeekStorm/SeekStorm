@@ -70,7 +70,7 @@ pub(crate) async fn single_docid<'a>(
         let blo = &query_list_item_mut.blocks[query_list_item_mut.p_block as usize];
 
         query_list_item_mut.compression_type =
-            FromPrimitive::from_i32((blo.compression_type_pointer >> 30) as i32).unwrap();
+            FromPrimitive::from_u32(blo.compression_type_pointer >> 30).unwrap();
 
         query_list_item_mut.rank_position_pointer_range =
             blo.compression_type_pointer & 0b0011_1111_1111_1111_1111_1111_1111_1111;
@@ -124,7 +124,7 @@ pub(crate) async fn single_docid<'a>(
     }
 
     let compression_type: CompressionType =
-        FromPrimitive::from_i32((blo.compression_type_pointer >> 30) as i32).unwrap();
+        FromPrimitive::from_u32(blo.compression_type_pointer >> 30).unwrap();
 
     let rank_position_pointer_range: u32 =
         blo.compression_type_pointer & 0b0011_1111_1111_1111_1111_1111_1111_1111;
@@ -285,8 +285,6 @@ pub(crate) async fn single_docid<'a>(
                 }
             }
         }
-
-        _ => {}
     }
 }
 
