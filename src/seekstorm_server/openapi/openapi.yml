@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 2.2.0
+  version: 2.3.0
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -1760,6 +1760,7 @@ components:
       - Point
       - Text
       - Json
+      - Binary
     FrequentwordType:
       oneOf:
       - type: string

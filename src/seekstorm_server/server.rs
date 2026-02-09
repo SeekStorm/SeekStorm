@@ -265,7 +265,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         None,
                                                         apikey_object,
                                                         Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20, max_dictionary_entries: 500_000 }),
-                                                        Some(QueryCompletion {max_completion_entries:10_000_000_000})
+                                                        Some(QueryCompletion {max_completion_entries:10_000_000_000}),
+                                                        false
                                                     ).await
                                                 } else {
                                                     0
@@ -292,6 +293,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                                     data_path,
                                                                     dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
                                                                     dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                    dash.get("f").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
                                                                     dash.get("d").unwrap_or(&",".to_owned()).as_bytes()[0],
                                                                     dash.get("s").and_then(|value| value.parse::<usize>().ok()),
                                                                     dash.get("n").and_then(|value| value.parse::<usize>().ok())
@@ -302,6 +304,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                                     data_path,
                                                                     dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
                                                                     dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                    dash.get("f").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
                                                                     dash.get("d").unwrap_or(&";".to_owned()).as_bytes()[0],
                                                                     dash.get("s").and_then(|value| value.parse::<usize>().ok()),
                                                                     dash.get("n").and_then(|value| value.parse::<usize>().ok())
@@ -312,6 +315,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                                     data_path,
                                                                     dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
                                                                     dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                    dash.get("f").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
                                                                     dash.get("d").unwrap_or(&"\t".to_owned()).as_bytes()[0],
                                                                     dash.get("s").and_then(|value| value.parse::<usize>().ok()),
                                                                     dash.get("n").and_then(|value| value.parse::<usize>().ok())
@@ -322,6 +326,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                                     data_path,
                                                                     dash.get("h").unwrap_or(&"false".to_owned()).to_lowercase()=="true",
                                                                     dash.get("q").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
+                                                                    dash.get("f").unwrap_or(&"true".to_owned()).to_lowercase()=="true",
                                                                     dash.get("d").unwrap_or(&"|".to_owned()).as_bytes()[0],
                                                                     dash.get("s").and_then(|value| value.parse::<usize>().ok()),
                                                                     dash.get("n").and_then(|value| value.parse::<usize>().ok())

@@ -283,7 +283,7 @@ pub(crate) fn top_fragments_from_field(
                     }
                 }
 
-                if last < text.len() - 1 {
+                if last + 1 < text.len() {
                     let section = Fragment {
                         text: &text[last..],
                         trim_left: false,

@@ -1,3 +1,6 @@
+use base64::Engine;
+use base64::engine::general_purpose;
+
 pub(crate) fn write_u8_ref(value: u8, vec8: &mut [u8], pos: &mut usize) {
     vec8[*pos] = value;
     *pos += 1;
@@ -164,4 +167,14 @@ pub fn substring(source: &str, start: usize, length: usize) -> String {
         return source.to_string();
     }
     source.chars().skip(start).take(length).collect()
+}
+
+/// Encodes a byte slice into a base64 string.
+pub fn encode_bytes_to_base64_string(input: &[u8]) -> String {
+    general_purpose::STANDARD.encode(input)
+}
+
+/// Decodes a base64 string into a byte vector.
+pub fn decode_bytes_from_base64_string(input: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    general_purpose::STANDARD.decode(input)
 }

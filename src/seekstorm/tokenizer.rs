@@ -168,6 +168,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
+
                         _ => {
                             if start {
                                 non_unique_terms_line.push(&text_normalized[start_pos..char.0]);

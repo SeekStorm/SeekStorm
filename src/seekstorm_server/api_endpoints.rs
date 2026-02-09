@@ -543,6 +543,7 @@ pub(crate) async fn create_index_api<'a>(
     apikey_object: &'a mut ApikeyObject,
     spelling_correction: Option<SpellingCorrection>,
     query_completion: Option<QueryCompletion>,
+    mute: bool,
 ) -> u64 {
     let mut index_id: u64 = 0;
     for id in apikey_object.index_list.keys().sorted() {
@@ -579,7 +580,7 @@ pub(crate) async fn create_index_api<'a>(
         &schema,
         &synonyms,
         11,
-        false,
+        mute,
         force_shard_number,
     )
     .await

@@ -5,12 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-09
+
+### Added
+
+- Added `FieldType::Binary` that for storing binary data in base64 format. This field type will not be tokenized and indexed.  
+  For embedding binary data, e.g. images, audio, video, pdf, … in JSON or CSV documents. A self-contained alternative to storing URLs to external resources.  
+  Using the [Data URI scheme](https://en.wikipedia.org/wiki/Data_URI_scheme) in JavaScript you can create an Image object and put the base64 as its src, including the data:image... part like this:
+  ```javascript
+  var image = new Image();
+  image.src = 'data:image/png;base64,iVBORw0K...';
+  document.body.appendChild(image);
+  ```
+- The embedded Web UI now displays `FieldType::Binary` as an image if the field value starts with "data:image".
+- Two utility functions added to the SeekStorm library: 
+  - `encode_bytes_to_base64_string` Encodes a byte slice into a base64 string.
+  - `decode_bytes_from_base64_string` Decodes a base64 string into a byte vector.
+
+### Changed
+
+- The `gxhash` crate is now an optional default feature.  
+  If possible, SeekStorm uses GXHash instead of AHash for faster hash computation. The drawback is that it requires the target_feature "aes" and "sse2", that are not available on all platforms.  
+  SeekStorm always checked for the [target_features](https://doc.rust-lang.org/reference/conditional-compilation.html#r-cfg.target_feature) during compilation, before using GXHash, otherwise it automatically falls back to AHash.  
+  Now you can also disable GXHash independently from the set target_features by disabling all SeekStorm default features (`"zh", "pfd", "gx"`) and re-enabling only the features you want
+  in the .toml-file of your application with:  
+  `seekstorm = { version ="2.3.0", default-features = false, features = ["zh","pdf"] }`  
+  This fixes issue #56.
+- Adapted code to `rand` crate version 0.10.0.
+
+### Fixed
+
+- Fixed exception when ingesting .CSV files.
+- ingest_csv now allows ingesting .CSV files with a variable number of fields per row, when parameter `flexible` is set to true.
+
 ## [2.2.1] - 2026-02-06
 
 ### Fixed
 
 - Fixed update document(s) REST API endpoint document array detection fixed. There was an issue when the document itself contained a `[`-char.
-- Fixed issue #57. `index_document`/`index_posting` caused an exception after a previously committed incomplete level due to a wrong posting list `CompressionType` deserialization.
+- Fixed issue #57. `index_document`/`index_posting` caused an exception after a previously committed incomplete level due to a wrong posting list `CompressionType` deserialization.   
 
 ## [2.2.0] - 2026-01-30
 

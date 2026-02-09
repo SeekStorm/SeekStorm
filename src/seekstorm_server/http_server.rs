@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::{convert::Infallible, net::SocketAddr};
 
 use chrono::Utc;
-use rand::TryRngCore;
-use rand::rngs::OsRng;
+use rand::TryRng;
+use rand::rngs::SysRng;
 
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::{
@@ -387,6 +387,7 @@ pub(crate) async fn http_request_handler(
                 apikey_object,
                 create_index_request_object.spelling_correction,
                 create_index_request_object.query_completion,
+                true,
             )
             .await;
             drop(apikey_list_mut);
@@ -1176,7 +1177,7 @@ pub(crate) async fn http_request_handler(
             };
 
             let mut apikey = [0u8; 32];
-            OsRng.try_fill_bytes(&mut apikey).unwrap();
+            SysRng.try_fill_bytes(&mut apikey).unwrap();
             let api_key_base64 = general_purpose::STANDARD.encode(apikey);
             let mut apikey_list_mut = apikey_list.write().await;
             create_apikey_api(

@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "2.2.1"
+version = "2.3.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -14,10 +14,12 @@ edition = "2024"
 exclude = ["assets/*.png","assets/*.jpg"]
 
 [features]
-# comment out entry below if you don't need Chinese word segmentation
-default = ["zh","pdf"]
+# comment out the default features below you don't need: zh=Chinese word segmentation, pdf=PDF text extraction, gx=GXHash instead of AHash for faster hash computation. 
+# You can also disable all default features and re-enable them case-wise in your toml with: seekstorm = { version = "2.3.0", default-features = false, features = ["zh","pdf"] }
+default = ["zh","pdf","gx"]
 zh = []
 pdf = ["pdfium-render"]
+gx = ["gxhash"]
 
 [lib]
 name = "seekstorm"
@@ -36,7 +38,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 base64 = "0.22.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
-rand = "0.9.2"
+rand = "0.10.0"
 futures = "0.3.31"
 num = "0.4.3"
 num-derive = "0.4.2"
@@ -75,7 +77,7 @@ lz4_flex = "0.12.0"
 winapi = { version ="0.3.9",  features = ["winbase"]}
 
 [target.'cfg(all(target_feature = "aes", target_feature = "sse2"))'.dependencies]
-gxhash = { version = "3.5.0", features = ["deterministic"]}
+gxhash = { version = "3.5.0", features = ["deterministic"] , optional = true}
 
 [lints.rust]
 missing_docs = "warn"

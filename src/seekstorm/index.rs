@@ -45,7 +45,7 @@ use crate::{
     },
 };
 
-#[cfg(all(target_feature = "aes", target_feature = "sse2"))]
+#[cfg(all(target_feature = "aes", target_feature = "sse2", feature = "gx"))]
 use gxhash::{gxhash32, gxhash64};
 
 pub(crate) const FILE_PATH: &str = "files";
@@ -502,15 +502,19 @@ pub enum FieldType {
     Bool,
     /// String16
     /// allows a maximum cardinality of 65_535 (16 bit) distinct values, is space-saving.
+    /// For faceting and filtering with low cardinality fields, e.g. boolean fields, enum fields, country, language, status, category, tags, etc.
     String16,
     /// String32
     /// allows a maximum cardinality of 4_294_967_295 (32 bit) distinct values
+    /// For faceting and filtering with low cardinality fields, e.g. boolean fields, enum fields, country, language, status, category, tags, etc.
     String32,
     /// StringSet16 is a set of strings, e.g. tags, categories, keywords, authors, genres, etc.
     /// allows a maximum cardinality of 65_535 (16 bit) distinct values, is space-saving.
+    /// For faceting and filtering with low cardinality fields, e.g. boolean fields, enum fields, country, language, status, category, tags, etc.
     StringSet16,
     /// StringSet32 is a set of strings, e.g. tags, categories, keywords, authors, genres, etc.
     /// allows a maximum cardinality of 4_294_967_295 (32 bit) distinct values
+    /// For faceting and filtering with low cardinality fields, e.g. boolean fields, enum fields, country, language, status, category, tags, etc.
     StringSet32,
     /// Point is a geographic field type: A `Vec<f64>` with two coordinate values (latitude and longitude) are internally encoded into a single u64 value (Morton code).
     /// Morton codes enable efficient range queries.
@@ -528,6 +532,15 @@ pub enum FieldType {
     /// Despite being indexed as a single text string, the hierarchical structure of an JSON object is preserved in the stored document, so that it can be retrieved in the search results.
     /// When using search with highlighting, make sure to use a `name` different from `field`, otherwise the Json `field` in the results will be overwritten with the highlight (snippet) text.
     Json,
+    /// Binary encodes and stores binary data in base64 format. This field type will not be tokenized and indexed.
+    /// For embedding binary data, e.g. images, audio, video, pdf, … in JSON or CSV documents. A self-contained alternative to storing URLs to external resources.
+    /// Using the [Data URI scheme](https://en.wikipedia.org/wiki/Data_URI_scheme) in JavaScript you can create an Image object and put the base64 as its src, including the data:image... part like this:
+    ///```javascript
+    /// var image = new Image();
+    /// image.src = 'data:image/png;base64,iVBORw0K...';
+    /// document.body.appendChild(image);
+    ///```
+    Binary,
 }
 
 /// Defines synonyms for terms per index.
@@ -1270,7 +1283,7 @@ pub async fn create_index(
 pub(crate) async fn create_index_root(
     index_path: &Path,
     meta: IndexMetaObject,
-    schema: &Vec<SchemaField>,
+    #[allow(clippy::ptr_arg)] schema: &Vec<SchemaField>,
     serialize_schema: bool,
     synonyms: &Vec<Synonym>,
     segment_number_bits1: usize,
@@ -1315,6 +1328,13 @@ pub(crate) async fn create_index_root(
         .open(Path::new(index_path).join(INDEX_FILENAME))
     {
         Ok(index_file) => {
+            let mut schema = schema.clone();
+            for schema_field in schema.iter_mut() {
+                if schema_field.field_type == FieldType::Binary && schema_field.indexed {
+                    schema_field.indexed = false;
+                }
+            }
+
             let mut document_length_compressed_array: Vec<[u8; ROARING_BLOCK_SIZE]> = Vec::new();
             let mut indexed_field_vec: Vec<IndexedField> = Vec::new();
             let mut facets_vec: Vec<FacetField> = Vec::new();
@@ -1327,6 +1347,7 @@ pub(crate) async fn create_index_root(
             let mut longest_field_id_option: Option<usize> = None;
             for (i, schema_field) in schema.iter().enumerate() {
                 let mut schema_field_clone = schema_field.clone();
+
                 schema_field_clone.indexed_field_id = indexed_field_vec.len();
                 if schema_field.longest && schema_field.indexed {
                     longest_field_id_option = Some(schema_field_clone.indexed_field_id);
@@ -3120,39 +3141,39 @@ pub(crate) struct NonUniqueTermObject {
     pub op: QueryType,
 }
 
-#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2", feature = "gx")))]
 use ahash::RandomState;
-#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2", feature = "gx")))]
 use std::sync::LazyLock;
 
-#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2", feature = "gx")))]
 pub static HASHER_32: LazyLock<RandomState> =
     LazyLock::new(|| RandomState::with_seeds(805272099, 242851902, 646123436, 591410655));
 
-#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2", feature = "gx")))]
 pub static HASHER_64: LazyLock<RandomState> =
     LazyLock::new(|| RandomState::with_seeds(808259318, 750368348, 84901999, 789810389));
 
 #[inline]
-#[cfg(all(target_feature = "aes", target_feature = "sse2"))]
+#[cfg(all(target_feature = "aes", target_feature = "sse2", feature = "gx"))]
 pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
     gxhash32(term_bytes, 1234)
 }
 
 #[inline]
-#[cfg(all(target_feature = "aes", target_feature = "sse2"))]
+#[cfg(all(target_feature = "aes", target_feature = "sse2", feature = "gx"))]
 pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
     gxhash64(term_bytes, 1234) & 0b1111111111111111111111111111111111111111111111111111111111111000
 }
 
 #[inline]
-#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2", feature = "gx")))]
 pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
     HASHER_32.hash_one(term_bytes) as u32
 }
 
 #[inline]
-#[cfg(not(all(target_feature = "aes", target_feature = "sse2")))]
+#[cfg(not(all(target_feature = "aes", target_feature = "sse2", feature = "gx")))]
 pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
     HASHER_64.hash_one(term_bytes)
         & 0b1111111111111111111111111111111111111111111111111111111111111000
@@ -4765,7 +4786,7 @@ impl IndexDocument2 for ShardArc {
             }
             shard_mut.longest_field_id = longest_field_id;
             shard_mut.indexed_field_vec[longest_field_id].is_longest_field = true;
-            if shard_mut.indexed_field_vec.len() > 1 {
+            if shard_mut.longest_field_auto && shard_mut.indexed_field_vec.len() > 1 {
                 println!(
                     "detect longest field id {} name {} length {}",
                     longest_field_id,

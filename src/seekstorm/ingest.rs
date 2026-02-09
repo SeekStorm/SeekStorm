@@ -552,6 +552,7 @@ impl IngestJson for IndexArc {
                 let index_ref = index_arc_clone2.read().await;
                 drop(index_ref);
 
+                let _index_arc_clone = self.clone();
                 let file = File::open(data_path).unwrap();
                 let mut reader = BufReader::new(file);
 
@@ -650,15 +651,37 @@ impl IngestJson for IndexArc {
 
 #[allow(async_fn_in_trait)]
 /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
-/// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+/// The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+/// Parameters:
+/// - `has_header`: if true, the first line of the csv file is treated as header. Field names are always taken from schema in order.
+/// - `flexible`: if true, allows variable number of fields per record, otherwise all records must have the same number of fields.
+/// - `quoting`: if true, csv quoting is enabled, otherwise disabled. If disabled, quoting characters are treated as regular characters.
+/// - `delimiter`: csv delimiter character, default is comma (b',')
+/// - `skip_docs`: number of documents to skip from the beginning of the file, default is 0
+/// - `num_docs`: maximum number of documents to ingest, default is unlimited
+///
+/// ⚠️ **CAUTION**: When ingesting a `CSV` file, the **columns in the CSV file** are assigned **sequentially** to the defined **fields in the schema** of the index.  
+/// Any columns in the CSV file exceeding the number of defined fields are ignored.
 pub trait IngestCsv {
     /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
-    /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+    /// The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+    /// Parameters:
+    /// - `has_header`: if true, the first line of the csv file is treated as header. Field names are always taken from schema in order.
+    /// - `flexible`: if true, allows variable number of fields per record, otherwise all records must have the same number of fields.
+    /// - `quoting`: if true, csv quoting is enabled, otherwise disabled. If disabled, quoting characters are treated as regular characters.
+    /// - `delimiter`: csv delimiter character, default is comma (b',')
+    /// - `skip_docs`: number of documents to skip from the beginning of the file, default is 0
+    /// - `num_docs`: maximum number of documents to ingest, default is unlimited
+    ///
+    /// ⚠️ **CAUTION**: When ingesting a `CSV` file, the **columns in the CSV file** are assigned **sequentially** to the defined **fields in the schema** of the index.  
+    /// Any columns in the CSV file exceeding the number of defined fields are ignored.
+    #[allow(clippy::too_many_arguments)]
     async fn ingest_csv(
         &mut self,
         data_path: &Path,
         has_header: bool,
         quoting: bool,
+        flexible: bool,
         delimiter: u8,
         skip_docs: Option<usize>,
         num_docs: Option<usize>,
@@ -667,12 +690,23 @@ pub trait IngestCsv {
 
 impl IngestCsv for IndexArc {
     /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
-    /// The document ingestion is streamed without loading the whole document vector into memory to allwow for unlimited file size while keeping RAM consumption low.
+    /// The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+    /// Parameters:
+    /// - `has_header`: if true, the first line of the csv file is treated as header. Field names are always taken from schema in order.
+    /// - `flexible`: if true, allows variable number of fields per record, otherwise all records must have the same number of fields.
+    /// - `quoting`: if true, csv quoting is enabled, otherwise disabled. If disabled, quoting characters are treated as regular characters.
+    /// - `delimiter`: csv delimiter character, default is comma (b',')
+    /// - `skip_docs`: number of documents to skip from the beginning of the file, default is 0
+    /// - `num_docs`: maximum number of documents to ingest, default is unlimited
+    ///
+    /// ⚠️ **CAUTION**: When ingesting a `CSV` file, the **columns in the CSV file** are assigned **sequentially** to the defined **fields in the schema** of the index.  
+    /// Any columns in the CSV file exceeding the number of defined fields are ignored.
     async fn ingest_csv(
         &mut self,
         data_path: &Path,
         has_header: bool,
         quoting: bool,
+        flexible: bool,
         delimiter: u8,
         skip_docs: Option<usize>,
         num_docs: Option<usize>,
@@ -703,6 +737,7 @@ impl IngestCsv for IndexArc {
                     .quoting(quoting)
                     .delimiter(delimiter)
                     .terminator(Terminator::CRLF)
+                    .flexible(flexible)
                     .from_path(data_path)
                     .unwrap();
 
@@ -710,13 +745,17 @@ impl IngestCsv for IndexArc {
                 let max = num_docs.unwrap_or(usize::MAX);
                 let mut i: usize = 0;
                 let mut record = csv::StringRecord::new();
-                while rdr.read_record(&mut record).unwrap() && docid < max {
+                while rdr.read_record(&mut record).is_ok() && docid < max {
                     if i < skip {
                         i += 1;
                         continue;
                     }
+                    if record.is_empty() {
+                        break;
+                    }
+
                     let mut document = Document::new();
-                    for (i, element) in record.iter().enumerate() {
+                    for (i, element) in record.iter().take(schema_vec.len()).enumerate() {
                         document.insert(schema_vec[i].clone(), json!(element));
                     }
 

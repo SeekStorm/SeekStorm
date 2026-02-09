@@ -32,13 +32,14 @@ ingest [file_path]
 ```
 
 ```
-ingest [file_path] -t [type] -k [api_key] -i [index_id] -d [delimiter]  -h [header] -q [quoting] -s [skip] -n [num]
+ingest [file_path] -t [type] -k [api_key] -i [index_id] -f [flexible] -d [delimiter] -h [header] -q [quoting] -s [skip] -n [num]
 ```
 
 -t [type]:      file type, default=derived from file extension  
 -k [api_key]:   default=Demo API Key  
 -i [index_id]:  default=0  
 -h [header]:    CSV header, treat first line of file as header, default=false  
+-f [flexible]:  Allows variable number of fields per record, default=true
 -d [delimiter]: CSV delimiter, default=derived from file type or file extension  
 -q [quoting]:   CSV quoting, default=true  
 -s [skip]:      number of records to skip from start, default=None=0  
@@ -53,6 +54,9 @@ If the specified `[file_path]` is a `directory` instead of a file, then all `PDF
 
 If no `[file_path]` parameter is specified then **wiki-articles.json** is indexed, if present in same directory like seekstorm_server.exe or the directory specified by the command line parameter `ingest_path`.  
 If no `[api_key]` and `[index_id]` parameter are specified then the default demo API key and index_id=0 are used.
+
+&#x26A0; **CAUTION**: When ingesting a `CSV` file, the **columns in the CSV file** are assigned **sequentially** to the defined **fields in the schema** of the index.  
+  Any columns in the CSV file exceeding the number of defined fields are ignored.
 
 &#x26A0; **CAUTION**: The **array of documents** is expected to be in the **root element** of a `JSON` file.
 
@@ -118,7 +122,9 @@ The embedded Web UI is intended for demonstration, test and debugging rather tha
 
 ## REST API endpoints
 
-Use VSC extension "Rest client" to execute API calls, inspect responses and generate code snippets in your language:  
+See full [documentation of the REST API](https://seekstorm.apidocumentation.com/reference).
+
+You can use a REST client like [Bruno](https://www.usebruno.com/) or the VSC extension [Rest client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) to execute API calls, inspect responses and generate code snippets in your language:  
 [**interactive API endpoint examples**](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
 
 &#x26A0; **CAUTION**: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!

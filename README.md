@@ -38,7 +38,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * Unlimited field number, field length & index size
 * Compressed document store: ZStandard
 * Boolean queries: AND, OR, PHRASE, NOT
-* Field types: U8..U64, I8..I64, F32, F64, Timestamp, Bool, String, StringSet, Text, Point, Json
+* Field types: U8..U64, I8..I64, F32, F64, Timestamp, Bool, String, StringSet, Text, Point, Json, Binary
 * BM25F and BM25F_Proximity ranking
 * Field filtering
 * [Faceted search](https://github.com/SeekStorm/SeekStorm/blob/main/FACETED_SEARCH.md): Counting & filtering of String & Numeric range facets (with Histogram/Bucket & Min/Max aggregation)
@@ -1247,26 +1247,15 @@ See roadmap below.
 
 ## Roadmap
 
-The Rust port is not yet feature complete. The following features are currently ported or added.
-
-**Porting** 
-* ✅ Delete document
-* ✅ Faceted search
-* ✅ Sorting of results by any field
-* ✅ Unicode character folding/normalization tokenizer (diacritics, accents, umlauts, bold, italic, full-width ...)
-* ✅ Tokenizer with Chinese word segmentation
-* ✅ Typo tolerance (Query spelling correction)
-* ✅ Typo-tolerant query auto-completion (QAC)
+The following new features are planned to be implemented.  
+Are you missing something? Let us know via issue or discussions.
 
 **Improvements**
-* ✅ Better REST API documentation: integrated OpenAPI generator
-* ✅ 4..6x faster indexing via index sharding.
-* ✅ 3x shorter latency via index sharding.
+
 * Relevancy benchmarks: BeIR, MS MARCO
 
 **New features**
-* ✅ Docker file and container image
-* ✅ Stemming for 18 languages
+
 * Geocoding, reverse geocoding, GeoJSON
 * Model Context Protocol (MCP) server for Retrieval Augmented Generation (RAG)
 * Split of storage and compute
