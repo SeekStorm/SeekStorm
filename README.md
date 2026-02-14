@@ -1256,6 +1256,7 @@ Are you missing something? Let us know via issue or discussions.
 
 **New features**
 
+* 🔥Native vector search (currently PoC)
 * Geocoding, reverse geocoding, GeoJSON
 * Model Context Protocol (MCP) server for Retrieval Augmented Generation (RAG)
 * Split of storage and compute
@@ -1263,7 +1264,6 @@ Are you missing something? Let us know via issue or discussions.
   * Use Distributed Key-Value store as index backend
 * Elasticity: automatic spawning and winding down of shards in the cloud depending on index size and load.
 * Distributed search cluster (currently PoC)
-* Native vector search (currently PoC)
 * More tokenizer types (Japanese, Korean)
 * WebAssembly (Wasm)
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
