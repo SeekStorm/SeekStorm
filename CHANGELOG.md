@@ -15,11 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Basque
   - Catalan
   - Czech
-  - Dutch_porter
+  - DutchPorter
   - Esperanto
   - Estonian
   - Hindi
-  - Indonesia
+  - Indonesian
   - Irish
   - Lithuanian
   - Lovins

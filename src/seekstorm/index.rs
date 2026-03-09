@@ -197,83 +197,83 @@ pub enum TokenizerType {
 pub enum StemmerType {
     /// No stemming
     #[default]
-    None=0,
+    None = 0,
     /// Arabic stemmer
-    Arabic=1,
+    Arabic = 1,
     /// Armenian stemmer
-    Armenian=2,
+    Armenian = 2,
     /// Basque stemmer
-    Basque=3,
+    Basque = 3,
     /// Catalan stemmer
-    Catalan=4,
+    Catalan = 4,
     /// Czech stemmer
-    Czech=5,
+    Czech = 5,
     /// Danish stemmer
-    Danish=6,
+    Danish = 6,
     /// Dutch stemmer
-    Dutch=7,
+    Dutch = 7,
     /// Dutch porter stemmer
-    Dutch_porter=8,
+    DutchPorter = 8,
     /// English stemmer
-    English=9,
+    English = 9,
     /// Esperanto stemmer
-    Esperanto=10,
+    Esperanto = 10,
     /// Estonian stemmer
-    Estonian=11,
+    Estonian = 11,
     /// Finnish stemmer
-    Finnish=12,
+    Finnish = 12,
     /// French stemmer
-    French=13,
+    French = 13,
     /// German stemmer
-    German=14,
+    German = 14,
     /// Greek stemmer
-    Greek=15,
+    Greek = 15,
     /// Hindi stemmer
-    Hindi=16,
+    Hindi = 16,
     /// Hungarian stemmer
-    Hungarian=17,
+    Hungarian = 17,
     /// Indonesian stemmer
-    Indonesian=18,
+    Indonesian = 18,
     /// Irish stemmer
-    Irish=19,
+    Irish = 19,
     /// Italian stemmer
-    Italian=20,
+    Italian = 20,
     /// Lithuanian stemmer
-    Lithuanian=21,
+    Lithuanian = 21,
     /// Lovins stemmer
-    Lovins=22,
+    Lovins = 22,
     /// Nepali stemmer
-    Nepali=23,
+    Nepali = 23,
     /// Norwegian stemmer
-    Norwegian=24,
+    Norwegian = 24,
     /// Persian stemmer
-    Persian=25,
+    Persian = 25,
     /// Polish stemmer
-    Polish=26,
+    Polish = 26,
     /// Porter stemmer
-    Porter=27,
+    Porter = 27,
     /// Portuguese stemmer
-    Portuguese=28,
+    Portuguese = 28,
     /// Romanian stemmer
-    Romanian=29,
+    Romanian = 29,
     /// Russian stemmer
-    Russian=30,
+    Russian = 30,
     /// Serbian stemmer
-    Serbian=31,
+    Serbian = 31,
     /// Sesotho stemmer
-    Sesotho=32,
+    Sesotho = 32,
     /// Spanish stemmer
-    Spanish=33,
+    Spanish = 33,
     /// Swedish stemmer
-    Swedish=34,
+    Swedish = 34,
     /// Tamil stemmer
-    Tamil=35,
+    Tamil = 35,
     /// Turkish stemmer
-    Turkish=36,
+    Turkish = 36,
     /// Ukrainian stemmer
-    Ukrainian=37,
+    Ukrainian = 37,
     /// Yiddish stemmer
-    Yiddish=38,
+    Yiddish = 38,
 }
 
 pub(crate) struct LevelIndex {
@@ -1835,7 +1835,7 @@ pub(crate) fn create_shard(
                 StemmerType::Czech => Some(Stemmer::create(Algorithm::Czech)),
                 StemmerType::Danish => Some(Stemmer::create(Algorithm::Danish)),
                 StemmerType::Dutch => Some(Stemmer::create(Algorithm::Dutch)),
-                StemmerType::Dutch_porter => Some(Stemmer::create(Algorithm::Dutch_porter)),
+                StemmerType::DutchPorter => Some(Stemmer::create(Algorithm::DutchPorter)),
                 StemmerType::English => Some(Stemmer::create(Algorithm::English)),
                 StemmerType::Esperanto => Some(Stemmer::create(Algorithm::Esperanto)),
                 StemmerType::Estonian => Some(Stemmer::create(Algorithm::Estonian)),
