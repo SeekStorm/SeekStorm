@@ -49,7 +49,7 @@ Blog Posts: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek
 * 6 tokenizers, including Chinese word segmentation.
 * Typo tolerance / Fuzzy queries / Query spelling correction: return results if the query contains spelling errors.
 * Typo-tolerant Query Auto-Completion (QAC) and Instant search.
-* Stemming for 18 languages
+* Stemming for 38 languages
 * Stopword lists, custom and predefined, for smaller indices and faster search.
 * Frequent word lists, custom and predefined, for faster phrase search by N-gram indexing.
 * KWIC snippets, highlighting

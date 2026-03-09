@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "2.3.0"
+version = "2.3.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -31,15 +31,15 @@ path = "src/seekstorm_server/main.rs"
 
 [dependencies]
 crossbeam-channel = "0.5.15"
-ctrlc = "3.5.1"
+ctrlc = "3.5.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["preserve_order"] }
-tokio = { version = "1.49.0", features = ["full"] }
+tokio = { version = "1.50.0", features = ["full"] }
 base64 = "0.22.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
 rand = "0.10.0"
-futures = "0.3.31"
+futures = "0.3.32"
 num = "0.4.3"
 num-derive = "0.4.2"
 num-traits = "0.2.19"
@@ -56,18 +56,18 @@ zstd = "0.13.3"
 rayon = "1.11.0"
 aho-corasick = "1.1.4"
 smallvec = "1.15.1"
-memmap2 = "0.9.9"
-regex-syntax = "0.8.9"
+memmap2 = "0.9.10"
+regex-syntax = "0.8.10"
 indexmap = { version = "2.13.0", features = ["serde"]}
 unicode-normalization = "0.1.25"
 finl_unicode = "1.4.0"
 colored = "3.1.1"
 walkdir = "2.5.0"
 pdfium-render = { version ="0.8.37",  features = ["thread_safe","sync"], optional = true}
-chrono = "0.4.43"
+chrono = "0.4.44"
 utoipa = { version ="5.4.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
 num_cpus = "1.17.0"
-rust-stemmers = "1.2.0"
+rust-stemmers = { git = "https://github.com/SeekStorm/rust-stemmers.git" }
 csv = "1.4.0"
 symspell_complete_rs = "0.0.2"
 tokio-test = "0.4.4"

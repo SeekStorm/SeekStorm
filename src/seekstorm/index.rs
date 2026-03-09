@@ -197,43 +197,83 @@ pub enum TokenizerType {
 pub enum StemmerType {
     /// No stemming
     #[default]
-    None = 0,
+    None=0,
     /// Arabic stemmer
-    Arabic = 1,
+    Arabic=1,
+    /// Armenian stemmer
+    Armenian=2,
+    /// Basque stemmer
+    Basque=3,
+    /// Catalan stemmer
+    Catalan=4,
+    /// Czech stemmer
+    Czech=5,
     /// Danish stemmer
-    Danish = 2,
+    Danish=6,
     /// Dutch stemmer
-    Dutch = 3,
+    Dutch=7,
+    /// Dutch porter stemmer
+    Dutch_porter=8,
     /// English stemmer
-    English = 4,
+    English=9,
+    /// Esperanto stemmer
+    Esperanto=10,
+    /// Estonian stemmer
+    Estonian=11,
     /// Finnish stemmer
-    Finnish = 5,
+    Finnish=12,
     /// French stemmer
-    French = 6,
+    French=13,
     /// German stemmer
-    German = 7,
+    German=14,
+    /// Greek stemmer
+    Greek=15,
+    /// Hindi stemmer
+    Hindi=16,
     /// Hungarian stemmer
-    Greek = 8,
-    /// Hungarian stemmer
-    Hungarian = 9,
+    Hungarian=17,
+    /// Indonesian stemmer
+    Indonesian=18,
+    /// Irish stemmer
+    Irish=19,
     /// Italian stemmer
-    Italian = 10,
+    Italian=20,
+    /// Lithuanian stemmer
+    Lithuanian=21,
+    /// Lovins stemmer
+    Lovins=22,
+    /// Nepali stemmer
+    Nepali=23,
     /// Norwegian stemmer
-    Norwegian = 11,
+    Norwegian=24,
+    /// Persian stemmer
+    Persian=25,
+    /// Polish stemmer
+    Polish=26,
+    /// Porter stemmer
+    Porter=27,
     /// Portuguese stemmer
-    Portuguese = 12,
+    Portuguese=28,
     /// Romanian stemmer
-    Romanian = 13,
+    Romanian=29,
     /// Russian stemmer
-    Russian = 14,
+    Russian=30,
+    /// Serbian stemmer
+    Serbian=31,
+    /// Sesotho stemmer
+    Sesotho=32,
     /// Spanish stemmer
-    Spanish = 15,
+    Spanish=33,
     /// Swedish stemmer
-    Swedish = 16,
+    Swedish=34,
     /// Tamil stemmer
-    Tamil = 17,
+    Tamil=35,
     /// Turkish stemmer
-    Turkish = 18,
+    Turkish=36,
+    /// Ukrainian stemmer
+    Ukrainian=37,
+    /// Yiddish stemmer
+    Yiddish=38,
 }
 
 pub(crate) struct LevelIndex {
@@ -1789,23 +1829,43 @@ pub(crate) fn create_shard(
 
             let stemmer = match meta.stemmer {
                 StemmerType::Arabic => Some(Stemmer::create(Algorithm::Arabic)),
+                StemmerType::Armenian => Some(Stemmer::create(Algorithm::Armenian)),
+                StemmerType::Basque => Some(Stemmer::create(Algorithm::Basque)),
+                StemmerType::Catalan => Some(Stemmer::create(Algorithm::Catalan)),
+                StemmerType::Czech => Some(Stemmer::create(Algorithm::Czech)),
                 StemmerType::Danish => Some(Stemmer::create(Algorithm::Danish)),
                 StemmerType::Dutch => Some(Stemmer::create(Algorithm::Dutch)),
+                StemmerType::Dutch_porter => Some(Stemmer::create(Algorithm::Dutch_porter)),
                 StemmerType::English => Some(Stemmer::create(Algorithm::English)),
+                StemmerType::Esperanto => Some(Stemmer::create(Algorithm::Esperanto)),
+                StemmerType::Estonian => Some(Stemmer::create(Algorithm::Estonian)),
                 StemmerType::Finnish => Some(Stemmer::create(Algorithm::Finnish)),
                 StemmerType::French => Some(Stemmer::create(Algorithm::French)),
                 StemmerType::German => Some(Stemmer::create(Algorithm::German)),
                 StemmerType::Greek => Some(Stemmer::create(Algorithm::Greek)),
+                StemmerType::Hindi => Some(Stemmer::create(Algorithm::Hindi)),
                 StemmerType::Hungarian => Some(Stemmer::create(Algorithm::Hungarian)),
+                StemmerType::Indonesian => Some(Stemmer::create(Algorithm::Indonesian)),
+                StemmerType::Irish => Some(Stemmer::create(Algorithm::Irish)),
                 StemmerType::Italian => Some(Stemmer::create(Algorithm::Italian)),
+                StemmerType::Lithuanian => Some(Stemmer::create(Algorithm::Lithuanian)),
+                StemmerType::Lovins => Some(Stemmer::create(Algorithm::Lovins)),
+                StemmerType::Nepali => Some(Stemmer::create(Algorithm::Nepali)),
                 StemmerType::Norwegian => Some(Stemmer::create(Algorithm::Norwegian)),
+                StemmerType::Persian => Some(Stemmer::create(Algorithm::Persian)),
+                StemmerType::Polish => Some(Stemmer::create(Algorithm::Polish)),
+                StemmerType::Porter => Some(Stemmer::create(Algorithm::Porter)),
                 StemmerType::Portuguese => Some(Stemmer::create(Algorithm::Portuguese)),
                 StemmerType::Romanian => Some(Stemmer::create(Algorithm::Romanian)),
                 StemmerType::Russian => Some(Stemmer::create(Algorithm::Russian)),
+                StemmerType::Serbian => Some(Stemmer::create(Algorithm::Serbian)),
+                StemmerType::Sesotho => Some(Stemmer::create(Algorithm::Sesotho)),
                 StemmerType::Spanish => Some(Stemmer::create(Algorithm::Spanish)),
                 StemmerType::Swedish => Some(Stemmer::create(Algorithm::Swedish)),
                 StemmerType::Tamil => Some(Stemmer::create(Algorithm::Tamil)),
                 StemmerType::Turkish => Some(Stemmer::create(Algorithm::Turkish)),
+                StemmerType::Ukrainian => Some(Stemmer::create(Algorithm::Ukrainian)),
+                StemmerType::Yiddish => Some(Stemmer::create(Algorithm::Yiddish)),
                 _ => None,
             };
 
