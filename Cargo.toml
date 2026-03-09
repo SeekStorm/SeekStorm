@@ -67,12 +67,12 @@ pdfium-render = { version ="0.8.37",  features = ["thread_safe","sync"], optiona
 chrono = "0.4.44"
 utoipa = { version ="5.4.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
 num_cpus = "1.17.0"
-rust-stemmers = { version = "1.3.0", git = "https://github.com/SeekStorm/rust-stemmers.git" }
 csv = "1.4.0"
 symspell_complete_rs = "0.0.2"
 tokio-test = "0.4.4"
 snap = "1.1.1"
 lz4_flex = "0.12.0"
+porter_stemmers_rs = "1.3.0"
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version ="0.3.9",  features = ["winbase"]}
 
