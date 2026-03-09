@@ -9,7 +9,7 @@ use num_derive::FromPrimitive;
 
 use num_format::{Locale, ToFormattedString};
 
-use porter_stemmers_rs::{Algorithm, Stemmer};
+use snowball_stemmers_rs::{Algorithm, Stemmer};
 use search::{QueryType, Search};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
