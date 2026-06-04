@@ -31,8 +31,8 @@ use crate::{
         Document, FileType, INDEX_FORMAT_VERSION_MAJOR, INDEX_FORMAT_VERSION_MINOR, Index,
         IndexArc, IndexDocument, Info, META_FILENAME,
     },
-    utils::{dir_size, truncate},
-    vector::{Embedding, Quantization, embedding_to_json},
+    utils::{dir_size, encode_bytes_to_base64_string, truncate},
+    vector::{Embedding, Quantization, embedding_to_bytes_be},
     vector_similarity::VectorSimilarity,
 };
 
@@ -1226,13 +1226,12 @@ pub async fn ingest_sift(
                 let bytes = cast_slice_mut(span);
                 fvecs_reader.read_exact(bytes).unwrap();
 
-                let document = Document::from([
-                    (
-                        "vector".to_string(),
-                        embedding_to_json(Embedding::F32(fvecs)),
-                    ),
-                    ("index".to_string(), Value::String(docid.to_string())),
-                ]);
+                let document = Document::from([(
+                    "vector".to_string(),
+                    Value::String(encode_bytes_to_base64_string(&embedding_to_bytes_be(
+                        &Embedding::F32(fvecs),
+                    ))),
+                )]);
 
                 index_arc.index_document(document, FileType::None).await;
 

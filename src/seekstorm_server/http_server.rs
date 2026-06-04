@@ -1,3 +1,7 @@
+use hyper_util::server::conn::auto;
+use rkyv::access_unchecked;
+use rkyv::rancor::Error;
+use rkyv::vec::ArchivedVec;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -7,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::str;
 use std::sync::Arc;
+use std::time::Instant;
 use std::{convert::Infallible, net::SocketAddr};
 
 use chrono::Utc;
@@ -19,14 +24,17 @@ use hyper::{
     body::{Bytes, Incoming},
     service::service_fn,
 };
-use hyper_util::{
-    rt::{TokioExecutor, TokioIo},
-    server::conn::auto::Builder,
+use hyper_util::rt::{TokioExecutor, TokioIo};
+
+use seekstorm::INDEX_RUNTIME;
+use seekstorm::index::{
+    ApikeyObject, CreateIndexRequest, DeleteApikeyRequest, Document, GetDocumentRequest,
+    GetIteratorRequest, SearchRequestObject, Synonym,
 };
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
 
-use seekstorm::index::{Document, Synonym};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, SearchMode};
-
+use seekstorm::vector::Embedding;
+use seekstorm::vector_similarity::AnnMode;
 use sha2::Digest;
 use sha2::Sha256;
 
@@ -34,14 +42,9 @@ use tokio::net::TcpListener;
 
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::api_endpoints::CreateIndexRequest;
-use crate::api_endpoints::DeleteApikeyRequest;
+use crate::api_endpoints::create_index_api;
+use crate::api_endpoints::delete_apikey_api;
 use crate::api_endpoints::update_documents_api;
-use crate::api_endpoints::{GetDocumentRequest, delete_apikey_api};
-use crate::api_endpoints::{
-    GetIteratorRequest, get_iterator_api_get, get_iterator_api_post, live_api, update_document_api,
-};
-use crate::api_endpoints::{SearchRequestObject, create_index_api};
 use crate::api_endpoints::{add_synonyms_api, get_index_info_api, set_synonyms_api};
 use crate::api_endpoints::{clear_index_api, close_index_api};
 use crate::api_endpoints::{commit_index_api, create_apikey_api};
@@ -52,8 +55,10 @@ use crate::api_endpoints::{delete_documents_by_object_api, delete_documents_by_q
 use crate::api_endpoints::{delete_index_api, get_file_api};
 use crate::api_endpoints::{get_apikey_indices_info_api, index_file_api};
 use crate::api_endpoints::{get_document_api, get_synonyms_api};
+use crate::api_endpoints::{
+    get_iterator_api_get, get_iterator_api_post, live_api, update_document_api,
+};
 use crate::api_endpoints::{index_document_api, query_index_api_get, query_index_api_post};
-use crate::multi_tenancy::ApikeyObject;
 use crate::multi_tenancy::get_apikey_hash;
 use crate::{MASTER_KEY_SECRET, VERSION};
 
@@ -174,6 +179,7 @@ pub(crate) async fn http_request_handler(
     apikey_list: Arc<tokio::sync::RwLock<HashMap<u128, ApikeyObject>>>,
     req: Request<Incoming>,
     _remote_addr: SocketAddr,
+    force_shard_number: Option<usize>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
     let apikey_header = req
         .headers()
@@ -208,6 +214,79 @@ pub(crate) async fn http_request_handler(
         ("api", "v1", "live", _, _, _, &Method::GET) => {
             let live_message = serde_json::to_vec(&live_api()).unwrap();
             Ok(Response::new(BoxBody::new(Full::new(live_message.into()))))
+        }
+
+        ("api", "v2", "index", _, "query", _, &Method::POST) => {
+            let Some(apikey) = apikey_header else {
+                return HttpServerError::Unauthorized.into();
+            };
+            let Some(apikey_hash) = get_apikey_hash(apikey, &apikey_list).await else {
+                return HttpServerError::Unauthorized.into();
+            };
+
+            let Ok(index_id) = parts[3].parse() else {
+                return HttpServerError::IndexNotFound.into();
+            };
+
+            let apikey_list_ref = apikey_list.read().await;
+            let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
+                return HttpServerError::Unauthorized.into();
+            };
+
+            let Some(index_arc) = apikey_object.index_list.get(&index_id) else {
+                return HttpServerError::IndexNotFound.into();
+            };
+
+            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+
+            let archived_query_vector =
+                unsafe { access_unchecked::<ArchivedVec<f32>>(&request_bytes) };
+
+            let query_vector: Vec<f32> = archived_query_vector.as_slice().to_vec();
+
+            let index_arc_clone = index_arc.clone();
+
+            let search_result = index_arc_clone
+                .search(
+                    String::new(),
+                    Some(Embedding::F32(query_vector)),
+                    QueryType::Intersection,
+                    SearchMode::Vector {
+                        similarity_threshold: None,
+                        ann_mode: AnnMode::Nprobe(15),
+                    },
+                    false,
+                    0,
+                    10,
+                    ResultType::Topk,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    QueryRewriting::SearchOnly,
+                )
+                .await;
+
+            let mut docid_vector: Vec<u64> = Vec::new();
+            for result in search_result.results.iter() {
+                docid_vector.push(result.doc_id as u64);
+            }
+
+            let response_bytes = rkyv::to_bytes::<Error>(&docid_vector).unwrap().into_vec();
+
+            match Ok::<Vec<u8>, String>(response_bytes) {
+                Ok(response_bytes) => {
+                    let response = Response::builder()
+                        .status(StatusCode::OK)
+                        .header("Content-Type", "application/octet-stream")
+                        .header("content-length", response_bytes.len())
+                        .body(BoxBody::new(Full::new(response_bytes.into())))
+                        .unwrap();
+                    Ok(response)
+                }
+                Err(e) => HttpServerError::BadRequest(e.to_string()).into(),
+            }
         }
 
         ("api", "v1", "index", _, "query", _, &Method::POST) => {
@@ -435,7 +514,7 @@ pub(crate) async fn http_request_handler(
                 create_index_request_object.ngram_indexing,
                 create_index_request_object.document_compression,
                 create_index_request_object.synonyms,
-                create_index_request_object.force_shard_number,
+                force_shard_number,
                 apikey_object,
                 create_index_request_object.spelling_correction,
                 create_index_request_object.query_completion,
@@ -509,11 +588,17 @@ pub(crate) async fn http_request_handler(
 
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
-            let result = commit_index_api(&index_arc_clone).await;
 
-            Ok(Response::new(BoxBody::new(Full::new(
-                result.unwrap().to_string().into(),
-            ))))
+            let task_result = std::thread::spawn(move || {
+                INDEX_RUNTIME.block_on(async move { commit_index_api(&index_arc_clone).await })
+            });
+
+            match task_result.join().unwrap() {
+                Ok(status_object_json) => Ok(Response::new(BoxBody::new(Full::new(
+                    status_object_json.to_string().into(),
+                )))),
+                Err(e) => HttpServerError::BadRequest(e.to_string()).into(),
+            }
         }
 
         ("api", "v1", "index", _, "", "", &Method::PUT) => {
@@ -799,9 +884,6 @@ pub(crate) async fn http_request_handler(
                     .into();
             };
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
-            let request_string = str::from_utf8(&request_bytes).unwrap();
-
             let apikey_list_ref = apikey_list.read().await;
             let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
                 return HttpServerError::Unauthorized.into();
@@ -812,29 +894,37 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            let status_object = if !request_string.trim().starts_with('[') {
-                let document_object = match serde_json::from_str(request_string) {
-                    Ok(document_object) => document_object,
-                    Err(e) => {
-                        return HttpServerError::BadRequest(e.to_string()).into();
-                    }
-                };
+            println!("start ingestsift3");
+            let start_time = Instant::now();
 
-                index_document_api(&index_arc_clone, document_object).await
-            } else {
-                let document_object_vec = match serde_json::from_str(request_string) {
-                    Ok(document_object_vec) => document_object_vec,
-                    Err(e) => {
-                        return HttpServerError::BadRequest(e.to_string()).into();
-                    }
-                };
+            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
-                index_documents_api(&index_arc_clone, document_object_vec).await
-            };
-            let status_object_json = serde_json::to_vec(&status_object).unwrap();
-            Ok(Response::new(BoxBody::new(Full::new(
-                status_object_json.into(),
-            ))))
+            let task_result = std::thread::spawn(move || {
+                INDEX_RUNTIME.block_on(async move {
+                    let request_string = str::from_utf8(&request_bytes).unwrap();
+
+                    let status_object = if !request_string.trim().starts_with('[') {
+                        let document_object = serde_json::from_str(request_string)?;
+                        index_document_api(&index_arc_clone, document_object).await
+                    } else {
+                        let document_object_vec = serde_json::from_str(request_string)?;
+                        index_documents_api(&index_arc_clone, document_object_vec).await
+                    };
+                    serde_json::to_vec(&status_object)
+                })
+            });
+
+            match task_result.join().unwrap() {
+                Ok(status_object_json) => {
+                    let search_time = start_time.elapsed().as_nanos() as i64;
+                    println!("finished ingestsift {} s.", search_time / 1_000_000_000);
+
+                    Ok(Response::new(BoxBody::new(Full::new(
+                        status_object_json.into(),
+                    ))))
+                }
+                Err(e) => HttpServerError::BadRequest(e.to_string()).into(),
+            }
         }
 
         ("api", "v1", "index", _, "doc", _, &Method::PATCH) => {
@@ -1395,6 +1485,7 @@ pub(crate) async fn http_server(
     apikey_list: Arc<tokio::sync::RwLock<HashMap<u128, ApikeyObject>>>,
     local_ip: &String,
     local_port: &u16,
+    force_shard_number: &Option<usize>,
 ) {
     let local_address: SocketAddr = format!("{}:{}", local_ip, local_port)
         .parse()
@@ -1406,26 +1497,46 @@ pub(crate) async fn http_server(
 
             let index_path = index_path.to_path_buf();
 
+            let auto_server = auto::Builder::new(TokioExecutor::new());
+
             loop {
-                let (tcp, remote_address) = listener.accept().await.unwrap();
-                let io = TokioIo::new(tcp);
+                let (stream, remote_address) = listener.accept().await.unwrap();
+
+                match stream.nodelay() {
+                    Ok(false) => {
+                        if let Err(e) = stream.set_nodelay(true) {
+                            eprintln!("Error setting TCP_NODELAY for {}: {}", remote_address, e);
+                        }
+                    }
+                    Ok(true) => {}
+                    Err(e) => eprintln!(
+                        "Could not read TCP_NODELAY status for {}: {}",
+                        remote_address, e
+                    ),
+                }
+
+                let io = TokioIo::new(stream);
+                let server = auto_server.clone();
 
                 let index_path = index_path.clone();
                 let apikey_list = apikey_list.clone();
+                let force_shard_number = *force_shard_number;
 
-                tokio::task::spawn(async move {
-                    if let Err(err) = Builder::new(TokioExecutor::new())
+                tokio::spawn(async move {
+                    if let Err(err) = server
                         .serve_connection(
                             io,
                             service_fn(move |request: Request<Incoming>| {
                                 let index_path = index_path.clone();
                                 let apikey_list = apikey_list.clone();
+                                let force_shard_number = force_shard_number;
                                 async move {
                                     let t: Result<_, Infallible> = http_request_handler(
                                         index_path,
                                         apikey_list,
                                         request,
                                         remote_address,
+                                        force_shard_number,
                                     )
                                     .await;
 
@@ -1435,7 +1546,7 @@ pub(crate) async fn http_server(
                         )
                         .await
                     {
-                        eprintln!("error serving connection: {:?}", err);
+                        eprintln!("Error processing connection {}: {:?}", remote_address, err);
                     }
                 });
             }

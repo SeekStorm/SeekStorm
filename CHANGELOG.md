@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-06-05
+
+### Fixed
+
+- delete_index fixed, both library method and REST API endpoint.
+- Intermittent indexing after commits of incomplete levels (< 65_536 documents) fixed.
+- In open_index now the shard_number is restored correctly. Previously it was always set to the number of physical cores, not respecting when it was previously set to a lower number via force_shard_number.
+
+### Improved
+
+- Incomplete levels with less than 10_000 vectors per shard are now also clustered, resulting in improved query latency.
+  Previously, relatively small indices (e.g. 1 million vectors), depending on the number of cores, sometimes consisted only of 2 levels, with the last level unclustered.
+  That caused exhaustive search in the last level, instead of ANN search, leading to excessive overall query latency dominated by the exhaustive search in the last level.
+- Indexing is now deterministic. 
+  The same documents, in same order are always assigned the same internal doc ID, and the same shard.
+  Indexed docs are now distributed in a round-robin manner across the shards, leading to an deterministic and even distribution of docs per shard.
+  For vector search, this ensures deterministic clustering and recall. For lexical search this ensures deterministic BM25 statistics.
+  Internal doc ID are now stable and deterministic (monotonically increasing by 1 with the indexing order of documents). They can be used for measuring recall, without storing an additional doc ID field.
+- 3x faster server REST API for long running tasks, by spawning a separate tasks for every request in a dedicated tokio runtime:
+  - index documents
+  - commit
+  - query
+  Previously, the SeekStorm library was fast, while the same operations via the server REST API exhibited significantly higher and inconsistent latencies. 
+- Manual commit is now multi-threaded per shard and therefore much faster.
+
+### Added
+
+- The server info now displays the number of logical and physical processor cores. 
+- The server command line command "info" now shows current index information. 
+  That is useful to get up-to-date information about the index after external document indexing via REST API.
+- New RPC interface (in addition to the existing Json based REST API) with efficient rkyv based binary data interchange (currently only for vector benchmark).
+- In "commit shard" the number of documents is displayed both as accumulated number and as delta number per shard.
+
+### Changed
+
+- force_shard_number: Option<usize> removed from CreateIndexRequest. Instead of allowing the number of shards per index via REST API we have now an server-wide command line parameter force_shard_number.
+  - If not specified then the number of shards is auto-detected from the available_parallelism() (previously from the number physical cores).
+  - Container Awareness: Unlike basic hardware counts, available_parallelism respects cgroup CPU quotas and process affinity masks. 
+    If your app is restricted to 2 cores inside a Docker container on a 64-core server, it will return 2 instead of 64.
+  - `--force_shard_number` can also used with docker: `docker run -ti -p "8000:80" -v "$(pwd)/seekstorm_storage:/seekstorm_index:z" wolfgarbe/seekstorm_server --force_shard_number=20`
+- In the embedded HTTP server now TCP_NODELAY is checked and enforced for better performance.
+- If in create_index the force_shard_number is set to None, then the number of shards is now auto-detected from the available_parallelism() (previously from the number of physical cores).
+- Moved definitions from seekstorm_server to seekstorm library to be shared between seekstorm_server and the upcoming seekstorm_client:
+  - SearchRequestObject
+  - SearchResultObject
+  - ApikeyQuotaObject
+  - ApikeyObject
+  - CreateIndexRequest
+  - GetIteratorRequest
+  - GetDocumentRequest
+  - IndexResponseObject
+
 ## [3.2.0] - 2026-05-12
 
 ### Added

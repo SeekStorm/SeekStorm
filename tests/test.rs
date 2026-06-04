@@ -660,7 +660,7 @@ async fn test_12_create_index_vector_external() {
         &Vec::new(),
         segment_number_bits1,
         false,
-        None,
+        Some(2),
     )
     .await
     .unwrap();

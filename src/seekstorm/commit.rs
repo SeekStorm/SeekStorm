@@ -6,6 +6,7 @@ use std::{
     io::{Seek, SeekFrom, Write},
     path::Path,
 };
+use tokio::task::JoinSet;
 
 use crate::{
     add_result::{
@@ -108,30 +109,63 @@ impl Commit for IndexArc {
     async fn commit(&self) {
         let index_ref = self.read().await;
 
-        let mut uncommitted_doc_count = 0;
-        let mut uncommitted_vec_count = 0;
-        for shard in index_ref.shard_vec.iter() {
-            let p = shard.read().await.permits.clone();
-            let permit = p.acquire().await.unwrap();
+        let shard_vec = index_ref.shard_vec.clone();
+        drop(index_ref);
 
-            if shard.read().await.uncommitted {
-                let indexed_doc_count = shard.read().await.indexed_doc_count;
-                uncommitted_doc_count += indexed_doc_count - shard.read().await.committed_doc_count;
-                uncommitted_vec_count += shard.read().await.block_vector_buffer.len();
+        let mut uncommitted_doc_count = 0usize;
+        let mut uncommitted_vec_count = 0usize;
 
-                if shard.read().await.is_vector_indexing {
-                    shard.write().await.commit_vector_shard().await;
+        let mut join_set = JoinSet::new();
+
+        for shard in shard_vec {
+            join_set.spawn(async move {
+                let semaphore = { shard.read().await.semaphore.clone() };
+                let _permit = semaphore.acquire_owned().await.unwrap();
+
+                let shard_stats = {
+                    let s = shard.read().await;
+                    if !s.uncommitted {
+                        None
+                    } else {
+                        let indexed_doc_count = s.indexed_doc_count;
+                        let doc_delta = indexed_doc_count.saturating_sub(s.committed_doc_count);
+                        let vec_delta = s.block_vector_buffer.len();
+                        let is_vector_indexing = s.is_vector_indexing;
+                        Some((indexed_doc_count, doc_delta, vec_delta, is_vector_indexing))
+                    }
+                };
+
+                if let Some((indexed_doc_count, doc_delta, vec_delta, is_vector_indexing)) =
+                    shard_stats
+                {
+                    {
+                        let mut s = shard.write().await;
+                        if is_vector_indexing {
+                            s.commit_vector_shard().await;
+                        }
+                        s.commit_lexical_shard(indexed_doc_count).await;
+                    }
+                    warmup(&shard).await;
+                    (doc_delta, vec_delta)
+                } else {
+                    (0usize, 0usize)
                 }
-                shard
-                    .write()
-                    .await
-                    .commit_lexical_shard(indexed_doc_count)
-                    .await;
-                warmup(shard).await;
-            }
-
-            drop(permit);
+            });
         }
+
+        while let Some(joined) = join_set.join_next().await {
+            match joined {
+                Ok((doc_delta, vec_delta)) => {
+                    uncommitted_doc_count += doc_delta;
+                    uncommitted_vec_count += vec_delta;
+                }
+                Err(e) => {
+                    eprintln!("commit shard task failed: {:?}", e);
+                }
+            }
+        }
+
+        let index_ref = self.read().await;
 
         if !index_ref.mute {
             if uncommitted_doc_count == 0 && uncommitted_vec_count == 0 {
@@ -248,10 +282,16 @@ impl Shard {
 
         if !self.mute {
             println!(
-                "commit shard {} level {} indexed documents {}",
+                "commit shard {} level {} indexed documents {} ({})",
                 self.meta.id,
                 self.level_index.len(),
                 indexed_doc_count.to_formatted_string(&Locale::en),
+                (if indexed_doc_count == 0 {
+                    0
+                } else {
+                    ((indexed_doc_count - 1) % 65_536) + 1
+                })
+                .to_formatted_string(&Locale::en)
             );
         }
 
@@ -949,7 +989,7 @@ impl Shard {
         }
 
         let block_id = self.level_index.len() - 1;
-        let committed_doc_count = (self.committed_doc_count - 1 % ROARING_BLOCK_SIZE) + 1;
+        let committed_doc_count = ((self.committed_doc_count - 1) % ROARING_BLOCK_SIZE) + 1;
 
         for i in 0..self.indexed_field_vec.len() {
             if self.meta.access_type == AccessType::Mmap {

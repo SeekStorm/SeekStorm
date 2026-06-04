@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.2.0"
+version = "3.2.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -34,7 +34,7 @@ path = "src/seekstorm_server/main.rs"
 crossbeam-channel = "0.5.15"
 ctrlc = "3.5.2"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
+serde_json = { version = "1.0.150", features = ["preserve_order"] }
 tokio = { version = "1.52.3", features = ["full"] }
 base64 = "0.22.1"
 num-format = "0.4.4"
@@ -78,7 +78,9 @@ bytemuck = { version = "1.25.0", features = ["derive","extern_crate_alloc"] }
 model2vec-rs = "0.2.0"
 chunk = "0.10.1"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }
-tabled = { version = "0.20.0", features = ["ansi"]}
+tabled = { version = "0.21.0", features = ["ansi"]}
+rkyv = "0.8.16"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version ="0.3.9",  features = ["winbase"]}
 

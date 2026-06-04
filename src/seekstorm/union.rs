@@ -1,4 +1,5 @@
 use crate::{
+    INDEX_RUNTIME,
     add_result::{add_result_multiterm_multifield, is_facet_filter},
     compatible::{_blsr_u64, _mm_tzcnt_64},
     geo_search::{decode_morton_2_d, euclidian_distance},
@@ -370,7 +371,7 @@ pub(crate) async fn union_blockid<'a>(
 
             let result_count_clone = result_count_arc.clone();
 
-            task_list.push(tokio::spawn(async move {
+            task_list.push(INDEX_RUNTIME.handle().spawn(async move {
                 let result_count_local = 1;
                 result_count_clone.fetch_add(result_count_local, Ordering::Relaxed);
             }));

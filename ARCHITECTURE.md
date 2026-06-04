@@ -81,11 +81,12 @@ The identical index file format for both RAM and memory mapping mode, allows to 
 * facet.json : contains the unique values of all facet fields of all documents in the index
 * synonyms.json : contains the synonyms that were created with the synonyms parameter in create_index. Can be manually modified, but becomes effective only after restart and only for subsequently indexed documents.
 
-**SeekStorm server index directory structure**
+## SeekStorm server index directory structure
 
 First hierarchy level: API keys  
 Second hierarchy level: Indices per API key  
 Third hierarchy level: Shards of an index
+Fourth hierarchy level: Level per shard (level = 64k documents per shard). Lexical posting lists and vectors are collected in RAM, once 64k document threshold is reached they are committed to disk and become immutable.
 ```
 seekstorm_index/  
 ├─ 0/  

@@ -1,3 +1,4 @@
+use crate::INDEX_RUNTIME;
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
 use crate::index::{
     DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
@@ -932,6 +933,7 @@ pub type Point = Vec<f64>;
 /// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
 ///
 /// Intersection, AND `+`
+///
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Union;
@@ -974,7 +976,7 @@ pub type Point = Vec<f64>;
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
 ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-///
+/// 
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
 /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -988,7 +990,7 @@ pub type Point = Vec<f64>;
 ///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
 ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
 ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
-///
+/// 
 /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
 ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
 ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
@@ -1032,6 +1034,7 @@ pub trait Search {
     /// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
     ///
     /// Intersection, AND `+`
+    ///
     /// ```rust ,no_run
     /// use seekstorm::search::QueryType;
     /// let query_type=QueryType::Union;
@@ -1642,7 +1645,7 @@ impl Search for IndexArc {
             let result_sort_clone = result_sort.clone();
             let shard_id = shard.read().await.meta.id;
 
-            result_object_list.push(tokio::spawn(async move {
+            result_object_list.push(INDEX_RUNTIME.handle().spawn(async move {
                 match query_mode_clone {
                     SearchMode::Lexical => {
                         let mut rlo_lexical = shard_clone
@@ -1992,7 +1995,6 @@ impl Search for IndexArc {
                             .entry(result.doc_id)
                             .and_modify(|e| {
                                 e.score += rrf_score;
-
                                 e.field_id = result.field_id;
                                 e.chunk_id = result.chunk_id;
                                 e.level_id = result.level_id;
@@ -2078,10 +2080,8 @@ impl Search for IndexArc {
                         });
                     }
                 }
-
                 let shard_vec =
                     futures::future::join_all(index_ref.shard_vec.iter().map(|s| s.read())).await;
-
                 result_object.results.sort_by(|a, b| {
                     result_ordering_root(
                         &shard_vec,
@@ -3071,7 +3071,6 @@ impl SearchLexicalShard for ShardArc {
                 let key0: u32 = term.key0;
                 let key_hash: u64 = term.key_hash;
                 let term_no_diacritics_umlaut_case = &non_unique_term.term;
-
                 let mut idf = 0.0;
                 let mut idf_ngram1 = 0.0;
                 let mut idf_ngram2 = 0.0;
@@ -3331,7 +3330,6 @@ impl SearchLexicalShard for ShardArc {
                             }
                             _ => preceding_ngram_count += 2,
                         };
-
                         non_unique_query_list.push(nu_plo);
                     }
                 }
@@ -3411,7 +3409,6 @@ impl SearchLexicalShard for ShardArc {
                         .clone_from(&stopword_result_object.query_terms);
                     result_object.result_count = stopword_result_object.result_count;
                     result_object.result_count_total = stopword_result_object.result_count_total;
-
                     if result_type != ResultType::Count {
                         result_object
                             .results
@@ -3423,7 +3420,6 @@ impl SearchLexicalShard for ShardArc {
                             result_object.results.truncate(length);
                         }
                     }
-
                     if !search_result.query_facets.is_empty() && result_type != ResultType::Topk {
                         let mut facets: AHashMap<String, Facet> = AHashMap::new();
                         for facet in search_result.query_facets.iter() {
@@ -3432,7 +3428,6 @@ impl SearchLexicalShard for ShardArc {
                             {
                                 continue;
                             }
-
                             let v = stopword_result_object.facets[&facet.field]
                                 .iter()
                                 .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
@@ -3442,7 +3437,6 @@ impl SearchLexicalShard for ShardArc {
                                 })
                                 .take(facet.length.max(facet_cap) as usize)
                                 .collect::<Vec<_>>();
-
                             if !v.is_empty() {
                                 facets.insert(facet.field.clone(), v);
                             }

@@ -230,12 +230,6 @@ impl Shard {
         let non_affine = self.max_vector_value == f32::MIN;
 
         let vector_count_block = self.block_vector_buffer.len();
-        if vector_count_block < 10_000 {
-            return vec![Medoid {
-                medoid_index: 0,
-                child_count: vector_count_block,
-            }];
-        }
 
         let cluster_number = match self.meta.clustering {
             Clustering::Auto => (vector_count_block.sqrt() * 2).max(1),

@@ -4,12 +4,14 @@ use crossbeam_channel::{Receiver, bounded, select};
 
 use indexmap::IndexMap;
 
+use num_cpus::get_physical;
 use num_format::{Locale, ToFormattedString};
 
 use seekstorm::{
     index::{
-        Close, Clustering, DocumentCompression, FrequentwordType, IS_AVX2, IS_NEON, Info,
-        LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+        ApikeyObject, ApikeyQuotaObject, Close, Clustering, DocumentCompression, FrequentwordType,
+        IS_AVX2, IS_NEON, Info, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+        TokenizerType,
     },
     ingest::{
         IngestCsv, IngestJson, IngestPdf, display_index_info, ingest_sift, read_fvecs, read_ivecs,
@@ -19,7 +21,6 @@ use seekstorm::{
     vector::{Embedding, Inference, Model, Quantization},
     vector_similarity::{AnnMode, VectorSimilarity},
 };
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
@@ -29,6 +30,7 @@ use std::{
     io::{self, IsTerminal},
     path::Path,
     sync::Arc,
+    thread::available_parallelism,
     time::Instant,
 };
 use tabled::{
@@ -47,7 +49,7 @@ use crate::{
         create_apikey_api, create_index_api, delete_apikey_api, generate_openapi, open_all_apikeys,
     },
     http_server::{calculate_hash, http_server},
-    multi_tenancy::{ApikeyObject, ApikeyQuotaObject, get_apikey_hash},
+    multi_tenancy::get_apikey_hash,
 };
 
 const WIKIPEDIA_FILENAME: &str = "wiki-articles.json";
@@ -92,6 +94,10 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
         absolute_path.push(ingest_path_str);
         ingest_path = &absolute_path;
     }
+
+    let force_shard_number: Option<usize> = params
+        .get("force_shard_number")
+        .and_then(|cores| cores.parse::<usize>().ok());
 
     let mut index_path_str = "seekstorm_index";
     if params.contains_key("index_path") {
@@ -153,14 +159,23 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
             value: index_path.display().to_string(),
         },
         Info {
-            entry: "SIMD",
+            entry: "SIMD / processor",
             value: if *IS_AVX2 {
                 "AVX2".to_string()
             } else if *IS_NEON {
                 "NEON".to_string()
             } else {
                 "disabled".to_string()
-            },
+            } + " / "
+                + num_cpus::get().to_string().as_str()
+                + " logical, "
+                + get_physical().to_string().as_str()
+                + " physical cores, "
+                + available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or_else(|_| num_cpus::get())
+                    .to_string()
+                    .as_str(),
         },
         Info {
             entry: "web server (UI, REST API) ",
@@ -170,7 +185,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
             ),
         },
         Info {
-            entry: "master key ⚠️",
+            entry: "master API key ⚠️",
             value: master_apikey_base64.clone(),
         },
         Info {
@@ -390,7 +405,14 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
     let index_path_local = index_path.clone();
 
     tokio::spawn(async move {
-        http_server(&index_path_local, apikey_list, &local_ip, &local_port).await
+        http_server(
+            &index_path_local,
+            apikey_list,
+            &local_ip,
+            &local_port,
+            &force_shard_number,
+        )
+        .await
     });
 
     let demo_api_key = [0u8; 32];
@@ -444,8 +466,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let topk=10;
                                     let similarity_threshold=None;
                                     let field_filter=Vec::new();
-                                    let fields_hashset=HashSet::new();
-                                    let search_mode=SearchMode::Vector { similarity_threshold , ann_mode:AnnMode::Nprobe(16)};
+                                    let search_mode=SearchMode::Vector { similarity_threshold , ann_mode:AnnMode::Nprobe(15)};
 
                                     let mut search_time_sum=0;
                                     let mut results_sum=0;
@@ -455,8 +476,15 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let mut recall_count_sum=0;
 
 
-                                    if let Ok(ground_truth) = read_ivecs(r"C:\linux_remote\testset\sift_groundtruth.ivecs") {
-                                    if let Ok(queries) = read_fvecs(r"C:\linux_remote\testset\sift_query.fvecs") {
+                                    let data_path_str=if parameter.len()>1 {
+                                        parameter[1]
+                                    } else {
+                                        r"C:\linux_remote\testset"
+                                    };
+
+
+                                    if let Ok(ground_truth) = read_ivecs(&Path::new(data_path_str).join("sift_groundtruth.ivecs").to_string_lossy()) {
+                                    if let Ok(queries) = read_fvecs(&Path::new(data_path_str).join("sift_query.fvecs").to_string_lossy()) {
 
 
 
@@ -500,24 +528,17 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                             observed_cluster_count_sum+=result_object_vector.observed_cluster_count;
                                             observed_vector_count_sum+=result_object_vector.observed_vector_count;
 
+
                                             let mut recall_count=0;
                                             for result in result_object_vector.results.iter() {
-                                                let doc = index_arc.read().await.get_document(result.doc_id, false,&None, &fields_hashset, &Vec::new()).await.ok();
-                                                let index_value= if let Some(doc) = &doc {
-                                                        if let Some(index_field) = doc.get("index") { index_field } else { &Value::String("".to_string()) }
-                                                    }
-                                                    else { &Value::String("".to_string()) };
-                                                let index_string=serde_json::from_value::<String>(index_value.clone()).unwrap_or(index_value.to_string());
-                                                let idx=index_string.parse::<usize>().unwrap_or(0);
-                                                let flag=ground_truth_for_query.contains_key(&idx);
-                                                if flag { recall_count+=1; }
 
+
+                                                if ground_truth_for_query.contains_key(&result.doc_id) {
+                                                    recall_count+=1;
+                                                }
                                             }
 
-
-
                                             recall_count_sum+=recall_count;
-
                                         }
 
                                         let indexed_vector_count=index_arc.read().await.indexed_vector_count().await;
@@ -717,6 +738,13 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                         "ingestsift" =>
                         {
+
+                            let data_path_str=if parameter.len()>1 {
+                                parameter[1]
+                            } else {
+                                r"C:\linux_remote\testset"
+                            };
+
                             use seekstorm::vector::Precision;
                             println!("ingest sift start");
                             let mut apikey_list_mut = apikey_list_clone.write().await;
@@ -739,9 +767,11 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             let apikey_hash = calculate_hash(&demo_api_key) as u128;
                             if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) {
                                 let indexname_schemajson =
+
+
                                     {("sift1m",r#"
-                                [{"field":"vector","field_type":"Json","store":false,"index_lexical":false,"index_vector":true},
-                                {"field":"index","field_type":"Text","store":true,"index_lexical":false,"index_vector":false}]"#,
+                                    [{"field":"vector","field_type":"Binary","store":false,"index_lexical":false,"index_vector":true}]"#,
+
                                     LexicalSimilarity::Bm25f,TokenizerType::UnicodeAlphanumeric)};
 
                                 let _ =create_index_api(
@@ -756,7 +786,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     NgramSet::SingleTerm as u8 ,
                                     DocumentCompression::Snappy,
                                     Vec::new(),
-                                    None,
+                                    force_shard_number,
                                     apikey_object,
 
                                     None,
@@ -768,7 +798,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                 let index_id=0;
                                 if let Some(index_arc) = apikey_object.index_list.get_mut(&index_id) {
-                                    ingest_sift(index_arc, Path::new(r"C:\linux_remote\testset\sift_base.fvecs"), None).await;
+
+                                    ingest_sift(index_arc, Path::new(&Path::new(data_path_str).join("sift_base.fvecs")), None).await;
                                 }
                             }
                         }
@@ -880,7 +911,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         NgramSet::NgramFF as u8 ,
                                                         DocumentCompression::Snappy,
                                                         Vec::new(),
-                                                        None,
+                                                        force_shard_number,
                                                         apikey_object,
                                                         None,
                                                         None,
@@ -1045,6 +1076,16 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             return;
                         },
 
+                        "info" =>
+                        {
+                            let apikey_list_ref=apikey_list_clone.read().await;
+                            for apikey in apikey_list_ref.iter() {
+                                for index in apikey.1.index_list.iter() {
+                                    display_index_info(index.1, "info", "0 s".to_string()).await;
+                                }
+                            }
+                        }
+
                         "help" =>
                         {
                             println!("{}","Server console commands:".yellow());
@@ -1054,6 +1095,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             println!("{:40} Index a local file in PDF, CSV, JSON, Newline-delimited JSON, or Concatenated JSON format.","ingest [file_path] -t [type] -k [api_key] -i [index_id] -d [delimiter] -h [header] -q [quoting] -s [skip] -n [num]".green());
                             println!("{:40} Create the demo API key manually to allow a subsequent custom create index via REST API.","create".green());
                             println!("{:40} Delete the demo API key and all its indices.","delete".green());
+                            println!("{:40} Display current index information.","info".green());
                             println!("{:40} Create OpenAPI JSON file.","openapi".green());
                             println!("{:40} Stop the server.","quit".green());
                             println!("{:40} Show this help.","help".green());

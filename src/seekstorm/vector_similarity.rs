@@ -1622,11 +1622,7 @@ impl QuantizedVector {
 
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
-    pub(crate) unsafe fn quantize_affine_avx2(
-        values: &[f32],
-        scale: f32,
-        zero_point: i16,
-    ) -> Vec<i8> {
+    pub unsafe fn quantize_affine_avx2(values: &[f32], scale: f32, zero_point: i16) -> Vec<i8> {
         unsafe {
             let inv_scale = 1.0 / scale;
 
@@ -1684,7 +1680,7 @@ impl QuantizedVector {
 
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
-    pub(crate) unsafe fn sum_avx2(data: &[i8]) -> i32 {
+    unsafe fn sum_avx2(data: &[i8]) -> i32 {
         unsafe {
             let mut sum = _mm256_setzero_si256();
             let mut i = 0;

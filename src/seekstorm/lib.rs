@@ -475,6 +475,19 @@ pub struct ReadmeDoctests;
 #[cfg_attr(doctest, doc = include_str!("../../FACETED_SEARCH.md"))]
 pub struct ReadmeDoctests2;
 
+use std::sync::LazyLock;
+
+use tokio::runtime::Runtime;
+/// Global Tokio runtime for index operations, initialized lazily on first use.
+pub static INDEX_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(num_cpus::get())
+        .thread_name("seekstorm-indexer")
+        .enable_all()
+        .build()
+        .unwrap()
+});
+
 pub(crate) mod add_result;
 pub(crate) mod clustering;
 /// Commit moves indexed documents from the intermediate uncompressed data structure in RAM

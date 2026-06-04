@@ -14,6 +14,10 @@
 * index_path   (default = "/seekstorm_index" in the path of the current running executable)
 * local_ip     (default = 0.0.0.0)
 * local_port   (default = 80)
+* force_shard_number : Set number of shards manually.
+    - not set: number of shards is set automatically = number of physical processor cores (default)
+    - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption, more frequent auto-commit (docs round-robin distributed across shards, commit after 64k docs per shard)
+    - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption, less frequent auto-commit (docs round-robin distributed across shards, commit after 64k docs per shard)
 
 ```
 ./seekstorm_server.exe local_ip="127.0.0.1" local_port=80 index_path="c:/seekstorm_index"
@@ -130,7 +134,7 @@ You can use a REST client like [Bruno](https://www.usebruno.com/) or the VSC ext
 
 
 ### create api key
-Use master API key displayed in the server console at startup.
+Use the **master API key** displayed in the server console at startup.
 WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
 ```
 curl --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
