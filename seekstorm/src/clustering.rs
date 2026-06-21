@@ -9,10 +9,9 @@ use std::arch::x86_64::*;
 
 use crate::{
     index::{Clustering, Shard},
-    vector::{Embedding, EmbeddingView, Precision, Quantization, VectorHeader, read_record},
+    vector::{Embedding, Quantization},
     vector_similarity::{
-        QuerySimd, VectorSimilarity, quantize_f32_to_i8, quantize_f32_to_i8_simd,
-        similarity_embedding, similarity_embedding_simd,
+        QuerySimd, VectorSimilarity, similarity_embedding, similarity_embedding_simd,
     },
 };
 

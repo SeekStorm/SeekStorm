@@ -2078,7 +2078,12 @@ impl TurboQuant {
     /// Calculates the estimated Dot Product between two vectors.
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
-    pub(crate) fn dot_i8_turboquant_avx2(v1_q: &QuerySimd, scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
+    pub(crate) fn dot_i8_turboquant_avx2(
+        v1_q: &QuerySimd,
+        scale1: f32,
+        v2_q: &[i8],
+        scale2: f32,
+    ) -> f32 {
         let dot = unsafe { dot_i8_avx2(v1_q, v2_q) };
 
         (dot as f32) * scale1 * scale2
@@ -2774,7 +2779,12 @@ impl TurboQuant {
     }
 
     #[inline(always)]
-    pub(crate) fn dot_i8_turboquant_neon(v1_q: &QuerySimd, scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
+    pub(crate) fn dot_i8_turboquant_neon(
+        v1_q: &QuerySimd,
+        scale1: f32,
+        v2_q: &[i8],
+        scale2: f32,
+    ) -> f32 {
         let dot = unsafe { dot_i8_neon(v1_q, v2_q) };
         (dot as f32) * scale1 * scale2
     }
