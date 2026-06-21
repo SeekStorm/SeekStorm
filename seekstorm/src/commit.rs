@@ -31,40 +31,40 @@ use crate::{
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
 /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
-/// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+/// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
 /// There is no way to prevent this automatic commit by not manually invoking it.
 /// But commit can also be invoked manually at any time at any number of newly indexed documents.
 /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
 /// is invoked implicitly with every index_doc,
 /// i.e. the document can immediately searched and included in the search results
-/// if it matches the query AND the query paramter realtime=true is enabled.
+/// if it matches the query AND the query parameter realtime=true is enabled.
 /// **Use commit with caution, as it is an expensive operation**.
-/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
 /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
 /// There are only 2 reasons that justify a manual commit:
 /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
 ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
 #[allow(async_fn_in_trait)]
 pub trait Commit {
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
     /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
-    /// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+    /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
     /// There is no way to prevent this automatic commit by not manually invoking it.
     /// But commit can also be invoked manually at any time at any number of newly indexed documents.
     /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
     /// is invoked implicitly with every index_doc,
     /// i.e. the document can immediately searched and included in the search results
-    /// if it matches the query AND the query paramter realtime=true is enabled.
+    /// if it matches the query AND the query parameter realtime=true is enabled.
     /// **Use commit with caution, as it is an expensive operation**.
-    /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+    /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
     /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
     /// There are only 2 reasons that justify a manual commit:
     /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-    ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+    ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
     async fn commit(&self);
 }
@@ -72,39 +72,39 @@ pub trait Commit {
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
 /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
-/// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+/// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
 /// There is no way to prevent this automatic commit by not manually invoking it.
 /// But commit can also be invoked manually at any time at any number of newly indexed documents.
 /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
 /// is invoked implicitly with every index_doc,
 /// i.e. the document can immediately searched and included in the search results
-/// if it matches the query AND the query paramter realtime=true is enabled.
+/// if it matches the query AND the query parameter realtime=true is enabled.
 /// **Use commit with caution, as it is an expensive operation**.
-/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
 /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
 /// There are only 2 reasons that justify a manual commit:
 /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
 ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
 impl Commit for IndexArc {
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
     /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
-    /// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+    /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
     /// There is no way to prevent this automatic commit by not manually invoking it.
     /// But commit can also be invoked manually at any time at any number of newly indexed documents.
     /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
     /// is invoked implicitly with every index_doc,
     /// i.e. the document can immediately searched and included in the search results
-    /// if it matches the query AND the query paramter realtime=true is enabled.
+    /// if it matches the query AND the query parameter realtime=true is enabled.
     /// **Use commit with caution, as it is an expensive operation**.
-    /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+    /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
     /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
     /// There are only 2 reasons that justify a manual commit:
     /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-    ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+    ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
     async fn commit(&self) {
         let index_ref = self.read().await;

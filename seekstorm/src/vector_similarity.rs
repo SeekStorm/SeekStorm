@@ -1036,7 +1036,7 @@ pub(crate) type QuerySimdLaneF = f32;
 /// degenerate to single scalar elements, which makes this enum simultaneously
 /// the SIMD-pack and the scalar fallback.
 #[derive(Clone, Debug)]
-pub enum QuerySimd {
+pub(crate) enum QuerySimd {
     /// Integer (i8) query, lane-packed for the active SIMD backend.
     I(Vec<QuerySimdLaneI>),
     /// f32 query, lane-packed for the active SIMD backend.
@@ -1411,7 +1411,7 @@ impl QuantizedVector {
     }
 
     #[inline(always)]
-    pub fn new_scale_norm_affine(
+    pub(crate) fn new_scale_norm_affine(
         min_vector_value: &mut f32,
         max_vector_value: &mut f32,
         values: &[f32],
@@ -1472,7 +1472,7 @@ impl QuantizedVector {
 
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
-    pub fn new_scale_norm_affine_avx2(
+    pub(crate) fn new_scale_norm_affine_avx2(
         min_vector_value: &mut f32,
         max_vector_value: &mut f32,
         values: &[f32],
@@ -1842,7 +1842,7 @@ impl TurboQuant {
     }
 
     #[inline(always)]
-    pub fn new(original_dim: usize, seed: u64) -> Self {
+    pub(crate) fn new(original_dim: usize, seed: u64) -> Self {
         let dim = Self::next_power_of_two(original_dim);
 
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
@@ -2041,7 +2041,7 @@ impl TurboQuant {
     /// QJL-corrected Euclidean Distance (Squared)
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
-    pub fn euclidean_i8_turboquant_avx2(
+    pub(crate) fn euclidean_i8_turboquant_avx2(
         v1_q: &QuerySimd,
         scale1: f32,
         norm1: f32,
@@ -2055,7 +2055,7 @@ impl TurboQuant {
 
     /// QJL-corrected Euclidean Distance (Squared)
     #[inline(always)]
-    pub fn euclidean_i8_turboquant(
+    pub(crate) fn euclidean_i8_turboquant(
         v1_q: &[i8],
         scale1: f32,
         norm1: f32,
@@ -2069,7 +2069,7 @@ impl TurboQuant {
 
     /// Calculates the Dot Product between two vectors.
     #[inline(always)]
-    pub fn dot_i8_turboquant(v1_q: &[i8], scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
+    pub(crate) fn dot_i8_turboquant(v1_q: &[i8], scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
         let dot = dot_i8(v1_q, v2_q);
 
         (dot as f32) * scale1 * scale2
@@ -2078,7 +2078,7 @@ impl TurboQuant {
     /// Calculates the estimated Dot Product between two vectors.
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
-    pub fn dot_i8_turboquant_avx2(v1_q: &QuerySimd, scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
+    pub(crate) fn dot_i8_turboquant_avx2(v1_q: &QuerySimd, scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
         let dot = unsafe { dot_i8_avx2(v1_q, v2_q) };
 
         (dot as f32) * scale1 * scale2
@@ -2453,7 +2453,7 @@ pub(crate) fn dot_i8_quantized_neon(v1: &QuerySimd, scale1: f32, v2: &[i8], scal
 #[allow(clippy::too_many_arguments)]
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
-pub fn euclidean_i8_quantized_affine_neon(
+pub(crate) fn euclidean_i8_quantized_affine_neon(
     v1: &QuerySimd,
     scale1: f32,
     norm1: f32,
@@ -2471,26 +2471,6 @@ pub fn euclidean_i8_quantized_affine_neon(
         + n * zero_point1 as i32 * zero_point2 as i32;
     let dot = dot_i32 as f32 * scale1 * scale2;
     (norm1 + norm2 - 2.0 * dot).max(0.0)
-}
-
-#[allow(clippy::too_many_arguments)]
-#[cfg(target_arch = "aarch64")]
-#[inline(always)]
-pub fn dot_i8_quantized_affine_neon(
-    v1: &QuerySimd,
-    scale1: f32,
-    zero_point1: i32,
-    sum_q1: i32,
-    v2: &[i8],
-    scale2: f32,
-    zero_point2: i32,
-    sum_q2: i32,
-) -> f32 {
-    let dot_i32: i32 = unsafe { dot_i8_neon(v1, v2) };
-    let n = v2.len() as i32;
-    let dot_i32 =
-        dot_i32 - zero_point2 * sum_q1 - zero_point1 * sum_q2 + n * zero_point1 * zero_point2;
-    dot_i32 as f32 * scale1 * scale2
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -2643,7 +2623,7 @@ impl QuantizedVector {
     }
 
     #[inline(always)]
-    pub fn new_scale_norm_affine_neon(
+    pub(crate) fn new_scale_norm_affine_neon(
         min_vector_value: &mut f32,
         max_vector_value: &mut f32,
         values: &[f32],
@@ -2794,13 +2774,13 @@ impl TurboQuant {
     }
 
     #[inline(always)]
-    pub fn dot_i8_turboquant_neon(v1_q: &QuerySimd, scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
+    pub(crate) fn dot_i8_turboquant_neon(v1_q: &QuerySimd, scale1: f32, v2_q: &[i8], scale2: f32) -> f32 {
         let dot = unsafe { dot_i8_neon(v1_q, v2_q) };
         (dot as f32) * scale1 * scale2
     }
 
     #[inline(always)]
-    pub fn euclidean_i8_turboquant_neon(
+    pub(crate) fn euclidean_i8_turboquant_neon(
         v1_q: &QuerySimd,
         scale1: f32,
         norm1: f32,
@@ -2977,7 +2957,7 @@ impl QuantizedVector {
     }
 
     #[inline(always)]
-    pub fn new_scale_norm_affine_simd(
+    pub(crate) fn new_scale_norm_affine_simd(
         min_vector_value: &mut f32,
         max_vector_value: &mut f32,
         values: &[f32],

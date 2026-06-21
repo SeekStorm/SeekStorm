@@ -192,7 +192,7 @@ unsafe fn accumulate_i8_neon(sum: &mut [f32], emb: &[i8]) {
 }
 
 #[cfg(target_arch = "aarch64")]
-pub fn accumulate_neon(sum: &mut [f32], emb: &Embedding) {
+pub(crate) fn accumulate_neon(sum: &mut [f32], emb: &Embedding) {
     match emb {
         Embedding::I8(emb) => unsafe { accumulate_i8_neon(sum, emb) },
         Embedding::F32(emb) => unsafe { accumulate_f32_neon(sum, emb) },
@@ -226,100 +226,6 @@ pub(crate) fn accumulate(sum: &mut [f32], emb: &Embedding) {
 }
 
 impl Shard {
-    pub(crate) async fn _fill_vector_shard(&mut self, level: usize) {
-        let query_string = "rosy panther";
-        let index = self.index_option.as_ref().unwrap().read().await;
-
-        let vector_type = index.vector_precision;
-        let vector_dimensions = index.vector_dimensions;
-        let vector_size = size_of::<VectorHeader>()
-            + (vector_dimensions
-                * match vector_type {
-                    Precision::F32 => 4,
-                    Precision::I8 => 1,
-                    Precision::None => 0,
-                });
-
-        let query_embedding = index
-            .embedding_model_option
-            .as_ref()
-            .unwrap()
-            .encode(&[query_string.to_string()])
-            .remove(0);
-        let query_embedding = if self.is_simd {
-            unsafe { quantize_f32_to_i8_simd(&query_embedding) }
-        } else {
-            quantize_f32_to_i8(&query_embedding)
-        };
-        let _query_simd = unsafe { QuerySimd::new(&query_embedding) };
-
-        self.block_vector_buffer.clear();
-
-        let _sum_vector = vec![0i32; vector_dimensions];
-
-        let mut offset = 0;
-        for level_id in 0..self.level_index.len() {
-            let cluster_number_bytes = &self.vector_file_mmap[offset..offset + 4];
-            let cluster_number =
-                u32::from_le_bytes(cluster_number_bytes.try_into().unwrap()) as usize;
-            offset += 4;
-
-            let mut clusters = Vec::with_capacity(cluster_number);
-            let mut level_vectors_count = 0;
-            let mut start_index = 0;
-            for _i in 0..cluster_number {
-                let cluster_header_bytes = &self.vector_file_mmap[offset..offset + 4];
-                let cluster_header = ClusterHeader {
-                    start_index,
-                    child_count: u32::from_le_bytes(cluster_header_bytes.try_into().unwrap()),
-                };
-                offset += 4;
-                start_index += cluster_header.child_count;
-                clusters.push(cluster_header);
-                level_vectors_count += cluster_header.child_count;
-            }
-
-            if level_id == level {
-                for cluster in clusters.iter() {
-                    let cluster_vectors_count = cluster.child_count as usize;
-                    let cluster_offset = cluster.start_index as usize * vector_size;
-
-                    for vector_id in 0..cluster_vectors_count {
-                        let record = read_record(
-                            &self.vector_file_mmap
-                                [offset + cluster_offset + (vector_id * vector_size)..],
-                            vector_dimensions,
-                            vector_type,
-                        );
-
-                        self.block_vector_buffer.push(ParentMedoid {
-                            medoid_index: 0,
-                            similarity: 0.0,
-                            is_medoid: false,
-                            scale: 0.0,
-                            norm: 0.0,
-                            zero_point: 0,
-                            sum_q: 0,
-
-                            doc_id: record.header.doc_id,
-                            field_id: record.header.field_id,
-                            chunk_id: record.header.chunk_id,
-                            embedding: match record.embedding {
-                                EmbeddingView::I8(e) => Embedding::I8(e.to_vec()),
-                                EmbeddingView::F32(e) => Embedding::F32(e.to_vec()),
-                            },
-                        });
-                    }
-                }
-            }
-
-            offset += level_vectors_count as usize * vector_size;
-        }
-
-        self.block_vector_buffer
-            .sort_unstable_by_key(|p| (p.doc_id, p.field_id, p.chunk_id));
-    }
-
     /// cluster the vectors in the block_vector_buffer, and return the medoids
     pub(crate) async fn cluster_vector_shard(&mut self, sort: bool) -> Vec<Medoid> {
         let non_affine = self.max_vector_value == f32::MIN;

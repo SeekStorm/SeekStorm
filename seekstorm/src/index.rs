@@ -734,7 +734,7 @@ impl fmt::Display for StemmerType {
             StemmerType::Czech => write!(f, "Czech"),
             StemmerType::Danish => write!(f, "Danish"),
             StemmerType::Dutch => write!(f, "Dutch"),
-            StemmerType::DutchPorter => write!(f, "Dutch_porter"),
+            StemmerType::DutchPorter => write!(f, "DutchPorter"),
             StemmerType::English => write!(f, "English"),
             StemmerType::Esperanto => write!(f, "Esperanto"),
             StemmerType::Estonian => write!(f, "Estonian"),
@@ -1553,8 +1553,6 @@ pub type IndexArc = Arc<RwLock<Index>>;
 /// The shard object of the index. It contains all levels and all segments of the index.
 /// It also contains all properties that control indexing and intersection.
 pub struct Shard {
-    pub(crate) semaphore: Arc<Semaphore>,
-
     /// Incompatible index  format change: new library can't open old format, and old library can't open new format
     pub index_format_version_major: u16,
     /// Backward compatible format change: new library can open old format, but old library can't open new format
@@ -1569,7 +1567,7 @@ pub struct Shard {
 
     /// Number of committed documents
     pub committed_doc_count: usize,
-    /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents, or once commit is invoked manually.
+    /// The index countains indexed, but uncommitted documents. Documents will either committed automatically once the number exceeds 64K documents **per shard**, or once commit is invoked manually.
     pub(crate) uncommitted: bool,
 
     /// Indicates whether the index has been modified since the start.
@@ -1588,6 +1586,7 @@ pub struct Shard {
     pub(crate) last_level_vector_file_start_pos: u64,
 
     /// Number of allowed parallel indexed documents (default=available_parallelism). Can be used to detect wehen all indexing processes are finished.
+    pub(crate) semaphore: Arc<Semaphore>,
     pub(crate) docstore_file: File,
     pub(crate) docstore_file_mmap: Mmap,
 
@@ -1669,12 +1668,12 @@ pub struct Shard {
     pub(crate) level_terms: AHashMap<u32, String>,
     pub(crate) level_completions: Arc<RwLock<AHashMap<Vec<String>, usize>>>,
     /// AVX2 (x86_64) support enabled.
-    pub is_avx2: bool,
+    pub(crate) is_avx2: bool,
     /// NEON (aarch64) support enabled.
-    pub is_neon: bool,
+    pub(crate) is_neon: bool,
     /// Any SIMD backend (`is_avx2 || is_neon`). Call sites dispatch on this
     /// to pick between the `*_simd` SIMD path and the scalar fallback.
-    pub is_simd: bool,
+    pub(crate) is_simd: bool,
     pub(crate) is_vector_indexing: bool,
     pub(crate) is_lexical_indexing: bool,
     pub(crate) chunks_meta: Vec<(u16, u32, u32)>,
@@ -1759,15 +1758,15 @@ pub struct Index {
     /// Vector similarity function for approximate nearest neighbor (ANN) search: Cosine, Euclidean, DotProduct.
     pub vector_similarity: VectorSimilarity,
     /// AVX2 support enabled
-    pub is_avx2: bool,
+    pub(crate) is_avx2: bool,
     /// NEON support enabled (aarch64 only).
-    pub is_neon: bool,
+    pub(crate) is_neon: bool,
     /// Any SIMD backend enabled (`is_avx2 || is_neon`).
-    pub is_simd: bool,
+    pub(crate) is_simd: bool,
     /// Indicates whether the index contains vector embeddings for vector search.
-    pub is_vector_indexing: bool,
+    pub(crate) is_vector_indexing: bool,
     /// Indicates whether the index contains lexical term indexing for lexical search.
-    pub is_lexical_indexing: bool,
+    pub(crate) is_lexical_indexing: bool,
     pub(crate) chunk_size: usize,
     pub(crate) turbo_quant: TurboQuant,
 }
@@ -4180,7 +4179,7 @@ pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
     )
 ))]
 pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
-    gxhash64(term_bytes, 1234) & 0b1111111111111111111111111111111111111111111111111111111111111000 // !0b111
+    gxhash64(term_bytes, 1234) & 0b1111111111111111111111111111111111111111111111111111111111111000
 }
 
 #[inline]
@@ -4219,7 +4218,7 @@ pub(crate) fn hash32(term_bytes: &[u8]) -> u32 {
 )))]
 pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
     HASHER_64.hash_one(term_bytes)
-        & 0b1111111111111111111111111111111111111111111111111111111111111000 // !0b111
+        & 0b1111111111111111111111111111111111111111111111111111111111111000
 }
 
 static FREQUENT_EN: &str = include_str!("../../assets/dictionaries/frequent_en.txt");
@@ -4624,7 +4623,7 @@ impl Index {
         indexed_cluster_count
     }
 
-    /// Get number of index levels. One index level comprises 64K documents.
+    /// Get number of index levels. One index level comprises 64K documents **per shard**.
     pub async fn level_count(&self) -> usize {
         let mut level_count = 0;
         for shard in self.shard_vec.iter() {
@@ -5256,18 +5255,9 @@ impl IndexDocuments for IndexArc {
     /// Index list of documents (bulk)
     /// May block, if the threshold of documents indexed in parallel is exceeded.
     async fn index_documents(&self, document_vec: Vec<Document>) {
-        println!("start indexing {} documents", document_vec.len());
-        let start_time = Instant::now();
-
         for document in document_vec {
             self.index_document(document, FileType::None).await;
         }
-
-        let elapsed_time = start_time.elapsed().as_nanos();
-        println!(
-            "finished indexing documents {} s.",
-            elapsed_time / 1_000_000_000
-        );
     }
 }
 

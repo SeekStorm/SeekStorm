@@ -55,7 +55,7 @@ pub(crate) fn save_apikey_data(apikey: &ApikeyObject, index_path: &PathBuf) {
 }
 
 /// Live
-/// 
+///
 /// Returns a live message with the SeekStorm server version.
 #[utoipa::path(
     tag = "Info",
@@ -78,7 +78,7 @@ pub(crate) fn live_api() -> String {
 }
 
 /// Create API Key
-/// 
+///
 /// Creates an API key and returns the Base64 encoded API key.  
 /// Expects the Base64 encoded master API key in the header.  
 /// Use the **master API key displayed** in the server console at startup.
@@ -136,7 +136,7 @@ pub(crate) fn create_apikey_api<'a>(
 }
 
 /// Delete API Key
-/// 
+///
 /// Deletes an API key and returns the number of remaining API keys.
 /// Expects the Base64 encoded master API key in the header.
 /// WARNING: This will delete all indices and documents associated with the API key.
@@ -241,7 +241,7 @@ pub(crate) async fn open_all_apikeys(
 }
 
 /// Create Index
-/// 
+///
 /// Create an index within the directory associated with the specified API key and return the index_id.
 #[utoipa::path(
     post,
@@ -306,7 +306,7 @@ pub(crate) async fn open_all_apikeys(
 				"similarity": "Bm25fProximity",
 				"tokenizer": "UnicodeAlphanumeric",
 				"clustering": "Auto",
-				"inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "I8" }}
+				"inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
 			}))),
             ("Example: Vector index" = (value = json!({
 				"schema":[
@@ -327,7 +327,7 @@ pub(crate) async fn open_all_apikeys(
 				"index_name": "sift1m",
 				"clustering": "Auto",
 				"inference": {
-					"External": { "dimensions": 128, "precision": "F32", "quantization": "I8", "similarity": "Euclidean" }
+					"External": { "dimensions": 128, "precision": "F32", "quantization": "ScalarQuantizationI8", "similarity": "Euclidean" }
 				}
 			})))
         )
@@ -412,7 +412,7 @@ pub(crate) async fn create_index_api<'a>(
 }
 
 /// Delete Index
-/// 
+///
 /// Delete an index within the directory associated with the specified API key and return the number of remaining indices.
 #[utoipa::path(
     delete,
@@ -449,24 +449,24 @@ pub(crate) async fn delete_index_api(
 }
 
 /// Commit Index
-/// 
+///
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
 /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
-/// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
+/// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
 /// There is no way to prevent this automatic commit by not manually invoking it.
 /// But commit can also be invoked manually at any time at any number of newly indexed documents.
 /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
 /// is invoked implicitly with every index_doc,
 /// i.e. the document can immediately searched and included in the search results
-/// if it matches the query AND the query paramter realtime=true is enabled.
+/// if it matches the query AND the query parameter realtime=true is enabled.
 /// **Use commit with caution, as it is an expensive operation**.
-/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
+/// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
 /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
 /// There are only 2 reasons that justify a manual commit:
 /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
-///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
+///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
 ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
 #[utoipa::path(
     patch,
@@ -487,18 +487,12 @@ pub(crate) async fn delete_index_api(
     operation_id = "commit_index",
 )]
 pub(crate) async fn commit_index_api(index_arc: &IndexArc) -> Result<u64, String> {
-    println!("commit_index_api start");
-    let start_time = Instant::now();
-
     let index_arc_clone = index_arc.clone();
     let index_ref = index_arc.read().await;
     let indexed_doc_count = index_ref.indexed_doc_count().await;
 
     drop(index_ref);
     index_arc_clone.commit().await;
-
-    let elapsed_time = start_time.elapsed().as_nanos();
-    println!("commit_index_api end {} s.", elapsed_time / 1_000_000_000);
 
     Ok(indexed_doc_count as u64)
 }
@@ -532,7 +526,7 @@ pub(crate) async fn get_synonyms_api(index_arc: &IndexArc) -> Result<Vec<Synonym
 }
 
 /// Get Index Info
-/// 
+///
 /// Get index Info from index with index_id
 #[utoipa::path(
     get,
@@ -579,7 +573,7 @@ pub(crate) async fn get_index_info_api(
 }
 
 /// Get API Key Info
-/// 
+///
 /// Get info about all indices associated with the specified API key
 #[utoipa::path(
     get,
@@ -623,11 +617,11 @@ pub(crate) async fn get_apikey_indices_info_api(
 }
 
 /// Index Document(s)
-/// 
+///
 /// Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// Index documents enables true real-time search (as opposed to near realtime.search):
 /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
-/// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
+/// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.
 #[utoipa::path(
     post,
     tag = "Document",
@@ -685,7 +679,7 @@ pub(crate) async fn index_document_api(
 }
 
 /// Index PDF file
-/// 
+///
 /// Index PDF file (byte array) to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// - Converts PDF to a JSON document with "title", "body", "url" and "date" fields and indexes it.
 /// - extracts title from metatag, or first line of text, or from filename
@@ -728,7 +722,7 @@ pub(crate) async fn index_file_api(
 }
 
 /// Get PDF file
-/// 
+///
 /// Get PDF file from index with index_id
 /// ⚠️ Use search or get_iterator first to obtain s valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 #[utoipa::path(
@@ -770,7 +764,7 @@ pub(crate) async fn index_documents_api(
 }
 
 /// Get Document
-/// 
+///
 /// Get document from index with index_id
 /// ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 #[utoipa::path(
@@ -842,13 +836,13 @@ pub(crate) async fn get_document_api(
 }
 
 /// Update Document(s)
-/// 
+///
 /// Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// Update document is a combination of delete_document and index_document.
 /// All current limitations of delete_document apply.
 /// Update documents enables true real-time search (as opposed to near realtime.search):
 /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
-/// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
+/// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.
 #[utoipa::path(
     patch,
     tag = "Document",
@@ -885,7 +879,7 @@ pub(crate) async fn update_documents_api(
 }
 
 /// Delete Document
-/// 
+///
 /// Delete document by document_id from index with index_id
 /// ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 /// Immediately effective, indpendent of commit.
@@ -925,7 +919,7 @@ pub(crate) async fn delete_document_by_parameter_api(
 }
 
 /// Delete Document(s) by Request Object
-/// 
+///
 /// Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
 /// Immediately effective, indpendent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
@@ -1000,7 +994,7 @@ pub(crate) async fn delete_documents_by_query_api(
 }
 
 /// Document iterator
-/// 
+///
 /// Document iterator via GET and POST are identical, only the way parameters are passed differ.
 /// The document iterator allows to iterate over all document IDs and documents in the entire index, forward or backward.
 /// It enables efficient sequential access to every document, even in very large indexes, without running a search.
@@ -1079,7 +1073,7 @@ pub(crate) async fn get_iterator_api_get(
 }
 
 /// Document iterator
-/// 
+///
 /// Document iterator via GET and POST are identical, only the way parameters are passed differ.
 /// The document iterator allows to iterate over all document IDs and documents in the entire index, forward or backward.
 /// It enables efficient sequential access to every document, even in very large indexes, without running a search.
@@ -1158,7 +1152,7 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
 }
 
 /// Query Index
-/// 
+///
 /// Query results from index with index_id
 /// The following parameters are supported:
 /// - Result type
@@ -1288,7 +1282,7 @@ pub(crate) async fn query_index_api_post(
 }
 
 /// Query Index
-/// 
+///
 /// Query results from index with index_id.
 /// Query index via GET is a convenience function, that **offers only a limited set of parameters compared to Query Index via POST**.
 /// Always use Query Index via POST for the full set of parameters and maximum flexibility.
