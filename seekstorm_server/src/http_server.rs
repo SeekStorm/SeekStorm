@@ -62,20 +62,20 @@ use crate::api_endpoints::{index_document_api, query_index_api_get, query_index_
 use crate::multi_tenancy::get_apikey_hash;
 use crate::{MASTER_KEY_SECRET, VERSION};
 
-const INDEX_HTML: &str = include_str!("web/index.html");
-const FLEXBOX_CSS: &str = include_str!("web/css/flexboxgrid.min.css");
-const MASTER_CSS: &str = include_str!("web/css/master.css");
-const MASTER_JS: &str = include_str!("web/js/master.js");
-const AUTOCOMPLETE_JS: &str = include_str!("web/js/autocomplete.js");
-const JQUERY_JS: &str = include_str!("web/js/jquery-3.7.1.min.js");
-const LOGO_SVG: &[u8] = include_bytes!("web/svg/logo.svg");
-const FAVICON_16: &[u8] = include_bytes!("web/favicon-16x16.png");
-const FAVICON_32: &[u8] = include_bytes!("web/favicon-32x32.png");
+const INDEX_HTML: &str = include_str!("../web/index.html");
+const FLEXBOX_CSS: &str = include_str!("../web/css/flexboxgrid.min.css");
+const MASTER_CSS: &str = include_str!("../web/css/master.css");
+const MASTER_JS: &str = include_str!("../web/js/master.js");
+const AUTOCOMPLETE_JS: &str = include_str!("../web/js/autocomplete.js");
+const JQUERY_JS: &str = include_str!("../web/js/jquery-3.7.1.min.js");
+const LOGO_SVG: &[u8] = include_bytes!("../web/svg/logo.svg");
+const FAVICON_16: &[u8] = include_bytes!("../web/favicon-16x16.png");
+const FAVICON_32: &[u8] = include_bytes!("../web/favicon-32x32.png");
 
-const HISTOGRAM_CSS: &str = include_str!("web/css/bootstrap.histogram.slider.css");
-const SLIDER_CSS: &str = include_str!("web/css/histogram.slider.css");
-const HISTOGRAM_JS: &str = include_str!("web/js/bootstrap.histogram.slider.js");
-const SLIDER_JS: &str = include_str!("web/js/bootstrap-slider.js");
+const HISTOGRAM_CSS: &str = include_str!("../web/css/bootstrap.histogram.slider.css");
+const SLIDER_CSS: &str = include_str!("../web/css/histogram.slider.css");
+const HISTOGRAM_JS: &str = include_str!("../web/js/bootstrap.histogram.slider.js");
+const SLIDER_JS: &str = include_str!("../web/js/bootstrap-slider.js");
 
 pub(crate) fn calculate_hash<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();

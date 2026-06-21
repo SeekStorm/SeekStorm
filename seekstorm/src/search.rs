@@ -933,7 +933,6 @@ pub type Point = Vec<f64>;
 /// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
 ///
 /// Intersection, AND `+`
-///
 /// ```rust ,no_run
 /// use seekstorm::search::QueryType;
 /// let query_type=QueryType::Union;
@@ -976,7 +975,6 @@ pub type Point = Vec<f64>;
 /// * `offset`: offset of search results to return.
 /// * `length`: number of search results to return.
 ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-/// 
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
 /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -990,7 +988,6 @@ pub type Point = Vec<f64>;
 ///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
 ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
 ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
-/// 
 /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
 ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
 ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
@@ -999,7 +996,6 @@ pub type Point = Vec<f64>;
 ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
 ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
 ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
-///
 /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
 ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
 ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
@@ -1077,7 +1073,6 @@ pub trait Search {
     /// * `offset`: offset of search results to return.
     /// * `length`: number of search results to return.
     ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-    ///
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
     /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
@@ -1924,7 +1919,6 @@ impl Search for IndexArc {
                     };
                 }
             };
-
             if let Some(rlo_shard_lexical) = rlo_shard_hybrid_options.0
                 && !rlo_shard_lexical.facets.is_empty()
             {
@@ -1974,7 +1968,6 @@ impl Search for IndexArc {
                             Result {
                                 doc_id: result.doc_id,
                                 score: 1.0 / (k + i as f32),
-
                                 #[cfg(feature = "vb")]
                                 lexical_score: result.score,
                                 #[cfg(feature = "vb")]
@@ -1995,6 +1988,7 @@ impl Search for IndexArc {
                             .entry(result.doc_id)
                             .and_modify(|e| {
                                 e.score += rrf_score;
+
                                 e.field_id = result.field_id;
                                 e.chunk_id = result.chunk_id;
                                 e.level_id = result.level_id;
@@ -2082,6 +2076,7 @@ impl Search for IndexArc {
                 }
                 let shard_vec =
                     futures::future::join_all(index_ref.shard_vec.iter().map(|s| s.read())).await;
+
                 result_object.results.sort_by(|a, b| {
                     result_ordering_root(
                         &shard_vec,
@@ -2248,7 +2243,6 @@ pub(crate) fn decode_posting_list_counts(
                     }
                 }
             }
-
             posting_count_list += posting_count as u32 + 1;
         }
     }
@@ -2320,7 +2314,6 @@ pub(crate) fn decode_posting_list_object(
 
             let max_docid = read_u16(byte_array, key_address + 10);
             let max_p_docid = read_u16(byte_array, key_address + 12);
-
             match shard.key_head_size {
                 20 => {}
                 22 => {
@@ -2464,6 +2457,7 @@ impl SearchLexicalShard for ShardArc {
         }
 
         let mut query_type_mut = query_type_default;
+
         let facet_cap = if shard_ref.shard_number == 1 {
             0
         } else {
@@ -2481,7 +2475,6 @@ impl SearchLexicalShard for ShardArc {
         if shard_ref.segments_index.is_empty() {
             return result_object;
         }
-
         let mut field_filter_set: AHashSet<u16> = AHashSet::new();
         for item in field_filter.iter() {
             match shard_ref.schema_map.get(item) {
@@ -2667,7 +2660,6 @@ impl SearchLexicalShard for ShardArc {
                             }
                         }
                     }
-
                     FacetFilter::String32 { field, filter } => {
                         if let Some(idx) = shard_ref.facets_map.get(field) {
                             let facet = &shard_ref.facets[*idx];
@@ -3023,6 +3015,7 @@ impl SearchLexicalShard for ShardArc {
             let mut unique_terms: AHashMap<String, TermObject> = AHashMap::new();
             let mut non_unique_terms: Vec<NonUniqueTermObject> = Vec::new();
             let mut nonunique_terms_count = 0u32;
+
             tokenizer(
                 &shard_ref,
                 &query_string,
@@ -3040,7 +3033,6 @@ impl SearchLexicalShard for ShardArc {
                 1,
             )
             .await;
-
             if include_uncommitted && shard_ref.uncommitted {
                 shard_ref.search_lexical_shard_uncommitted(
                     &unique_terms,
@@ -3066,11 +3058,13 @@ impl SearchLexicalShard for ShardArc {
             let mut blocks_vec: Vec<Vec<BlockObjectIndex>> = Vec::new();
 
             let mut not_found_terms_hashset: AHashSet<u64> = AHashSet::new();
+
             for non_unique_term in non_unique_terms.iter() {
                 let term = unique_terms.get(&non_unique_term.term).unwrap();
                 let key0: u32 = term.key0;
                 let key_hash: u64 = term.key_hash;
                 let term_no_diacritics_umlaut_case = &non_unique_term.term;
+
                 let mut idf = 0.0;
                 let mut idf_ngram1 = 0.0;
                 let mut idf_ngram2 = 0.0;
@@ -3094,7 +3088,6 @@ impl SearchLexicalShard for ShardArc {
                                 key_hash,
                                 false,
                             );
-
                             if let Some(plo) = posting_list_object_index_option {
                                 posting_count = plo.posting_count;
                                 max_list_score = plo.max_list_score;
@@ -3198,7 +3191,6 @@ impl SearchLexicalShard for ShardArc {
                                         [key0 as usize]
                                         .segment
                                         .get(&key_hash);
-
                                     if let Some(plo) = posting_list_object_index_option {
                                         posting_count = plo.posting_count;
                                         posting_count_ngram_1 = plo.posting_count_ngram_1;
@@ -3219,6 +3211,7 @@ impl SearchLexicalShard for ShardArc {
                                         false
                                     }
                                 };
+
                                 if found_plo {
                                     if result_type != ResultType::Count {
                                         if non_unique_term.ngram_type == NgramType::SingleTerm
@@ -3271,7 +3264,6 @@ impl SearchLexicalShard for ShardArc {
                                                 .ln();
                                         }
                                     }
-
                                     let value_new = PostingListObjectQuery {
                                         posting_count,
                                         max_list_score,
@@ -3359,10 +3351,8 @@ impl SearchLexicalShard for ShardArc {
                     result_object.query_terms.push(term.term.to_string());
                 }
             }
-
             not_query_list = not_query_list_map.into_values().collect();
             query_list = query_list_map.into_values().collect();
-
             if shard_ref.meta.access_type == AccessType::Mmap {
                 for plo in query_list.iter_mut() {
                     plo.blocks = &blocks_vec[plo.blocks_index - 1]
@@ -3420,6 +3410,7 @@ impl SearchLexicalShard for ShardArc {
                             result_object.results.truncate(length);
                         }
                     }
+
                     if !search_result.query_facets.is_empty() && result_type != ResultType::Topk {
                         let mut facets: AHashMap<String, Facet> = AHashMap::new();
                         for facet in search_result.query_facets.iter() {
@@ -3446,7 +3437,6 @@ impl SearchLexicalShard for ShardArc {
 
                     return result_object;
                 }
-
                 single_blockid(
                     &shard_ref,
                     &mut non_unique_query_list,
@@ -3590,7 +3580,6 @@ impl SearchLexicalShard for ShardArc {
                     .results
                     .sort_by(|a, b| search_result.topk_candidates.result_ordering_shard(*b, *a));
             }
-
             if offset > 0 {
                 result_object.results.drain(..offset);
             }

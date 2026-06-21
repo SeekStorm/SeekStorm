@@ -436,7 +436,7 @@ content-type: application/json
         "store": true, 
         "index_lexical": true
     },
-    {
+        {
         "field": "body",
         "field_type": "Text", 
         "store": true, 
@@ -494,7 +494,9 @@ content-type: application/json
 }
 
 
-// amazon.csv
+//------------ amazon.csv //wie läuft die zuordnung von den feldern
+
+// #,Thumbnail Image,Product Name,URL,Description,About this item,From the manufacturer,Brand,Category,Product Score for PL,Product Score for Reselling,Number of Sellers,Rank,Price,FBA Fees,Net Margin,Est. Sales,UPC,Est. Revenue,# of Reviews,RPR,Rating,LQS,Weight,Variants,Available From,Seller Type
 
 ### create index
 POST http://127.0.0.1:80/api/v1/index HTTP/1.1

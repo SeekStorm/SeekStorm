@@ -2018,7 +2018,7 @@ pub(crate) struct BlockObject {
     pub p_block_vec: Vec<i32>,
 }
 
-/// Intersection between blocks of 64k docids of a posting list **per shard**
+/// Intersection between blocks of 64k docids of a posting list
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn intersection_blockid<'a>(
     shard: &'a Shard,

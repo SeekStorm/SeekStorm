@@ -1,91 +1,16 @@
-[package]
-name = "seekstorm"
-version = "3.2.1"
-authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
-license = "Apache-2.0"
-categories = ["database-implementations", "data-structures"]
-description = """Vector & lexical search engine library & multi-tenancy server"""
-documentation = "https://docs.rs/seekstorm/"
-homepage = "https://seekstorm.com"
-repository = "https://github.com/SeekStorm/SeekStorm"
-readme = "README.md"
-keywords = ["search", "information", "retrieval"]
-edition = "2024"
-exclude = ["assets/*.png","assets/*.jpg"]
+[workspace]
+resolver = "3"
+members = [
+    "seekstorm",
+    "seekstorm_server"
+]
 
-[features]
-# comment out the default features below you don't need: zh=Chinese word segmentation, pdf=PDF text extraction, gx=GXHash instead of AHash for faster hash computation. 
-# You can also disable all default features and re-enable them case-wise in your toml with: seekstorm = { version = "3.0.2", default-features = false, features = ["zh","pdf"] }
-default = ["zh","pdf","gx","vb"]
-zh = []
-pdf = ["pdfium-render"]
-gx = ["gxhash"]
-vb = []
-
-[lib]
-name = "seekstorm"
-path = "src/seekstorm/lib.rs"
-
-[[bin]]
-name = "seekstorm_server"
-path = "src/seekstorm_server/main.rs"
-
-[dependencies]
-crossbeam-channel = "0.5.15"
-ctrlc = "3.5.2"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.150", features = ["preserve_order"] }
-tokio = { version = "1.52.3", features = ["full"] }
-base64 = "0.22.1"
-num-format = "0.4.4"
-ahash ={ version = "0.8.12", features = ["serde"]}
-rand = { version = "0.10.1", features = ["chacha"]}
-futures = "0.3.32"
-num = "0.4.3"
-num-derive = "0.4.2"
-num-traits = "0.2.19"
-regex = "1.12.3"
-lazy_static = "1.5.0"
-hyper = { version = "1.9.0", features = ["full","server"] }
-hyper-util = { version ="0.1.20",  features = ["server","tokio","http1","http2"]}
-http-body-util = "0.1.3"
-url = "2.5.8"
-sha2 = "0.11.0"
-itertools = "0.14.0"
-async-recursion = "1.1.1"
-zstd = "0.13.3"
-rayon = "1.12.0"
-aho-corasick = "1.1.4"
-smallvec = "1.15.1"
-memmap2 = "0.9.10"
-regex-syntax = "0.8.10"
-indexmap = { version = "2.14.0", features = ["serde"]}
-unicode-normalization = "0.1.25"
-finl_unicode = "1.4.0"
-colored = "3.1.1"
-walkdir = "2.5.0"
-pdfium-render = { version ="0.9.1",  features = ["thread_safe"], optional = true}
-chrono = "0.4.44"
-utoipa = { version ="5.5.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
-num_cpus = "1.17.0"
-csv = "1.4.0"
-symspell_complete_rs = "0.0.2"
-tokio-test = "0.4.5"
-snap = "1.1.1"
-lz4_flex = "0.13.0"
-snowball_stemmers_rs = "1.0.1"
-bytemuck = { version = "1.25.0", features = ["derive","extern_crate_alloc"] }
-model2vec-rs = "0.2.0"
-chunk = "0.10.1"
-half = { version = "2.7.1", features = ["bytemuck","serde"] }
-tabled = { version = "0.21.0", features = ["ansi"]}
-rkyv = "0.8.16"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version ="0.3.9",  features = ["winbase"]}
-
-[target.'cfg(all(target_feature = "aes", target_feature = "sse2"))'.dependencies]
-gxhash = { version = "3.5.0", features = ["deterministic"] , optional = true}
+[workspace.lints.rust]
+missing_docs = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_qualifications = "warn"
 
 [profile.release]
 lto = true
@@ -95,7 +20,3 @@ debug-assertions = false
 panic = "abort"
 overflow-checks = false
 strip = "debuginfo"
-
-[package.metadata.docs.rs]
-rustc-args = ["-C", "target-cpu=native"]
-rustdoc-args = ["-C", "target-cpu=native"]

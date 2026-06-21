@@ -63,8 +63,6 @@ async fn test_01_create_index() {
     let result = index.meta.id;
     assert_eq!(result, 0);
     index_arc.close().await;
-
-    //println!("test1 {} µs", start_time.elapsed().as_micros());
 }
 
 #[tokio::test]
@@ -363,7 +361,6 @@ async fn test_06_clear_index() {
 
     let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 1);
-    println!("indexed_doc_count: {}", result);
 
     // query index
     let query = "body1".into();
@@ -385,10 +382,6 @@ async fn test_06_clear_index() {
             QueryRewriting::SearchOnly,
         )
         .await;
-
-    for r in result_object.results.iter() {
-        println!("result doc_id: {}", r.doc_id);
-    }
 
     let result = result_object.result_count_total;
     assert_eq!(result, 1);
@@ -669,8 +662,6 @@ async fn test_12_create_index_vector_external() {
     let result = index.meta.id;
     assert_eq!(result, 0);
     index_arc.close().await;
-
-    //println!("test1 {} µs", start_time.elapsed().as_micros());
 }
 
 #[tokio::test]

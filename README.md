@@ -380,7 +380,7 @@ SeekStorm\target\doc\seekstorm_server\index.html
 
 - **`zh` (default)**: Enables TokenizerType.UnicodeAlphanumericZH that implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
 - **`pdf` (default)**: Enables PDF ingestion via `pdfium` crate.
-- **`vb`**: vb (verbose) adds additional properties to the `Result` struct:
+- **`vb` (default)**: vb (verbose) adds additional properties to the `Result` struct:
   - field_id
   - chunk_id
   - level_id
@@ -390,6 +390,7 @@ SeekStorm\target\doc\seekstorm_server\index.html
   - vector_score
   - lexical_score
   - source: ResultSource (Lexical/Vector/Hybrid)
+- **`gxhash`**: high-performance hashing via `gxhash`, both for `x86_64` and `aarch64`. Otherwise fallback to `ahash`.
 
 You can disable the SeekStorm default features by using default-features = false in the cargo.toml of your application.  
 This can be useful to reduce the size of your application or if there are dependency version conflicts.
