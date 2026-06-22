@@ -4119,7 +4119,7 @@ pub static IS_SIMD: LazyLock<bool> = LazyLock::new(|| *IS_AVX2 || *IS_NEON);
         target_feature = "neon"
     )
 )))]
-pub static HASHER_32: LazyLock<RandomState> =
+pub(crate) static HASHER_32: LazyLock<RandomState> =
     LazyLock::new(|| RandomState::with_seeds(805272099, 242851902, 646123436, 591410655));
 
 #[cfg(not(any(
@@ -4136,7 +4136,7 @@ pub static HASHER_32: LazyLock<RandomState> =
         target_feature = "neon"
     )
 )))]
-pub static HASHER_64: LazyLock<RandomState> =
+pub(crate) static HASHER_64: LazyLock<RandomState> =
     LazyLock::new(|| RandomState::with_seeds(808259318, 750368348, 84901999, 789810389));
 
 #[inline]
