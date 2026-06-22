@@ -54,6 +54,15 @@ winapi = { version = "0.3.9", features = ["winbase", "processthreadsapi"] }
 [lints]
 workspace = true
 
+[profile.release]
+lto = true
+opt-level = 3
+debug = false
+debug-assertions = false
+panic = "abort"
+overflow-checks = false
+strip = "debuginfo"
+
 [package.metadata.docs.rs]
 rustc-args = ["-C", "target-cpu=native"]
 rustdoc-args = ["-C", "target-cpu=native"]

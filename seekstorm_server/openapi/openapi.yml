@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 3.2.1
+  version: 3.2.2
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -19,7 +19,7 @@ paths:
       - Info
       summary: Live
       description: Returns a live message with the SeekStorm server version.
-      operationId: live_api
+      operationId: live
       responses:
         '200':
           description: SeekStorm server is live
@@ -33,7 +33,7 @@ paths:
       - API Key
       summary: Get API Key Info
       description: Get info about all indices associated with the specified API key
-      operationId: get_apikey_indices_info_api
+      operationId: get_api_key_info
       parameters:
       - name: apikey
         in: header
@@ -64,11 +64,11 @@ paths:
       description: |-
         Creates an API key and returns the Base64 encoded API key.
         Expects the Base64 encoded master API key in the header.
-        Use the master API key displayed in the server console at startup.
+        Use the **master API key displayed** in the server console at startup.
 
         WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
         For development purposes you may also use the SeekStorm server console command 'create' to create an demo API key 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='.
-      operationId: create_apikey_api
+      operationId: create_api_key
       parameters:
       - name: apikey
         in: header
@@ -126,10 +126,10 @@ paths:
       - API Key
       summary: Delete API Key
       description: |-
-        Deletes an API and returns the number of remaining API keys.
+        Deletes an API key and returns the number of remaining API keys.
         Expects the Base64 encoded master API key in the header.
         WARNING: This will delete all indices and documents associated with the API key.
-      operationId: delete_apikey_api
+      operationId: delete_api_key
       parameters:
       - name: apikey
         in: header
@@ -155,7 +155,7 @@ paths:
       - Index
       summary: Create Index
       description: Create an index within the directory associated with the specified API key and return the index_id.
-      operationId: create_index_api
+      operationId: create_index
       parameters:
       - name: apikey
         in: header
@@ -260,7 +260,7 @@ paths:
       - Index
       summary: Get Index Info
       description: Get index Info from index with index_id
-      operationId: get_index_info_api
+      operationId: get_index_info
       parameters:
       - name: apikey
         in: header
@@ -295,7 +295,7 @@ paths:
       - Index
       summary: Delete Index
       description: Delete an index within the directory associated with the specified API key and return the number of remaining indices.
-      operationId: delete_index_api
+      operationId: delete_index
       parameters:
       - name: apikey
         in: header
@@ -350,7 +350,7 @@ paths:
         2. if after indexing new documents there won't be more documents indexed (for some time),
            so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
            but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
-      operationId: commit_index_api
+      operationId: commit_index
       parameters:
       - name: apikey
         in: header
@@ -414,7 +414,7 @@ paths:
         Previous page: take first docid from previous result set, skip=1, take=-page_size
         Returns an IteratorResult, consisting of the number of actually skipped document IDs, and a list of taken document IDs and documents, sorted ascending).
         Detect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip
-      operationId: get_iterator_api_get
+      operationId: document_iterator_get
       parameters:
       - name: apikey
         in: header
@@ -527,7 +527,7 @@ paths:
         Previous page: take first docid from previous result set, skip=1, take=-page_size
         Returns an IteratorResult, consisting of the number of actually skipped document IDs, and a list of taken document IDs and documents, sorted ascending).
         Detect end/begin of index during iteration: if returned vec.len() < requested take || if returned skip <requested skip
-      operationId: get_iterator_api_post
+      operationId: document_iterator_post
       parameters:
       - name: apikey
         in: header
@@ -577,7 +577,7 @@ paths:
         Index documents enables true real-time search (as opposed to near realtime.search):
         When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
         Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.
-      operationId: index_document_api
+      operationId: index_document
       parameters:
       - name: apikey
         in: header
@@ -1037,7 +1037,7 @@ paths:
         For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
         BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
         Document ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.
-      operationId: delete_document_by_object_api
+      operationId: delete_document_by_request_object
       parameters:
       - name: apikey
         in: header
@@ -1094,7 +1094,7 @@ paths:
         Update documents enables true real-time search (as opposed to near realtime.search):
         When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
         Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.
-      operationId: update_document_api
+      operationId: update_document
       parameters:
       - name: apikey
         in: header
@@ -1157,7 +1157,7 @@ paths:
         - extracts title from metatag, or first line of text, or from filename
         - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
         - copies all ingested pdf files to "files" subdirectory in index
-      operationId: index_file_api
+      operationId: index_pdf_file
       parameters:
       - name: apikey
         in: header
@@ -1218,7 +1218,7 @@ paths:
       description: |-
         Get document from index with index_id
         ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
-      operationId: get_document_api
+      operationId: get_document
       parameters:
       - name: apikey
         in: header
@@ -1298,7 +1298,7 @@ paths:
         Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
         For minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).
         BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
-      operationId: delete_document_by_parameter_api
+      operationId: delete_document_by_parameter
       parameters:
       - name: apikey
         in: header
@@ -1345,7 +1345,7 @@ paths:
       description: |-
         Get PDF file from index with index_id
         ⚠️ Use search or get_iterator first to obtain s valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
-      operationId: get_file_api
+      operationId: get_pdf_file
       parameters:
       - name: apikey
         in: header
@@ -1397,7 +1397,7 @@ paths:
         Query index via GET is a convenience function, that **offers only a limited set of parameters compared to Query Index via POST**.
         Always use Query Index via POST for the full set of parameters and maximum flexibility.
         Query Index via GET is provided for simple queries and quick testing, and to be easily callable from browser address bar, but it is not intended for production use.
-      operationId: query_index_api_get
+      operationId: query_index_get
       parameters:
       - name: apikey
         in: header
@@ -1485,7 +1485,7 @@ paths:
         - Facet filter: filter facets by field and value
         - Result sort: sort results by field and direction
         - Query type default: default query type, if not specified in query
-      operationId: query_index_api_post
+      operationId: query_index_post
       parameters:
       - name: apikey
         in: header
@@ -1850,6 +1850,7 @@ components:
           description: 'Specify tokenizer type for the index: (default=UnicodeAlphanumeric). The tokenizer is used to split text into tokens for indexing and searching. The choice of tokenizer can affect search performance and relevance, depending on the language and characteristics of the text being indexed.'
         stemmer:
           $ref: '#/components/schemas/StemmerType'
+          description: Specify stemmer
         stop_words:
           $ref: '#/components/schemas/StopwordType'
           description: Specify stop words for the index. Stop words are not indexed and not searched for. This can be used to reduce index size and improve search performance by excluding high-frequency, low-information terms from the index.
@@ -1889,16 +1890,6 @@ components:
             - blueberry
             - gooseberry
             multiway: false
-        force_shard_number:
-          type:
-          - integer
-          - 'null'
-          description: |-
-            Set number of shards manually or automatically.
-            - none: number of shards is set automatically = number of physical processor cores (default)
-            - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
-            - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
-          minimum: 0
         spelling_correction:
           oneOf:
           - type: 'null'
@@ -1912,7 +1903,7 @@ components:
               The dictionary is deleted when delete_index or clear_index is called.
               Note: enabling spelling correction increases the index size, indexing time and query latency.
               Default: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).
-              The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
+              The higher the value, the higher the number of errors that can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
         query_completion:
           oneOf:
           - type: 'null'
@@ -1920,6 +1911,7 @@ components:
             description: 'Enable query completion for search queries using a prefix dictionary. When enabled, a prefix dictionary is incrementally created during indexing of documents and stored in the index. The prefix dictionary is used to generate suggestions for query completion based on the indexed documents. In addition you need to set the parameter `query_rewriting` in the search method to enable it per query. Note: enabling query completion increases the index size, indexing time and query latency.'
         clustering:
           $ref: '#/components/schemas/Clustering'
+          description: Enable clustering for vector search.
         inference:
           $ref: '#/components/schemas/Inference'
           description: Enable inference for search and indexing. This can be used to create vector representations of documents and queries for semantic search, e.g. by using a model like PotionBase2M.
@@ -2594,6 +2586,7 @@ components:
             Only used when **highlight_markup** is set to true.
     IndexResponseObject:
       type: object
+      description: Index response object
       required:
       - id
       - name
@@ -2616,6 +2609,7 @@ components:
           example: demo_index
         schema:
           type: object
+          description: Schema definition for the index
           additionalProperties:
             $ref: '#/components/schemas/SchemaField'
           propertyNames:
@@ -3841,6 +3835,7 @@ components:
           minimum: 1
         result_type:
           $ref: '#/components/schemas/ResultType'
+          description: Specify the type of search result.
         realtime:
           type: boolean
           description: 'True realtime search: include indexed, but uncommitted documents into search results.'
@@ -3907,6 +3902,7 @@ components:
           description: 'Specify search mode: (default=Lexical).'
     SearchResultObject:
       type: object
+      description: Search result object
       required:
       - time
       - original_query

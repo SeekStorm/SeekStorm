@@ -312,7 +312,7 @@ pub struct CreateIndexRequest {
     #[serde(default = "tokenizer_type_api")]
     pub tokenizer: TokenizerType,
     #[serde(default)]
-    /// Süecify stemmer
+    /// Specify stemmer
     pub stemmer: StemmerType,
     /// Specify stop words for the index. Stop words are not indexed and not searched for. This can be used to reduce index size and improve search performance by excluding high-frequency, low-information terms from the index.
     #[serde(default)]
@@ -342,11 +342,6 @@ pub struct CreateIndexRequest {
     #[schema(required = false, example = json!([{"terms":["berry","lingonberry","blueberry","gooseberry"],"multiway":false}]))]
     #[serde(default)]
     pub synonyms: Vec<Synonym>,
-    /// Set number of shards manually or automatically.
-    /// - none: number of shards is set automatically = number of physical processor cores (default)
-    /// - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
-    /// - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
-    ///
     /// Enable spelling correction for search queries using the SymSpell algorithm.
     /// When enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.
     /// In addition you need to set the parameter `query_rewriting` in the search method to enable it per query.
@@ -355,7 +350,7 @@ pub struct CreateIndexRequest {
     /// The dictionary is deleted when delete_index or clear_index is called.
     /// Note: enabling spelling correction increases the index size, indexing time and query latency.
     /// Default: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).
-    /// The higher the value, the higher the number of errors taht can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
+    /// The higher the value, the higher the number of errors that can be corrected - but also the memory consumption, lookup latency, and the number of false positives.
     #[serde(default)]
     pub spelling_correction: Option<SpellingCorrection>,
     /// Enable query completion for search queries using a prefix dictionary. When enabled, a prefix dictionary is incrementally created during indexing of documents and stored in the index. The prefix dictionary is used to generate suggestions for query completion based on the indexed documents. In addition you need to set the parameter `query_rewriting` in the search method to enable it per query. Note: enabling query completion increases the index size, indexing time and query latency.
