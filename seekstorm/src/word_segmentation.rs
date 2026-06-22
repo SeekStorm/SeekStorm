@@ -7,7 +7,7 @@ use ahash::AHashMap;
 
 #[cfg(feature = "zh")]
 static DICTIONARY_TXT: &str =
-    include_str!("../../assets/dictionaries/frequency_dictionary_zh_cn_349_045.txt");
+    include_str!("../assets/dictionaries/frequency_dictionary_zh_cn_349_045.txt");
 
 /// word_segmentation_tm: Fast Word Segmentation with Triangular Matrix
 /// Rust port of the original C# implementation: https://github.com/wolfgarbe/WordSegmentationTM

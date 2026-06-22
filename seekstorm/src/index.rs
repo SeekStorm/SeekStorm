@@ -4216,10 +4216,10 @@ pub(crate) fn hash64(term_bytes: &[u8]) -> u64 {
         & 0b1111111111111111111111111111111111111111111111111111111111111000
 }
 
-static FREQUENT_EN: &str = include_str!("../../assets/dictionaries/frequent_en.txt");
-static FREQUENT_DE: &str = include_str!("../../assets/dictionaries/frequent_de.txt");
-static FREQUENT_FR: &str = include_str!("../../assets/dictionaries/frequent_fr.txt");
-static FREQUENT_ES: &str = include_str!("../../assets/dictionaries/frequent_es.txt");
+static FREQUENT_EN: &str = include_str!("../assets/dictionaries/frequent_en.txt");
+static FREQUENT_DE: &str = include_str!("../assets/dictionaries/frequent_de.txt");
+static FREQUENT_FR: &str = include_str!("../assets/dictionaries/frequent_fr.txt");
+static FREQUENT_ES: &str = include_str!("../assets/dictionaries/frequent_es.txt");
 
 pub(crate) const NUM_FREE_VALUES: u32 = 24;
 
