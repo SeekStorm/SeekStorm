@@ -12,7 +12,7 @@
   <a href="https://deephn.org/">Demo</a> | 
   <a href="#documentation">Library Docs</a> | 
   <a href="https://seekstorm.github.io/documentation/">Server Docs</a> |
-  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md">Server Readme</a> |
+  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md">Server Readme</a> |
   <a href="#roadmap">Roadmap</a> | 
   <a href="https://seekstorm.com/blog/">Blog</a> | 
   <a href="https://x.com/seekstorm">Twitter</a>
