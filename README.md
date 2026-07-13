@@ -1,30 +1,45 @@
 
 <img src="assets/logo.png" width="450" alt="Logo"><br>
+**SeekStorm**: **sub-millisecond**, native **vector** & **lexical search** - **in-process library** & **multi-tenancy server**, in **Rust**.
+
+Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, work in progress.  
+SeekStorm is open source licensed under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+
+## SeekStorm in-process search library
 [![Crates.io](https://img.shields.io/crates/v/seekstorm.svg)](https://crates.io/crates/seekstorm)
 [![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
 [![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
+
+## SeekStorm multi-tenancy search server
+[![Crates.io](https://img.shields.io/crates/v/seekstorm_server.svg)](https://crates.io/crates/seekstorm_server)
+[![Downloads](https://img.shields.io/crates/d/seekstorm_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_server)
 [![Docker](https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server)](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
+[![REST API Documentation](https://docs.rs/seekstorm/badge.svg)](https://seekstorm.github.io/documentation/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
+
+## SeekStorm REST client
+[![Crates.io](https://img.shields.io/crates/v/seekstorm_client_rs.svg)](https://crates.io/crates/seekstorm_client_rs)
+[![Downloads](https://img.shields.io/crates/d/seekstorm_client_rs.svg?style=flat-square)](https://crates.io/crates/seekstorm_client_rs)
+[![Documentation](https://docs.rs/seekstorm_client_rs/badge.svg)](https://docs.rs/seekstorm_client_rs)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 [![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
 <p>
   <a href="https://seekstorm.com">Website</a> | 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
   <a href="https://deephn.org/">Demo</a> | 
   <a href="#documentation">Library Docs</a> | 
-  <a href="https://seekstorm.github.io/documentation/">Server Docs</a> |
+  <a href="https://seekstorm.github.io/documentation/">REST API Docs</a> |
   <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md">Server Readme</a> |
+  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_client/README.md">Client Readme</a> |
   <a href="#roadmap">Roadmap</a> | 
   <a href="https://seekstorm.com/blog/">Blog</a> | 
-  <a href="https://x.com/seekstorm">Twitter</a>
+  <a href="https://x.com/seekstorm">X</a>
 </p>
 
 ---
-
-**SeekStorm**: **sub-millisecond**, native **vector** & **lexical search** - **in-process library** & **multi-tenancy server**, in **Rust**.
-
-Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, work in progress.
-
-SeekStorm is open source licensed under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
 Blog Posts: 
 - [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/)
@@ -1849,7 +1864,7 @@ Are you missing something? Let us know via issue or discussions.
 * ✅ TurboQuant (TQ) for vector search
 * Late Interaction Multimodal Retrieval
 * Geocoding, reverse geocoding, GeoJSON
-* Model Context Protocol (MCP) server for Retrieval Augmented Generation (RAG)
+* Model Context Protocol (MCP) server and CLI for Retrieval Augmented Generation (RAG) and agentic search.
 * **Split of storage and compute**
   * Use S3 object storage as index backend
   * Use Distributed Key-Value store as index backend
@@ -1858,7 +1873,14 @@ Are you missing something? Let us know via issue or discussions.
 * More tokenizer types (Japanese, Korean)
 * WebAssembly (Wasm)
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
-* Client libraries/SDK in JavaScript, Python, Java, C#, C, Go, Rust for the SeekStorm server REST API
+* Client libraries/SDK for the SeekStorm server REST API
+  * ✅ Rust
+  * JavaScript
+  * Python
+  * Java 
+  * C#
+  * C
+  * Go
 * Improved SIMD support
   - ✅ lexical search: 
 	- ✅ x86_64 (Intel, AMD)

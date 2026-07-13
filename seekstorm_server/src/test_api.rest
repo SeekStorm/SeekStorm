@@ -321,12 +321,12 @@ content-type: application/json
 
 
 ### iterator: get first 2 documents
-GET http://127.0.0.1/api/v1/index/0/doc_id/?document_id=null&skip=0&take=2&include_document=true&fields=["title","body"]
+GET http://127.0.0.1/api/v1/index/0/iterator/?document_id=null&skip=0&take=2&include_document=true&fields=["title","body"]
 apikey: {{api_key}}
 content-type: application/json
 
 ### iterator: get first 2 documents
-POST http://127.0.0.1/api/v1/index/0/doc_id/
+POST http://127.0.0.1/api/v1/index/0/iterator/
 apikey: {{api_key}}
 content-type: application/json
 
@@ -354,7 +354,7 @@ content-type: application/json
 }
 
 ### iterator: get next document
-POST http://127.0.0.1/api/v1/index/0/doc_id/
+POST http://127.0.0.1/api/v1/index/0/iterator/
 apikey: {{api_key}}
 content-type: application/json
 
@@ -368,7 +368,7 @@ content-type: application/json
 }
 
 ### iterator: get previous document
-POST http://127.0.0.1/api/v1/index/0/doc_id/
+POST http://127.0.0.1/api/v1/index/0/iterator/
 apikey: {{api_key}}
 content-type: application/json
 

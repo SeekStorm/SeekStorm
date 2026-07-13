@@ -919,6 +919,7 @@ pub type Point = Vec<f64>;
 #[allow(async_fn_in_trait)]
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
+///
 /// Arguments:
 /// * `query_string`: query string `+` `-` `""` search operators are recognized.
 /// * `query_type_default`: Specifiy default QueryType:
@@ -1020,6 +1021,7 @@ pub type Point = Vec<f64>;
 pub trait Search {
     /// Search the index for all indexed documents, both for committed and uncommitted documents.
     /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
+    ///
     /// Arguments:
     /// * `query_string`: query string `+` `-` `""` search operators are recognized.
     /// * `query_type_default`: Specifiy default QueryType:
@@ -1605,7 +1607,7 @@ impl Search for IndexArc {
                 }
             } else if let Some(embedding_model) = index_ref.embedding_model_option.as_ref() {
                 let fvecs = embedding_model
-                    .encode(&[query_string.to_string()])
+                    .encode(std::slice::from_ref(&query_string))
                     .remove(0);
                 if index_ref.quantization == Quantization::ScalarQuantizationI8
                     || index_ref.quantization == Quantization::TurboQuantI8
@@ -2151,7 +2153,6 @@ pub(crate) fn binary_search(
             cmp::Ordering::Greater => right = mid - 1,
         }
     }
-
     -1
 }
 
@@ -2462,7 +2463,6 @@ impl SearchLexicalShard for ShardArc {
         }
 
         let mut query_type_mut = query_type_default;
-
         let facet_cap = if shard_ref.shard_number == 1 {
             0
         } else {
@@ -3020,7 +3020,6 @@ impl SearchLexicalShard for ShardArc {
             let mut unique_terms: AHashMap<String, TermObject> = AHashMap::new();
             let mut non_unique_terms: Vec<NonUniqueTermObject> = Vec::new();
             let mut nonunique_terms_count = 0u32;
-
             tokenizer(
                 &shard_ref,
                 &query_string,
@@ -3327,6 +3326,7 @@ impl SearchLexicalShard for ShardArc {
                             }
                             _ => preceding_ngram_count += 2,
                         };
+
                         non_unique_query_list.push(nu_plo);
                     }
                 }
@@ -3369,7 +3369,6 @@ impl SearchLexicalShard for ShardArc {
 
             let query_list_len = query_list.len();
             let non_unique_query_list_len = non_unique_query_list.len();
-
             let mut matching_blocks: i32 = 0;
             let query_term_count = non_unique_terms.len();
             if query_list_len == 0 {
@@ -3404,6 +3403,7 @@ impl SearchLexicalShard for ShardArc {
                         .clone_from(&stopword_result_object.query_terms);
                     result_object.result_count = stopword_result_object.result_count;
                     result_object.result_count_total = stopword_result_object.result_count_total;
+
                     if result_type != ResultType::Count {
                         result_object
                             .results
@@ -3424,6 +3424,7 @@ impl SearchLexicalShard for ShardArc {
                             {
                                 continue;
                             }
+
                             let v = stopword_result_object.facets[&facet.field]
                                 .iter()
                                 .sorted_unstable_by(|a, b| b.1.cmp(&a.1))
@@ -3442,6 +3443,7 @@ impl SearchLexicalShard for ShardArc {
 
                     return result_object;
                 }
+
                 single_blockid(
                     &shard_ref,
                     &mut non_unique_query_list,

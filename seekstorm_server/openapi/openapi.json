@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "3.2.2"
+    "version": "3.3.0"
   },
   "servers": [
     {
@@ -146,6 +146,10 @@
                     ],
                     "description": "queries per sec per API key",
                     "minimum": 0
+                  },
+                  "demo": {
+                    "type": "boolean",
+                    "description": "create fixed demo api key instead of random api key for demo purposes (default=false)"
                   }
                 }
               }
@@ -523,7 +527,7 @@
         }
       }
     },
-    "/api/v1/index/{index_id}/doc_id": {
+    "/api/v1/index/{index_id}/iterator": {
       "get": {
         "tags": [
           "Iterator"
@@ -1216,7 +1220,7 @@
           "Document"
         ],
         "summary": "Delete Document(s) by Request Object",
-        "description": "Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.\nDocument ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.",
+        "description": "Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.\nImmediately effective, independent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.\nDocument ID can by obtained by search. When deleting by query (SearchRequestObject), it is advised to perform a dry run search first, to see which documents will be deleted.",
         "operationId": "delete_document_by_request_object",
         "parameters": [
           {
@@ -1573,8 +1577,8 @@
         "tags": [
           "Document"
         ],
-        "summary": "Delete Document",
-        "description": "Delete document by document_id from index with index_id\n⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!\nImmediately effective, indpendent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.",
+        "summary": "Delete Document by document ID",
+        "description": "Delete document by document_id from index with index_id\n⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!\nImmediately effective, independent of commit.\nIndex space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.\nBy manually deleting the delete.bin file the deleted documents can be recovered (until compaction).\nDeleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).\nFor minimal query latency delete index and reindexing documents is preferred over deleting documents (until compaction is implemented).\nBM25 scores are not updated (until compaction is implemented), but the impact is minimal.",
         "operationId": "delete_document_by_parameter",
         "parameters": [
           {

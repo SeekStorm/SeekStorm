@@ -4,7 +4,7 @@
 #![doc(html_favicon_url = "http://seekstorm.com/favicon.ico")]
 
 //! # `seekstorm`
-//! SeekStorm is an open-source, sub-millisecond full-text search library & multi-tenancy server written in Rust.
+//! SeekStorm is an open-source, sub-millisecond vector and lexical search library & multi-tenancy server written in Rust.
 //! The **SeekStorm library** can be embedded into your program, while the **SeekStorm server** is a standalone search server to be accessed via HTTP.
 //! ### Add required crates to your project
 //! ```text

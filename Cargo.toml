@@ -2,7 +2,8 @@
 resolver = "3"
 members = [
     "seekstorm",
-    "seekstorm_server"
+    "seekstorm_server",
+    "seekstorm_client"
 ]
 
 [workspace.lints.rust]

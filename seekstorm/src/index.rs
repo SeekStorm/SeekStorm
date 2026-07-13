@@ -274,6 +274,9 @@ pub struct ApikeyQuotaObject {
     #[schema(ignore)]
     /// for rate limit: number of violations within current window
     pub violation_count: usize,
+    /// create fixed demo api key instead of random api key for demo purposes (default=false)
+    #[serde(default)]
+    pub demo: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -3919,7 +3922,6 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                 let dimensions_clone = dimensions;
                                 shard_handle_vec.push(tokio::spawn(async move {
                                     let path = index_path_clone2.join("shards").join(i.to_string());
-
                                     open_shard(&path, true, vector_type_clone, dimensions_clone)
                                         .await
                                         .unwrap()
@@ -5076,11 +5078,12 @@ pub trait DeleteDocument {
 }
 
 /// Delete document from index by document id
+///
 /// Arguments:
 /// * `doc_id`: Document ID that specifies which document to delete from the index.
 ///   ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 ///
-/// Immediately effective, indpendent of commit.
+/// Immediately effective, independent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
@@ -5116,7 +5119,7 @@ pub trait DeleteDocuments {
 
 /// Delete documents from index by document id
 /// Document ID can by obtained by search.
-/// Immediately effective, indpendent of commit.
+/// Immediately effective, independent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).

@@ -546,7 +546,7 @@ impl Shard {
                     }
                 }
 
-                for (_medoid_index, centroid) in centroid_map.iter_mut() {
+                for centroid in centroid_map.values_mut() {
                     let sum_vector = match &self.block_vector_buffer[0].embedding {
                         Embedding::I8(_) => Embedding::I8(
                             centroid

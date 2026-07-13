@@ -11,7 +11,6 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::str;
 use std::sync::Arc;
-use std::time::Instant;
 use std::{convert::Infallible, net::SocketAddr};
 
 use chrono::Utc;
@@ -28,8 +27,8 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 
 use seekstorm::INDEX_RUNTIME;
 use seekstorm::index::{
-    ApikeyObject, CreateIndexRequest, DeleteApikeyRequest, Document, GetDocumentRequest,
-    GetIteratorRequest, SearchRequestObject, Synonym,
+    ApikeyObject, ApikeyQuotaObject, CreateIndexRequest, DeleteApikeyRequest, Document,
+    GetDocumentRequest, GetIteratorRequest, SearchRequestObject, Synonym,
 };
 use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
 
@@ -894,9 +893,6 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            println!("start ingestsift3");
-            let start_time = Instant::now();
-
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
 
             let task_result = std::thread::spawn(move || {
@@ -915,14 +911,9 @@ pub(crate) async fn http_request_handler(
             });
 
             match task_result.join().unwrap() {
-                Ok(status_object_json) => {
-                    let search_time = start_time.elapsed().as_nanos() as i64;
-                    println!("finished ingestsift {} s.", search_time / 1_000_000_000);
-
-                    Ok(Response::new(BoxBody::new(Full::new(
-                        status_object_json.into(),
-                    ))))
-                }
+                Ok(status_object_json) => Ok(Response::new(BoxBody::new(Full::new(
+                    status_object_json.into(),
+                )))),
                 Err(e) => HttpServerError::BadRequest(e.to_string()).into(),
             }
         }
@@ -1193,7 +1184,7 @@ pub(crate) async fn http_request_handler(
             }
         }
 
-        ("api", "v1", "index", _, "doc_id", "", &Method::POST) => {
+        ("api", "v1", "index", _, "iterator", "", &Method::POST) => {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -1250,7 +1241,7 @@ pub(crate) async fn http_request_handler(
             ))))
         }
 
-        ("api", "v1", "index", _, "doc_id", "", &Method::GET) => {
+        ("api", "v1", "index", _, "iterator", "", &Method::GET) => {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -1370,7 +1361,9 @@ pub(crate) async fn http_request_handler(
             ))))
         }
 
-        ("api", "v1", "apikey", "", "", "", &Method::POST) => {
+        ("api", "v1", "apikey", "", "", "", method)
+            if *method == Method::POST || method.as_str() == "QUERY" =>
+        {
             let Some(apikey_header) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -1383,16 +1376,20 @@ pub(crate) async fn http_request_handler(
                 return HttpServerError::Unauthorized.into();
             };
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
-            let apikey_quota_object = match serde_json::from_slice(&request_bytes) {
-                Ok(apikey_quota_object) => apikey_quota_object,
-                Err(e) => {
-                    return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
-                }
-            };
+            let apikey_quota_object: ApikeyQuotaObject =
+                match serde_json::from_slice(&request_bytes) {
+                    Ok(apikey_quota_object) => apikey_quota_object,
+                    Err(e) => {
+                        return Ok(status(StatusCode::BAD_REQUEST, e.to_string()));
+                    }
+                };
 
             let mut apikey = [0u8; 32];
-            SysRng.try_fill_bytes(&mut apikey).unwrap();
+            if !apikey_quota_object.demo {
+                SysRng.try_fill_bytes(&mut apikey).unwrap();
+            }
             let api_key_base64 = general_purpose::STANDARD.encode(apikey);
+
             let mut apikey_list_mut = apikey_list.write().await;
             create_apikey_api(
                 &index_path,

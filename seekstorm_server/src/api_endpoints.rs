@@ -878,11 +878,11 @@ pub(crate) async fn update_documents_api(
     Ok(index_arc.read().await.indexed_doc_count().await as u64)
 }
 
-/// Delete Document
+/// Delete Document by document ID
 ///
 /// Delete document by document_id from index with index_id
 /// ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
-/// Immediately effective, indpendent of commit.
+/// Immediately effective, independent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
@@ -921,7 +921,7 @@ pub(crate) async fn delete_document_by_parameter_api(
 /// Delete Document(s) by Request Object
 ///
 /// Delete document by document_id, by array of document_id (bulk), by query (SearchRequestObject) from index with index_id, or clear all documents from index.
-/// Immediately effective, indpendent of commit.
+/// Immediately effective, independent of commit.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
@@ -1024,7 +1024,7 @@ pub(crate) async fn delete_documents_by_query_api(
 #[utoipa::path(
     get,
     tag = "Iterator",
-    path = "/api/v1/index/{index_id}/doc_id",
+    path = "/api/v1/index/{index_id}/iterator",
     params(
         ("apikey" = String, Header, description = "YOUR_SECRET_API_KEY",example="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
         ("index_id" = u64, Path, description = "index id"),
@@ -1103,7 +1103,7 @@ pub(crate) async fn get_iterator_api_get(
 #[utoipa::path(
     post,
     tag = "Iterator",
-    path = "/api/v1/index/{index_id}/doc_id",
+    path = "/api/v1/index/{index_id}/iterator",
     params(
         ("apikey" = String, Header, description = "YOUR_SECRET_API_KEY",example="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
         ("index_id" = u64, Path, description = "index id"),

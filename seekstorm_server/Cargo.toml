@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm_server"
-version = "3.2.2"
+version = "3.3.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -24,7 +24,7 @@ path = "src/main.rs"
 
 [dependencies]
 # This forces the library to compile WITH gxhash when building the server binary
-seekstorm = { version = "3.2.2", path = "../seekstorm" , features = ["gxhash"], default-features = false} 
+seekstorm = { version = "3.3.0", path = "../seekstorm" , features = ["gxhash"], default-features = false} 
 ahash ={ version = "0.8.12", features = ["serde"]}
 base64 = "0.22.1"
 chrono = "0.4.45"
@@ -32,13 +32,13 @@ colored = "3.1.1"
 crossbeam-channel = "0.5.15"
 ctrlc = "3.5.2"
 http-body-util = "0.1.3"
-hyper = { version = "1.9.0", features = ["full", "server"] }
+hyper = { version = "1.10.1", features = ["full", "server"] }
 hyper-util = { version = "0.1.20", features = ["server", "tokio", "http1", "http2"] }
 indexmap = { version = "2.14.0", features = ["serde"] }
 itertools = "0.15.0"
 num-format = "0.4.4"
 num_cpus = "1.17.0"
-rand = { version = "0.10.1", features = ["chacha"] }
+rand = { version = "0.10.2", features = ["chacha"] }
 rkyv = "0.8.16"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.150", features = ["preserve_order"] }
@@ -53,15 +53,6 @@ winapi = { version = "0.3.9", features = ["winbase", "processthreadsapi"] }
 
 [lints]
 workspace = true
-
-[profile.release]
-lto = true
-opt-level = 3
-debug = false
-debug-assertions = false
-panic = "abort"
-overflow-checks = false
-strip = "debuginfo"
 
 [package.metadata.docs.rs]
 rustc-args = ["-C", "target-cpu=native"]
