@@ -2,10 +2,10 @@
 
 Rust client for the SeekStorm open-source, sub-millisecond vector & lexical search server.
 
-<img src="../assets/logo.png" width="450" alt="Logo"><br>
-[![Crates.io](https://img.shields.io/crates/v/seekstorm_client.svg)](https://crates.io/crates/seekstorm_client)
-[![Downloads](https://img.shields.io/crates/d/seekstorm_client.svg?style=flat-square)](https://crates.io/crates/seekstorm_client)
-[![Documentation](https://docs.rs/seekstorm_client/badge.svg)](https://docs.rs/seekstorm_client)
+<img src="assets/logo.png" width="450" alt="Logo"><br>
+[![Crates.io](https://img.shields.io/crates/v/seekstorm_client_rs.svg)](https://crates.io/crates/seekstorm_client_rs)
+[![Downloads](https://img.shields.io/crates/d/seekstorm_client_rs.svg?style=flat-square)](https://crates.io/crates/seekstorm_client_rs)
+[![Documentation](https://docs.rs/seekstorm_client_rs/badge.svg)](https://docs.rs/seekstorm_client_rs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
 ## Installation
