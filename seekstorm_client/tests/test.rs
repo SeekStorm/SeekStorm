@@ -4,17 +4,12 @@
 //! Note: The tests will automatically build the server binary if it doesn't exist, and launch it for testing. It will also clean up the index_test folder before running the tests.
 //! If a test fails, the server process needs to be killed manually, e.g. by restarting VSC
 
-use seekstorm::{
-    highlighter::Highlight,
-    index::{
-        ApikeyQuotaObject, Clustering, CreateIndexRequest, Document, DocumentCompression,
-        FrequentwordType, GetDocumentRequest, LexicalSimilarity, NgramSet, SearchRequestObject,
-        StemmerType, StopwordType, TokenizerType,
-    },
-    search::{QueryRewriting, QueryType, ResultType, SearchMode},
-    vector::Inference,
+use seekstorm_client_rs::{
+    ApikeyQuotaObject, Clustering, CreateIndexRequest, Document, DocumentCompression,
+    FrequentwordType, GetDocumentRequest, Highlight, Inference, LexicalSimilarity, NgramSet,
+    QueryRewriting, QueryType, RestClient, ResultType, SearchMode, SearchRequestObject,
+    StemmerType, StopwordType, TokenizerType,
 };
-use seekstorm_client_rs::api_endpoints::RestClient;
 use std::{env, fs, path::PathBuf, sync::LazyLock, time::Duration};
 use tokio::process::Command;
 use tokio::time::sleep;

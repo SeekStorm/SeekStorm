@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.3.1] - 2026-07-28
+
+### Changed
+
+- Re-export all SeekStorm objects required for the seekstorm_client in seekstorm_client\src\lib.rs  
+  This allows using the seekstorm_client crate without specifying seekstorm as additional dependency.
+- seekstorm_client\tests\test.rs and seekstorm_client\src\lib.rs (documentation comments) changed accordingly.
+
 ## [3.3.0] - 2026-07-12
 
 ### Added
