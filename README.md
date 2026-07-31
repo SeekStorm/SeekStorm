@@ -1880,8 +1880,8 @@ Are you missing something? Let us know via issue or discussions.
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
 * Client libraries/SDK for the SeekStorm server REST API
   * ✅ Rust
+  * ✅ Python
   * JavaScript
-  * Python
   * Java 
   * C#
   * C
