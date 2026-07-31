@@ -1362,7 +1362,7 @@ pub(crate) async fn http_request_handler(
         }
 
         ("api", "v1", "apikey", "", "", "", method)
-            if *method == Method::POST || method.as_str() == "QUERY" =>
+            if *method == Method::POST || *method == Method::QUERY =>
         {
             let Some(apikey_header) = apikey_header else {
                 return HttpServerError::Unauthorized.into();

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.3.2] - 2026-07-31
+
+### Fixed
+
+- aarch64 gates for Hasher_32 fixed.
+
+### Changed
+
+- potion-code-16M updated to [potion-code-16M-v2 from MinishLab](https://huggingface.co/minishlab/potion-code-16M-v2) in Inference::Model2Vec. 
+  - potion-code-16M-v2 is a fast static code embedding model optimized for code retrieval tasks.
+- `method.as_str() == "QUERY"` replaced with native `*method == Method::QUERY`.
+
 ## [3.3.1] - 2026-07-28
 
 ### Changed

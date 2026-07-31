@@ -263,7 +263,7 @@ impl fmt::Display for Quantization {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub enum Model {
     /// nomic-ai/CodeRankEmbed, 16M parameters, 256 dimensions, English only, code retrieval.
-    PotionCode16M,
+    PotionCode16MV2,
     /// bge-base-en-v1.5: 512 dimensions, 32.3M parameters, English only, general purpose
     PotionBase32M,
     /// bge-base-multilingual-v1.5: 256 dimensions, 128M parameters, multilingual, general purpose

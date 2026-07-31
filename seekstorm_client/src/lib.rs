@@ -461,6 +461,7 @@
 
 /// The `api_endpoints` module contains the implementation of the REST API client for SeekStorm.
 pub mod api_endpoints;
+pub use crate::api_endpoints::RestClient;
 pub use seekstorm::{
     highlighter::Highlight,
     index::{
@@ -472,4 +473,3 @@ pub use seekstorm::{
     search::{QueryRewriting, QueryType, ResultType, SearchMode},
     vector::Inference,
 };
-pub use crate::api_endpoints::RestClient;

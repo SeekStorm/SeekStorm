@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 3.3.1
+  version: 3.3.2
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -2820,7 +2820,7 @@ components:
       type: string
       description: Predefined model type for embeddings.
       enum:
-      - PotionCode16M
+      - PotionCode16MV2
       - PotionBase32M
       - PotionMultilingual128M
       - PotionRetrieval32M

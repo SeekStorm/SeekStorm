@@ -2132,9 +2132,9 @@ pub(crate) async fn create_index_root(
                                 *quantization,
                                 VectorSimilarity::Cosine,
                             ),
-                            Model::PotionCode16M => (
+                            Model::PotionCode16MV2 => (
                                 0,
-                                "minishlab/potion-code-16M",
+                                "minishlab/potion-code-16M-v2",
                                 Precision::F32,
                                 chunk_size,
                                 *quantization,
@@ -4116,6 +4116,7 @@ pub static IS_SIMD: LazyLock<bool> = LazyLock::new(|| *IS_AVX2 || *IS_NEON);
         target_feature = "sse2"
     ),
     all(
+        feature = "gxhash",
         target_arch = "aarch64",
         target_feature = "aes",
         target_feature = "neon"

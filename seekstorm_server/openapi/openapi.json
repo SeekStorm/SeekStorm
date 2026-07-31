@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "3.3.1"
+    "version": "3.3.2"
   },
   "servers": [
     {
@@ -3582,7 +3582,7 @@
         "type": "string",
         "description": "Predefined model type for embeddings.",
         "enum": [
-          "PotionCode16M",
+          "PotionCode16MV2",
           "PotionBase32M",
           "PotionMultilingual128M",
           "PotionRetrieval32M",
