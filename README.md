@@ -38,7 +38,7 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_py?tab=Apache-2.0-1-ov-file#readme)
 
 ## SeekStorm REST client (C#)
-[![NuGet version](https://badge.fury.io/nu/seekstorm_client_cs.svg)](https://badge.fury.io/nu/seekstorm_client_cs)
+[![NuGet version](https://badge.fury.io/nu/SeekStorm.Client.svg)](https://badge.fury.io/nu/SeekStorm.Client)
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_cs)](https://github.com/SeekStorm/seekstorm_client_cs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_cs?tab=Apache-2.0-1-ov-file#readme)
 <p>
