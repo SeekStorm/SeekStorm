@@ -315,12 +315,11 @@ impl RestClient {
         index_id: u64,
     ) -> Result<usize, (StatusCode, String)> {
         let url = format!("{}/api/v1/index/{}/doc", base_url, index_id);
-        let request_object = "clear";
         if let Ok(response) = self
             .client
             .delete(&url)
             .header("apikey", apikey_base64)
-            .json(&request_object)
+            .body("clear")
             .send()
             .await
         {
@@ -328,12 +327,17 @@ impl RestClient {
                 && let Ok(body) = response.text().await
             {
                 if status.is_success() {
-                    body.parse::<usize>().map_err(|_| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to parse response as usize".to_string(),
-                        )
-                    })
+                    serde_json::from_str::<Result<u64, String>>(&body)
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to parse response as Result<u64, String>".to_string(),
+                            )
+                        })
+                        .and_then(|result| match result {
+                            Ok(count) => Ok(count as usize),
+                            Err(message) => Err((StatusCode::INTERNAL_SERVER_ERROR, message)),
+                        })
                 } else {
                     Err((status, body))
                 }

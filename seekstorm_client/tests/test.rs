@@ -373,3 +373,40 @@ async fn test_25_get_document() {
     // 4. Teardown server safely
     let _ = server_child.kill().await;
 }
+
+/// clear_index test
+#[tokio::test]
+async fn test_26_clear_index() {
+    assert!(
+        SERVER_BINARY_PATH.exists(),
+        "Server binary not found at {:?}. Did you run 'cargo build' first?",
+        SERVER_BINARY_PATH
+    );
+
+    // 1. Automatically launch the freshly built server binary
+    let mut server_child = Command::new(&*SERVER_BINARY_PATH)
+        .arg(format!("local_ip=127.0.0.1"))
+        .arg(format!("local_port=80"))
+        .arg(format!("index_path=index_test"))
+        .spawn()
+        .expect("Failed to start seekstorm_server binary");
+
+    // 2. Let the server bind to the port
+    sleep(Duration::from_millis(600)).await;
+
+    let cleared_doc_count = CLIENT
+        .clear_index(BASE_URL, DEMO_API_KEY, 0)
+        .await
+        .expect("clear_index failed");
+    assert_eq!(cleared_doc_count, 0);
+
+    // Verify index state matches the returned cleared document count.
+    let index_info = CLIENT
+        .get_index_info(BASE_URL, DEMO_API_KEY, 0)
+        .await
+        .expect("Failed to fetch index info after clear_index");
+    assert_eq!(index_info.indexed_doc_count, 0);
+
+    // 4. Teardown server safely
+    let _ = server_child.kill().await;
+}
