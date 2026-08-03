@@ -1892,7 +1892,7 @@ Are you missing something? Let us know via issue or discussions.
   * ✅ Rust
   * ✅ Python
   * ✅ C#
-  * JavaScript
+  * TypeScript
   * Java 
   * C
   * Go
