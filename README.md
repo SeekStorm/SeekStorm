@@ -1897,10 +1897,10 @@ Are you missing something? Let us know via issue or discussions.
   * ✅ Rust
   * ✅ Python
   * ✅ C#
+  * ✅ Java 
   * TypeScript
-  * Java 
-  * C
   * Go
+  * C
 * Improved SIMD support
   - ✅ lexical search: 
 	- ✅ x86_64 (Intel, AMD)
