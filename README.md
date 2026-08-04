@@ -41,6 +41,11 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![NuGet version](https://badge.fury.io/nu/SeekStorm.Client.svg)](https://badge.fury.io/nu/SeekStorm.Client)
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_cs)](https://github.com/SeekStorm/seekstorm_client_cs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_cs?tab=Apache-2.0-1-ov-file#readme)
+
+## SeekStorm REST client (Java)
+[![Maven Central](https://img.shields.io/maven-central/v/org.seekstorm.client/seekstorm-java)](https://central.sonatype.com/artifact/org.seekstorm.client/seekstorm-java)
+[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_java)](https://github.com/SeekStorm/seekstorm_client_java)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_java?tab=Apache-2.0-1-ov-file#readme)
 <p>
   <a href="https://seekstorm.com">Website</a> | 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
