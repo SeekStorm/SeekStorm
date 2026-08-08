@@ -1105,8 +1105,10 @@ pub struct SchemaField {
     /// only stored fields are returned in the search results
     pub store: bool,
     /// only indexed fields can be searched
+    /// Even if index_lexical is true in the schema, the field in the actual document is optional. You can index documents without that field, but you cannot search for that field in those documents.
     pub index_lexical: bool,
     /// only indexed fields can be searched
+    /// Even if index_vector is true in the schema, the field in the actual document is optional. You can index documents without that field, but you cannot search for that field in those documents.
     #[serde(skip_serializing_if = "is_default_bool")]
     #[serde(default = "default_false")]
     pub index_vector: bool,
