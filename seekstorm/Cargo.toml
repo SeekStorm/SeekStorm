@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.3.3"
+version = "3.3.4"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -32,13 +32,13 @@ ctrlc = "3.5.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
 tokio = { version = "1.53.1", features = ["full"] }
-base64 = "0.23.0"
+base64 = "0.23.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
 gxhash = { version = "3.5.0", features = ["deterministic"], optional = true }
 symspell_complete_rs = "0.0.4"
 rand = { version = "0.10.2", features = ["chacha"]}
-futures = "0.3.32"
+futures = "0.3.33"
 num = "0.4.3"
 num-derive = "0.5.1"
 num-traits = "0.2.19"
@@ -53,7 +53,7 @@ itertools = "0.15.0"
 async-recursion = "1.1.1"
 zstd = "0.13.3"
 rayon = "1.12.0"
-aho-corasick = "1.1.4"
+aho-corasick = "1.1.5"
 smallvec = "1.15.2"
 memmap2 = "0.9.11"
 regex-syntax = "0.8.11"
@@ -68,7 +68,7 @@ utoipa = { version ="5.5.0",  features = ["preserve_order","preserve_path_order"
 num_cpus = "1.17.0"
 csv = "1.4.0"
 tokio-test = "0.4.5"
-snap = "1.1.1"
+snap = "1.1.2"
 lz4_flex = "0.14.0"
 bytemuck = { version = "1.25.2", features = ["derive","extern_crate_alloc"] }
 model2vec-rs = "0.2.1"
@@ -76,7 +76,7 @@ chunk = "0.10.2"
 snowball_stemmers_rs = "1.0.1"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }
 tabled = { version = "0.21.0", features = ["ansi"]}
-rkyv = "0.8.17"
+rkyv = "0.8.18"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version ="0.3.9",  features = ["winbase"]}

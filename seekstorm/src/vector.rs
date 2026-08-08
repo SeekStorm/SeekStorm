@@ -14,7 +14,7 @@ use crate::{
 use ahash::AHashSet;
 use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, from_bytes, try_cast_slice};
 use chunk::chunk;
-use memmap2::{Mmap, MmapOptions};
+use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -1034,32 +1034,11 @@ impl Shard {
                 }
             }
 
-            self.vector_file_mmap = unsafe {
-                MmapOptions::new()
-                    .len(0)
-                    .map(&self.vector_file)
-                    .expect("Unable to create Mmap")
-            };
-
-            if let Err(e) = self
-                .vector_file
-                .set_len(self.last_level_vector_file_start_pos)
-            {
-                println!(
-                    "Unable to vector_file.set_len in commit_vector_shard {} {} {:?}",
-                    self.index_path_string, self.indexed_doc_count, e
-                )
-            };
-
             let _ = self
                 .vector_file
                 .seek(SeekFrom::Start(self.last_level_vector_file_start_pos));
         } else {
             self.last_level_vector_file_start_pos = self.vector_file.stream_position().unwrap();
-        }
-
-        if self.chunks_string.is_empty() && self.block_vector_buffer.is_empty() {
-            return;
         }
 
         if !self.chunks_string.is_empty() {

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.4] - 2026-08-08
+
+### Fixed
+
+- Fixed intermittent indexing of documents with missing vector fields when the index schema has both lexical fields and vector fields (Inference::External).  Fixes issue #65. 
+- Fixed intermittent indexing of documents, that was broken since the new deterministic doc ID in v3.2.1.
+
 ## [3.3.3] - 2026-08-03
 
 ### Fixed

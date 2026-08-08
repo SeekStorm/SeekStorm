@@ -3980,6 +3980,9 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                 shard_vec.push(shard_arc);
                             }
 
+                            let indexed_doc_count = index_arc.read().await.indexed_doc_count;
+                            *index_arc.write().await.docid_global.write().await = indexed_doc_count;
+
                             index_arc.write().await.shard_number = shard_vec.len();
 
                             index_arc.write().await.shard_vec = shard_vec;
