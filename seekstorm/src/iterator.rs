@@ -378,8 +378,6 @@ pub(crate) async fn search_iterator_index(
         suggestions: Vec::new(),
     };
 
-    let indexed_doc_count = index_arc.read().await.indexed_doc_count().await;
-
     if result_type != ResultType::Count {
         let iterator = if result_sort.len() == 1
             && !result_sort.is_empty()
@@ -407,7 +405,7 @@ pub(crate) async fn search_iterator_index(
 
         result_object.result_count = result_object.results.len();
     }
-    result_object.result_count_total = indexed_doc_count;
+    result_object.result_count_total = index_arc.read().await.current_doc_count().await;
 
     result_object
 }

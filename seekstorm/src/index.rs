@@ -5069,6 +5069,8 @@ impl Close for IndexArc {
                 shard_clone.write().await.docstore_file_mmap = mmap
                     .make_read_only()
                     .expect("Unable to make Mmap read-only");
+
+                shard_clone.write().await.index_option = None;
             }));
         }
         future::join_all(result_object_list).await;

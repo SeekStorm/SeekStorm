@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.3.4"
+version = "3.3.5"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -38,7 +38,7 @@ ahash ={ version = "0.8.12", features = ["serde"]}
 gxhash = { version = "3.5.0", features = ["deterministic"], optional = true }
 symspell_complete_rs = "0.0.4"
 rand = { version = "0.10.2", features = ["chacha"]}
-futures = "0.3.33"
+futures = "0.3.34"
 num = "0.4.3"
 num-derive = "0.5.1"
 num-traits = "0.2.19"
@@ -46,7 +46,7 @@ regex = "1.13.1"
 lazy_static = "1.5.0"
 hyper = { version = "1.11.0", features = ["full","server"] }
 hyper-util = { version ="0.1.20",  features = ["server","tokio","http1","http2"]}
-http-body-util = "0.1.4"
+http-body-util = "0.1.5"
 url = "2.5.8"
 sha2 = "0.11.0"
 itertools = "0.15.0"
