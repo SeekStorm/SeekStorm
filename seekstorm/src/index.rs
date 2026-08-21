@@ -4942,6 +4942,12 @@ impl Index {
             }));
         }
         future::join_all(result_object_list).await;
+
+        *self.docid_global.write().await = 0;
+        self.indexed_doc_count = 0;
+        self.indexed_vector_count = 0;
+        self.indexed_cluster_count = 0;
+        self.deleted_doc_count = 0;
     }
 
     /// Delete index from disc and ram
