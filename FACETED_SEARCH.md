@@ -456,8 +456,8 @@ let result_sort = vec![ResultSort {
 **Query facets result object**: Query facets with counts for all distinct values are returned in **facets** property of the search result.
 
 For all facet fields, it is counted how often each distinct value occurs **within all indexed documents matching the query**.
-If the query is **not empty**, then sorted/filtered **query facets** are returned.
-If the query is **empty**, then sorted/filtered **index facets** are returned (like with get_index_string_facets).
+If the query is **not empty**, or if it is empty and **enable_empty_query** is true, then sorted/filtered **query facets** are returned.
+If the query is **empty** and **enable_empty_query** is false, then no query is executed and sorted/filtered **index facets** are returned (like with get_index_string_facets).
 
 Within each facet field, the values are sorted by their occurrence count **within all indexed documents matching the query** in descending order.
 Numerical range & String value facet counting depend both on the query and on the applied range & string facet filtering.

@@ -994,8 +994,8 @@ pub type Point = Vec<f64>;
 ///
 /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
 ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
-///   The facet counts depend only from the query and not which facet filters are selected.
+///   If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
+///   the query facets are counted over all documents matching the query and the facet filter.
 ///   Examples:
 ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
 ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
@@ -1012,7 +1012,8 @@ pub type Point = Vec<f64>;
 ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
 ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
 ///  
-///   If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+///   If query_string is empty and enable_empty_query is false, then no query is executed and index facets (collected at index time) are returned.
+///   Otherwise query facets (collected at query time) are returned, counted over the documents matching the query and the facet filter.
 ///   Facets are defined in 3 different places:
 ///   the facet fields are defined in schema at create_index,
 ///   the facet field values are set in index_document at index time,
@@ -1096,8 +1097,8 @@ pub trait Search {
     ///
     /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
     ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-    ///   If the query is changed then both facet counts and search results are changed. If the facet filter is changed then only the search results are changed, while facet counts remain unchanged.
-    ///   The facet counts depend only from the query and not which facet filters are selected.
+    ///   If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
+    ///   the query facets are counted over all documents matching the query and the facet filter.
     ///   Examples:
     ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
     ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
@@ -1125,7 +1126,8 @@ pub trait Search {
     /// ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `meta.spelling_correction`.
     ///  
     /// Facets:
-    ///    If query_string is empty, then index facets (collected at index time) are returned, otherwise query facets (collected at query time) are returned.
+    ///    If query_string is empty and enable_empty_query is false, then no query is executed and index facets (collected at index time) are returned.
+    ///    Otherwise query facets (collected at query time) are returned, counted over the documents matching the query and the facet filter.
     ///    Facets are defined in 3 different places:
     ///    the facet fields are defined in schema at create_index,
     ///    the facet field values are set in index_document at index time,
@@ -3596,7 +3598,7 @@ impl SearchLexicalShard for ShardArc {
             + result_count_arc.load(Ordering::Relaxed);
 
         if !search_result.query_facets.is_empty() {
-            result_object.facets = if result_object.query_terms.is_empty() {
+            result_object.facets = if query_string.is_empty() && !enable_empty_query {
                 shard_ref
                     .get_index_string_facets_shard(query_facets)
                     .unwrap_or_default()

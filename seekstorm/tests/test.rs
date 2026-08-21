@@ -5,12 +5,13 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, DeleteDocument, DocumentCompression, FileType, FrequentwordType,
-    IndexDocument, IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType,
-    StopwordType, TokenizerType, create_index, open_index,
+    IndexArc, IndexDocument, IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet,
+    StemmerType, StopwordType, TokenizerType, create_index, open_index,
 };
 use seekstorm::iterator::GetIterator;
 use seekstorm::search::{
-    FacetValue, QueryRewriting, QueryType, ResultSort, ResultType, Search, SearchMode, SortOrder,
+    FacetFilter, FacetValue, QueryFacet, QueryRewriting, QueryType, ResultSort, ResultType, Search,
+    SearchMode, SortOrder,
 };
 use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
 use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
@@ -742,4 +743,132 @@ async fn test_14_query_index_vector_external() {
 
     let result = result_object.result_count_total;
     assert_eq!(result, 3);
+}
+
+#[tokio::test]
+/// query facets are scoped to the query and to the facet filter, also across shards
+async fn test_15_facet_scope() {
+    let index_path = Path::new("tests/index_facet_test/");
+    let _ = fs::remove_dir_all(index_path);
+
+    let schema_json = r#"
+    [{"field":"id","field_type":"String32","store":true,"index_lexical":false},
+    {"field":"text","field_type":"Text","store":true,"index_lexical":true,"longest":true},
+    {"field":"kind","field_type":"String16","store":true,"index_lexical":false,"facet":true}]"#;
+    let schema = serde_json::from_str(schema_json).unwrap();
+
+    let meta = IndexMetaObject {
+        id: 1,
+        name: "test_facet_index".into(),
+        lexical_similarity: LexicalSimilarity::Bm25f,
+        tokenizer: TokenizerType::UnicodeAlphanumeric,
+        stemmer: StemmerType::None,
+        stop_words: StopwordType::None,
+        frequent_words: FrequentwordType::None,
+        ngram_indexing: NgramSet::SingleTerm as u8,
+        document_compression: DocumentCompression::Snappy,
+        access_type: AccessType::Mmap,
+        spelling_correction: None,
+        query_completion: None,
+        clustering: Clustering::None,
+        inference: Inference::None,
+    };
+
+    // 3 shards: the 3 documents are distributed round-robin, one document per shard
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), 11, false, Some(3))
+        .await
+        .unwrap();
+
+    let documents_json = r#"
+    [{"id":"a","text":"alpha only","kind":"invoice"},
+    {"id":"b","text":"alpha and bravo","kind":"invoice"},
+    {"id":"c","text":"charlie only","kind":"minutes"}]"#;
+    let documents_vec = serde_json::from_str(documents_json).unwrap();
+    index_arc.index_documents(documents_vec).await;
+    index_arc.commit().await;
+
+    let result = index_arc.read().await.indexed_doc_count().await;
+    assert_eq!(result, 3);
+
+    // returns the total number of results and the facet counts of the "kind" facet field
+    async fn kind_facets(
+        index_arc: &IndexArc,
+        query: &str,
+        enable_empty_query: bool,
+        facet_filter: Vec<FacetFilter>,
+    ) -> (usize, Vec<(String, usize)>) {
+        let result_object = index_arc
+            .search(
+                query.into(),
+                None,
+                QueryType::Intersection,
+                SearchMode::Lexical,
+                enable_empty_query,
+                0,
+                10,
+                ResultType::TopkCount,
+                false,
+                Vec::new(),
+                vec![QueryFacet::String16 {
+                    field: "kind".into(),
+                    prefix: "".into(),
+                    length: 10,
+                }],
+                facet_filter,
+                Vec::new(),
+                QueryRewriting::SearchOnly,
+            )
+            .await;
+
+        let mut facets = result_object
+            .facets
+            .get("kind")
+            .cloned()
+            .unwrap_or_default();
+        facets.sort();
+        (result_object.result_count_total, facets)
+    }
+
+    // query matching 2 documents in 2 shards, both documents with the same facet value
+    let (count, facets) = kind_facets(&index_arc, "alpha", false, Vec::new()).await;
+    assert_eq!(count, 2);
+    assert_eq!(facets, vec![("invoice".to_string(), 2)]);
+
+    // query matching a single document in a single shard
+    let (count, facets) = kind_facets(&index_arc, "charlie", false, Vec::new()).await;
+    assert_eq!(count, 1);
+    assert_eq!(facets, vec![("minutes".to_string(), 1)]);
+
+    // query matching no document: no facet counts, in none of the shards
+    let (count, facets) = kind_facets(&index_arc, "zulu", false, Vec::new()).await;
+    assert_eq!(count, 0);
+    assert!(facets.is_empty());
+
+    // empty query with enable_empty_query: query facets over all documents
+    let (count, facets) = kind_facets(&index_arc, "", true, Vec::new()).await;
+    assert_eq!(count, 3);
+    assert_eq!(
+        facets,
+        vec![("invoice".to_string(), 2), ("minutes".to_string(), 1)]
+    );
+
+    // the facet filter narrows both the search results and the facet counts
+    let facet_filter = vec![FacetFilter::String16 {
+        field: "kind".into(),
+        filter: vec!["invoice".into()],
+    }];
+    let (count, facets) = kind_facets(&index_arc, "", true, facet_filter).await;
+    assert_eq!(count, 2);
+    assert_eq!(facets, vec![("invoice".to_string(), 2)]);
+
+    // empty query without enable_empty_query: no query is executed, index facets are returned
+    let (count, facets) = kind_facets(&index_arc, "", false, Vec::new()).await;
+    assert_eq!(count, 0);
+    assert_eq!(
+        facets,
+        vec![("invoice".to_string(), 2), ("minutes".to_string(), 1)]
+    );
+
+    index_arc.close().await;
+    let _ = fs::remove_dir_all(index_path);
 }
