@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - clear_index fixed: global index counts are reset to zero. Fixes issue #68. 
+- Test suite fixed: `tests/test.rs` was orphaned by the workspace refactoring in v3.2.2 (the workspace root has no `[package]` since then, so the directory belonged to no crate) and was neither compiled nor executed by `cargo test`. Moved into the `seekstorm` package.
 
 ## [3.3.5] - 2026-08-12
 
