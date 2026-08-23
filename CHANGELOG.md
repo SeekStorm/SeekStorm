@@ -5,16 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.3.6] - 2026-08-21
+## [3.3.7] - 2026-08-23
 
-### Fixed
-
-- clear_index fixed: global index counts are reset to zero. Fixes issue #68. 
 - Query facets fixed: the returned facet counts were the counts of all indexed documents instead of the counts within the documents matching the query and the facet filter.
   Index facets were returned whenever the query terms of a shard were empty, which is also the case for a shard that contains none of the query terms of an intersection or phrase query.
   As documents are distributed over the shards, every such shard contributed its index facets to the merged result.
   Now index facets are only returned if no query is executed at all (empty query string and enable_empty_query=false).
 - Test suite fixed: `tests/test.rs` was orphaned by the workspace refactoring in v3.2.2 (the workspace root has no `[package]` since then, so the directory belonged to no crate) and was neither compiled nor executed by `cargo test`. Moved into the `seekstorm` package.
+- Fixes contributed by @debe in #69
+
+## [3.3.6] - 2026-08-21
+
+### Fixed
+
+- clear_index fixed: global index counts are reset to zero. Fixes issue #68. 
 
 ## [3.3.5] - 2026-08-12
 
