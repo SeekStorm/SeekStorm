@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.3.7] - 2026-08-23
 
+### Fixed
+
 - Query facets fixed: the returned facet counts were the counts of all indexed documents instead of the counts within the documents matching the query and the facet filter.
   Index facets were returned whenever the query terms of a shard were empty, which is also the case for a shard that contains none of the query terms of an intersection or phrase query.
   As documents are distributed over the shards, every such shard contributed its index facets to the merged result.
