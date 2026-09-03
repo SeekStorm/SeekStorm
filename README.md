@@ -27,25 +27,27 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 [![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
 
-## SeekStorm REST client (Pure Python)
-[![PyPI](https://img.shields.io/pypi/v/seekstorm-client-pure-py?label=PyPI)](https://pypi.org/project/seekstorm-client-pure-py/)
+## SeekStorm REST client (Python)
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_pure_py)](https://github.com/SeekStorm/seekstorm_client_pure_py)
+[![PyPI](https://img.shields.io/pypi/v/seekstorm-client-pure-py?label=PyPI)](https://pypi.org/project/seekstorm-client-pure-py/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_pure_py?tab=Apache-2.0-1-ov-file#readme)
 
-## SeekStorm REST client (Python wrapper via PyO3/Maturin)
-[![PyPI](https://img.shields.io/pypi/v/seekstorm-client-py?label=PyPI)](https://pypi.org/project/seekstorm-client-py/)
-[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_py)](https://github.com/SeekStorm/seekstorm_client_py)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_py?tab=Apache-2.0-1-ov-file#readme)
-
 ## SeekStorm REST client (C#)
-[![NuGet version](https://badge.fury.io/nu/SeekStorm.Client.svg)](https://badge.fury.io/nu/SeekStorm.Client)
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_cs)](https://github.com/SeekStorm/seekstorm_client_cs)
+[![NuGet version](https://badge.fury.io/nu/SeekStorm.Client.svg)](https://badge.fury.io/nu/SeekStorm.Client)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_cs?tab=Apache-2.0-1-ov-file#readme)
 
 ## SeekStorm REST client (Java)
-[![Maven Central](https://img.shields.io/maven-central/v/org.seekstorm.client/seekstorm-java)](https://central.sonatype.com/artifact/org.seekstorm.client/seekstorm-java)
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_java)](https://github.com/SeekStorm/seekstorm_client_java)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_java?tab=Apache-2.0-1-ov-file#readme)
+
+## SeekStorm Instant search adapter
+A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend — no UI rewrite required.  
+Or, use the InstantSearch widget library to build a fresh UI from scratch, with SeekStorm's REST API as the backend.
+
+[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm-instantsearch-adapter)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter?tab=MIT-1-ov-file#readme)
+
 <p>
   <a href="https://seekstorm.com">Website</a> | 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
