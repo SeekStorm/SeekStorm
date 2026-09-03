@@ -76,6 +76,7 @@ The identical index file format for both RAM and memory mapping mode, allows to 
 
 * index.bin : contains posting lists with document IDs and term positions. Posting lists are compressed with roaring bitmaps. Term positions of each field are delta compressed and VINT encoded.
 * index.json : contains index meta data such as similarity (e.g. Bm25), access type (e.g. Ram/Mmap), tokenizer (e.g. AsciiAlphabetic).
+* vector.bin : contains vectors and clusters.
 * delete.bin : contains document IDs of deleted documents. By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 * facet.bin : contains the serialized values of all facet fields of all documents in the index
 * facet.json : contains the unique values of all facet fields of all documents in the index

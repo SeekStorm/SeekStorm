@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.8] - 2026-09-03
+
+### Added
+
+- Added CORS support. Cross-Origin Resource Sharing (CORS) safely relaxes the same-origin policy, allowing a web page served from one domain to access resources (e.g. a REST API) hosted on a different domain.
+
+### Changed
+
+-  ResultSort base is now optional when deserializing from json, with default=FacetValue::None.
+
+### Fixed
+
+- Fixed search.rs so invalid facet range indices are skipped safely with filter_map.
+- An existing demo api key was not re-used for the server console command `ingest` when the -k was parameter not explicitly specified (although -k was documented as having a default), 
+  leading to the re-creation of a duplicate API key, while the previous one with any existing index was neglected.
+
 ## [3.3.7] - 2026-08-23
 
 ### Fixed
@@ -28,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed empty-query result_count_total included deleted documents. Fixes issue #66. 
 - Fixed Memory leak: Shard.index_option Arc reference cycle — index never released after close(). Fixes issue #67. 
-
+ 
 ## [3.3.4] - 2026-08-08
 
 ### Fixed
@@ -42,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SeekStorm REST client (Rust): clear_index endpoint fixed.
 
-## [3.3.2] - 2026-07-31
+## [3.3.2] - 2026-07-29
 
 ### Fixed
 

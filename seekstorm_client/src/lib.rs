@@ -356,7 +356,7 @@
 //!         fields: Vec::new(),
 //!         distance_fields: Vec::new(),
 //!     };
-//
+//!
 //!     let doc=CLIENT.get_document(BASE_URL, DEMO_API_KEY, index_id,doc_id,&get_document_request).await.unwrap();
 //! # });
 //! ```
@@ -380,7 +380,7 @@
 //!   include_document: true,
 //!   fields: Vec::new(),
 //! };
-//
+//!
 //! let result=CLIENT.document_iterator(BASE_URL, DEMO_API_KEY, index_id,get_iterator_request).await;
 //! # });
 //! ```

@@ -21,6 +21,7 @@ use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::{
     Method, Request, Response, StatusCode,
     body::{Bytes, Incoming},
+    header::HeaderValue,
     service::service_fn,
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -90,6 +91,15 @@ pub(crate) fn status(
         .status(status)
         .body(BoxBody::new(Full::new(error_message.into())))
         .unwrap()
+}
+
+fn with_cors_headers(
+    mut response: Response<BoxBody<Bytes, Infallible>>,
+) -> Response<BoxBody<Bytes, Infallible>> {
+    response
+        .headers_mut()
+        .insert("Access-Control-Allow-Origin", HeaderValue::from_static("*"));
+    response
 }
 
 enum HttpServerError {
@@ -180,6 +190,16 @@ pub(crate) async fn http_request_handler(
     _remote_addr: SocketAddr,
     force_shard_number: Option<usize>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
+    if req.method() == Method::OPTIONS {
+        return Ok(Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+            .header("Access-Control-Allow-Headers", "content-type, apikey")
+            .body(BoxBody::new(Full::new(Bytes::new())))
+            .unwrap());
+    }
+
     let apikey_header = req
         .headers()
         .get("apikey")
@@ -1528,16 +1548,16 @@ pub(crate) async fn http_server(
                                 let apikey_list = apikey_list.clone();
                                 let force_shard_number = force_shard_number;
                                 async move {
-                                    let t: Result<_, Infallible> = http_request_handler(
+                                    let response = http_request_handler(
                                         index_path,
                                         apikey_list,
                                         request,
                                         remote_address,
                                         force_shard_number,
                                     )
-                                    .await;
+                                    .await?;
 
-                                    t
+                                    Ok::<_, Infallible>(with_cors_headers(response))
                                 }
                             }),
                         )

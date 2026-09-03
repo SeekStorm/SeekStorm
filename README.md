@@ -1765,7 +1765,7 @@ quit
 **Customizing**
 
 Do you want to use something similar for your own project?
-Have a look at the [ingest](/src/seekstorm_server/README.md#console-commands) and [web UI](/src/seekstorm_server/README.md#open-embedded-web-ui-in-browser) documentation.
+Have a look at the [ingest](/seekstorm_server/README.md#console-commands) and [web UI](/seekstorm_server/README.md#open-embedded-web-ui-in-browser) documentation.
 
 
 

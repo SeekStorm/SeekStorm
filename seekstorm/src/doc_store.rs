@@ -104,17 +104,19 @@ impl Shard {
         } else {
             let level = doc_id >> 16;
 
-            let pointer;
-            let previous_pointer;
             let position =
                 self.level_index[level].docstore_pointer_docs_pointer + (doc_id_local * 4);
 
-            if doc_id_local == 0 {
-                previous_pointer = ROARING_BLOCK_SIZE * 4;
-                pointer = read_u32(&self.docstore_file_mmap, position) as usize;
+            let (previous_pointer, pointer) = if doc_id_local == 0 {
+                (
+                    ROARING_BLOCK_SIZE * 4,
+                    read_u32(&self.docstore_file_mmap, position) as usize,
+                )
             } else {
-                previous_pointer = read_u32(&self.docstore_file_mmap, position - 4) as usize;
-                pointer = read_u32(&self.docstore_file_mmap, position) as usize;
+                (
+                    read_u32(&self.docstore_file_mmap, position - 4) as usize,
+                    read_u32(&self.docstore_file_mmap, position) as usize,
+                )
             };
 
             if previous_pointer == pointer {
@@ -343,12 +345,11 @@ impl Shard {
                 .write(&self.compressed_docstore_segment_block_buffer);
 
             if self.meta.access_type == AccessType::Ram {
-                self.level_index[level].docstore_pointer_docs.append(
-                    &mut self
-                        .compressed_docstore_segment_block_buffer
-                        .drain(..)
-                        .collect(),
-                );
+                self.level_index[level]
+                    .docstore_pointer_docs
+                    .append(&mut std::mem::take(
+                        &mut self.compressed_docstore_segment_block_buffer,
+                    ));
             }
         }
 

@@ -821,3 +821,32 @@ content-type: application/json
     }
 
 }
+
+// e-commerce demo
+
+//create in console
+
+### create index
+POST http://127.0.0.1:80/api/v1/index HTTP/1.1
+apikey: {{api_key}}
+content-type: application/json
+
+{
+    "schema":
+    [
+        { "field": "objectID",    "field_type": "String32", "store": true,  "index_lexical": false },
+        { "field": "name",        "field_type": "Text",     "store": true,  "index_lexical": true  },
+        { "field": "description", "field_type": "Text",     "store": true,  "index_lexical": true  },
+        { "field": "image",       "field_type": "String32", "store": true,  "index_lexical": false },
+        { "field": "url",         "field_type": "String32", "store": true,  "index_lexical": false },
+        { "field": "categories",  "field_type": "StringSet32", "store": true, "index_lexical": false, "facet": true },
+        { "field": "brand",       "field_type": "String32", "store": true,  "index_lexical": false, "facet": true },
+        { "field": "type",        "field_type": "String32", "store": true,  "index_lexical": false, "facet": true },
+        { "field": "rating",      "field_type": "U8",      "store": true,  "index_lexical": false, "facet": true },
+        { "field": "popularity",  "field_type": "U32",      "store": true,  "index_lexical": false, "facet": true },
+        { "field": "price",       "field_type": "F64",      "store": true,  "index_lexical": false, "facet": true }
+    ], 
+    "index_name": "test_index",
+    "similarity": "Bm25fProximity",
+    "tokenizer": "UnicodeAlphanumeric"
+}

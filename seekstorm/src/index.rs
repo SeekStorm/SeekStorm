@@ -274,13 +274,13 @@ pub struct ApikeyQuotaObject {
     #[schema(ignore)]
     /// for rate limit: number of violations within current window
     pub violation_count: usize,
-    /// create fixed demo api key instead of random api key for demo purposes (default=false)
+    /// create fixed demo api key instead of random api key for demonstration, example, and documentation purposes (default=false)
     #[serde(default)]
     pub demo: bool,
 }
 
-#[derive(Deserialize, Serialize)]
 /// API key object
+#[derive(Deserialize, Serialize)]
 pub struct ApikeyObject {
     /// API key id: self maintained, also used for index directory path
     pub id: u64,
@@ -2964,24 +2964,24 @@ pub(crate) fn get_max_score(
 
     let posting_pointer_size_sum;
     let rank_position_pointer;
-    let posting_pointer_size;
-    let embed_flag;
-    if max_p_docid < pointer_pivot_p_docid {
+
+    let (posting_pointer_size, embed_flag) = if max_p_docid < pointer_pivot_p_docid {
         posting_pointer_size_sum = max_p_docid as u32 * 2;
         rank_position_pointer = read_u16(
             byte_array,
             rank_position_pointer_range as usize + posting_pointer_size_sum as usize,
         ) as u32;
-        posting_pointer_size = 2;
-        embed_flag = (rank_position_pointer & 0b10000000_00000000) != 0;
+        (2, (rank_position_pointer & 0b10000000_00000000) != 0)
     } else {
         posting_pointer_size_sum = (max_p_docid as u32) * 3 - pointer_pivot_p_docid as u32;
         rank_position_pointer = read_u32(
             byte_array,
             rank_position_pointer_range as usize + posting_pointer_size_sum as usize,
         );
-        posting_pointer_size = 3;
-        embed_flag = (rank_position_pointer & 0b10000000_00000000_00000000) != 0;
+        (
+            3,
+            (rank_position_pointer & 0b10000000_00000000_00000000) != 0,
+        )
     };
 
     let positions_pointer = if embed_flag {
@@ -3924,6 +3924,7 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                 let dimensions_clone = dimensions;
                                 shard_handle_vec.push(tokio::spawn(async move {
                                     let path = index_path_clone2.join("shards").join(i.to_string());
+
                                     open_shard(&path, true, vector_type_clone, dimensions_clone)
                                         .await
                                         .unwrap()
@@ -3978,7 +3979,6 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                                     shard_arc.read().await.indexed_cluster_count;
                                 index_arc.write().await.deleted_doc_count +=
                                     shard_arc.read().await.delete_hashset.len();
-                                let _shard_id = shard_arc.read().await.meta.id;
                                 shard_vec.push(shard_arc);
                             }
 

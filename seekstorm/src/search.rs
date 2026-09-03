@@ -418,7 +418,7 @@ pub enum Ranges {
 }
 
 /// FacetValue: Facet field value types
-#[derive(Clone, PartialEq, Serialize, Deserialize, ToSchema, Debug)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, ToSchema, Debug, Default)]
 pub enum FacetValue {
     /// Boolean value
     Bool(bool),
@@ -451,6 +451,7 @@ pub enum FacetValue {
     /// Point value: latitude/lat, longitude/lon
     Point(Point),
     /// No value
+    #[default]
     None,
 }
 
@@ -897,6 +898,7 @@ pub struct ResultSort {
     /// Sort order: Ascending or Descending
     pub order: SortOrder,
     /// Base value/point for (geo) proximity sorting
+    #[serde(default)]
     pub base: FacetValue,
 }
 
@@ -3039,6 +3041,7 @@ impl SearchLexicalShard for ShardArc {
                 1,
             )
             .await;
+
             if include_uncommitted && shard_ref.uncommitted {
                 shard_ref.search_lexical_shard_uncommitted(
                     &unique_terms,
@@ -3360,6 +3363,7 @@ impl SearchLexicalShard for ShardArc {
             }
             not_query_list = not_query_list_map.into_values().collect();
             query_list = query_list_map.into_values().collect();
+
             if shard_ref.meta.access_type == AccessType::Mmap {
                 for plo in query_list.iter_mut() {
                     plo.blocks = &blocks_vec[plo.blocks_index - 1]
@@ -3436,6 +3440,7 @@ impl SearchLexicalShard for ShardArc {
                                 })
                                 .take(facet.length.max(facet_cap) as usize)
                                 .collect::<Vec<_>>();
+
                             if !v.is_empty() {
                                 facets.insert(facet.field.clone(), v);
                             }
@@ -3462,6 +3467,7 @@ impl SearchLexicalShard for ShardArc {
                 .await;
             } else if query_type_mut == QueryType::Union {
                 search_result.skip_facet_count = true;
+
                 if result_type == ResultType::Count && query_list_len != 2 {
                     union_blockid(
                         &shard_ref,
@@ -3589,6 +3595,7 @@ impl SearchLexicalShard for ShardArc {
                     .results
                     .sort_by(|a, b| search_result.topk_candidates.result_ordering_shard(*b, *a));
             }
+
             if offset > 0 {
                 result_object.results.drain(..offset);
             }
@@ -3706,50 +3713,49 @@ impl SearchLexicalShard for ShardArc {
                             .values
                             .iter()
                             .sorted_unstable_by(|a, b| a.0.cmp(b.0))
-                            .map(|(a, c)| {
-                                (
-                                    match &facet.ranges {
-                                        Ranges::U8(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::U16(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::U32(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::U64(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::I8(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::I16(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::I32(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::I64(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::Timestamp(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::F32(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::F64(_range_type, ranges) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
-                                        Ranges::Point(_range_type, ranges, _base, _unit) => {
-                                            ranges[*a as usize].0.clone()
-                                        }
+                            .filter_map(|(a, c)| {
+                                let range_index = *a as usize;
+                                let label = match &facet.ranges {
+                                    Ranges::U8(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::U16(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::U32(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::U64(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::I8(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::I16(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::I32(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::I64(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::Timestamp(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::F32(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::F64(_range_type, ranges) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    Ranges::Point(_range_type, ranges, _base, _unit) => {
+                                        ranges.get(range_index).map(|value| value.0.clone())
+                                    }
+                                    _ => return None,
+                                }?;
 
-                                        _ => "".into(),
-                                    },
-                                    *c,
-                                )
+                                Some((label, *c))
                             })
                             .filter(|(a, _c)| {
                                 facet.prefix.is_empty() || a.starts_with(&facet.prefix)

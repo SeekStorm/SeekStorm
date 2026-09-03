@@ -823,16 +823,19 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                 if data_path.exists() {
 
                                     let apikey_list_clone2=apikey_list_clone.clone();
-                                    let apikey_option=if dash.contains_key("k") {
+
+                                    let existing_apikey_option=if dash.contains_key("k") {
                                         get_apikey_hash(dash.get("k").unwrap_or(&"".to_owned()).to_string(), &apikey_list_clone2).await
                                     } else {
-                                        None
+                                        get_apikey_hash(demo_api_key_base64.clone(), &apikey_list_clone2).await
                                     };
 
+
                                     let mut apikey_list_mut = apikey_list_clone.write().await;
+
                                     let apikey_object_option=if dash.contains_key("k") {
 
-                                        if let Some(apikey_hash) = apikey_option
+                                        if let Some(apikey_hash) = existing_apikey_option
                                         {
                                             apikey_list_mut.get_mut(&apikey_hash)
                                         } else if dash.get("k").unwrap_or(&"".to_owned())==&demo_api_key_base64{
@@ -855,20 +858,27 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                             None
                                         }
                                     } else {
-                                        let apikey_quota_object=ApikeyQuotaObject {
-                                            indices_max: 10,
-                                            indices_size_max: 100_000_000_000,
-                                            documents_max: 100_000_000,
-                                            operations_max: 1_000_000_000,
-                                            rate_limit:None,
-                                            ..Default::default()
-                                        };
-                                        Some(create_apikey_api(
-                                            &index_path,
-                                            apikey_quota_object,
-                                            &demo_api_key,
-                                            &mut apikey_list_mut,
-                                        ))
+
+
+                                        if let Some(apikey_hash) = existing_apikey_option
+                                        {
+                                            apikey_list_mut.get_mut(&apikey_hash)
+                                        } else {
+                                            let apikey_quota_object=ApikeyQuotaObject {
+                                                indices_max: 10,
+                                                indices_size_max: 100_000_000_000,
+                                                documents_max: 100_000_000,
+                                                operations_max: 1_000_000_000,
+                                                rate_limit:None,
+                                                ..Default::default()
+                                            };
+                                            Some(create_apikey_api(
+                                                &index_path,
+                                                apikey_quota_object,
+                                                &demo_api_key,
+                                                &mut apikey_list_mut,
+                                            ))
+                                        }
                                     };
 
                                     if let Some(apikey_object) = apikey_object_option {
@@ -878,7 +888,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                         if dash.contains_key("i") || !md.is_file() || data_path.display().to_string().to_lowercase().ends_with(".pdf")
                                         || data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME) || data_path.display().to_string().to_lowercase().ends_with(MSMARCO_FILENAME) ||
-                                        (parameter.len()==1 && !apikey_object.index_list.is_empty() && apikey_object.index_list.contains_key(&0))  {
+                                        (!parameter.is_empty() && !apikey_object.index_list.is_empty() && apikey_object.index_list.contains_key(&0))  {
+
                                             let index_id=if dash.contains_key("i") {
                                                 dash.get("i").and_then(|value| value.parse::<u64>().ok()).unwrap_or(0)
                                             } else if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
@@ -1001,12 +1012,12 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                             } else {
                                                 println!("{} {}: Create schema/index first. Schema and index are automatically created only for {} and PDF files.","Index not found".bright_red(),index_id ,WIKIPEDIA_FILENAME);
                                                 println!("For other JSON files, you need to create an index first via REST API (e.g. via CURL) and then use the console command: ingest [file_path] -k [api_key] -i [index_id]");
-                                                println!("See details: https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#console-commands");
+                                                println!("See details: https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#console-commands");
                                             }
                                         } else{
                                                 println!("{}: Create schema/index first! Schema and index are automatically created only for {} and PDF files.","Index not specified or found".bright_red(),WIKIPEDIA_FILENAME);
                                                 println!("For other JSON files, you need to create an index first via REST API (e.g. via CURL) and then use the console command: ingest [file_path] -k [api_key] -i [index_id]");
-                                                println!("See details: https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#console-commands");
+                                                println!("See details: https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#console-commands");
                                         }
 
                                     } else {
@@ -1100,7 +1111,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             println!("{:40} Stop the server.","quit".green());
                             println!("{:40} Show this help.","help".green());
                             println!();
-                            println!("{} https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/README.md#console-commands","See details:".yellow());
+                            println!("{} https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#console-commands","See details:".yellow());
                         },
 
                         &_ => {
