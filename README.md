@@ -42,7 +42,7 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_java?tab=Apache-2.0-1-ov-file#readme)
 
 ## SeekStorm Instant search adapter
-A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend — no UI rewrite required.  
+A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend — no UI rewrite required. 
 Or, use the InstantSearch widget library to build a fresh UI from scratch, with SeekStorm's REST API as the backend.
 
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm-instantsearch-adapter)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter)
