@@ -51,6 +51,7 @@ A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a
 Or, use the InstantSearch widget library to build a fresh UI from scratch, with SeekStorm's REST API as the backend.
 
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm-instantsearch-adapter)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter)
+[![npm](https://img.shields.io/npm/v/seekstorm-instantsearch-adapter?label=npm)](https://www.npmjs.com/package/seekstorm-instantsearch-adapter)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter?tab=MIT-1-ov-file#readme)
 
 <p>
