@@ -1280,7 +1280,10 @@ impl Shard {
         }
 
         if result_type != &ResultType::Topk {
-            let filtered = !not_query_list.is_empty() || !field_filter_set.is_empty();
+            let filtered = !not_query_list.is_empty()
+                || !field_filter_set.is_empty()
+                || !self.delete_hashset.is_empty()
+                || !facet_filter.is_empty();
             result_count_arc.fetch_add(
                 if filtered {
                     result_count_local as usize
@@ -1928,7 +1931,7 @@ impl Shard {
         let mut result_count: i32 = 0;
 
         if result_type == &ResultType::Count {
-            self.union_count_uncommitted(&mut result_count, query_list);
+            self.union_count_uncommitted(&mut result_count, query_list, block_id);
             result_count_arc.fetch_add(result_count as usize, Ordering::Relaxed);
             return;
         }
@@ -1953,7 +1956,11 @@ impl Shard {
         &self,
         result_count: &mut i32,
         query_list: &mut [PostingListObjectQuery],
+        block_id: usize,
     ) {
+        // TODO: NOT/field/facet filters are not applied here (no params for
+        // them, unlike committed union_count); only deletes are excluded.
+        // Queries with those filters on uncommitted data may still miscount.
         query_list.sort_by(|a, b| b.posting_count.partial_cmp(&a.posting_count).unwrap());
 
         let mut result_count_local = query_list[0].posting_count;
@@ -1967,18 +1974,28 @@ impl Shard {
             if i == 0 {
                 for _p_docid in 0..item.posting_count {
                     self.get_next_docid_uncommitted(item);
-                    let docid = item.docid as usize;
-                    let byte_index = docid >> 3;
-                    let bit_index = docid & 7;
+                    let docid = (block_id << 16) | item.docid as usize;
+                    if self.delete_hashset.contains(&docid) {
+                        // Deleted docs must neither set bits (they would
+                        // shadow later terms) nor stay in the initial
+                        // posting_count-based total.
+                        result_count_local -= 1;
+                        continue;
+                    }
+                    let byte_index = item.docid as usize >> 3;
+                    let bit_index = item.docid as usize & 7;
 
                     bitmap_0[byte_index] |= 1 << bit_index;
                 }
             } else {
                 for _p_docid in 0..item.posting_count {
                     self.get_next_docid_uncommitted(item);
-                    let docid = item.docid as usize;
-                    let byte_index = docid >> 3;
-                    let bit_index = docid & 7;
+                    let docid = (block_id << 16) | item.docid as usize;
+                    if self.delete_hashset.contains(&docid) {
+                        continue;
+                    }
+                    let byte_index = item.docid as usize >> 3;
+                    let bit_index = item.docid as usize & 7;
 
                     if bitmap_0[byte_index] & (1 << bit_index) == 0 {
                         bitmap_0[byte_index] |= 1 << bit_index;
@@ -2047,7 +2064,12 @@ impl Shard {
                         &mut query_list[term_index],
                         not_query_list,
                     );
-                    if not_query_list.is_empty() && result_type != &ResultType::Topk {
+                    if not_query_list.is_empty()
+                        && field_filter_set.is_empty()
+                        && self.delete_hashset.is_empty()
+                        && facet_filter.is_empty()
+                        && result_type != &ResultType::Topk
+                    {
                         *result_count += 1;
                     }
                 } else {
