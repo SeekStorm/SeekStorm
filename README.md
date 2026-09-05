@@ -182,6 +182,7 @@ Blog Posts:
 * Code first OpenAPI generated [REST API documentation](https://seekstorm.github.io/documentation/)
 * Cross-platform: runs on Linux, Windows, and macOS (other OS untested).
 * Docker file and container image at [Docker Hub](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
+* Client libraries/SDK in Rust, Python, C#, Java, TypeScript.
 
 ---
 
@@ -1906,7 +1907,7 @@ Are you missing something? Let us know via issue or discussions.
   * ✅ Python
   * ✅ C#
   * ✅ Java 
-  * TypeScript
+  * ✅ TypeScript
   * Go
   * C
 * Improved SIMD support
