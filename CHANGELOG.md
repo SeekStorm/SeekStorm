@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixing union_count cross-block union count jitter. Fix by @qkun-zh in #75
+- Fixing union_count cross-block union count jitter. Fix by @qkun-zh in #76
 - Fixed Bitmap AND/OR Count ignoring deleted documents. Fix by @qkun-zh in #75
 - Fixed realtime totals ignoring deleted documents. Fix by @qkun-zh in #74
 - Fixed Union Count ignoring deleted documents. Fix by @qkun-zh in #73
