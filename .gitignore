@@ -4,6 +4,7 @@ debug/
 target/
 seekstorm/tests/index_test/
 seekstorm/tests/index_facet_test/
+seekstorm/tests/index_delete_*/
 .vscode/
 .idea
 

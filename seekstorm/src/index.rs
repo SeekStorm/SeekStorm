@@ -4574,8 +4574,12 @@ impl Index {
     pub async fn current_doc_count(&self) -> usize {
         let mut current_doc_count = 0;
         for shard in self.shard_vec.iter() {
-            current_doc_count +=
-                shard.read().await.indexed_doc_count - shard.read().await.delete_hashset.len();
+            // saturating: deletes are recorded against allocated docids and
+            // may transiently outnumber the indexed counter (async indexing).
+            let shard_ref = shard.read().await;
+            current_doc_count += shard_ref
+                .indexed_doc_count
+                .saturating_sub(shard_ref.delete_hashset.len());
         }
         current_doc_count
     }
@@ -4584,8 +4588,10 @@ impl Index {
     pub async fn uncommitted_doc_count(&self) -> usize {
         let mut uncommitted_doc_count = 0;
         for shard in self.shard_vec.iter() {
-            uncommitted_doc_count +=
-                shard.read().await.indexed_doc_count - shard.read().await.committed_doc_count;
+            let shard_ref = shard.read().await;
+            uncommitted_doc_count += shard_ref
+                .indexed_doc_count
+                .saturating_sub(shard_ref.committed_doc_count);
         }
         uncommitted_doc_count
     }
@@ -5098,6 +5104,8 @@ pub trait DeleteDocument {
 ///   ⚠️ Use search or get_iterator first to obtain a valid doc_id. Document IDs are not guaranteed to be continuous and gapless!
 ///
 /// Immediately effective, independent of commit.
+/// Only already allocated docids are accepted; clear_index invalidates old
+/// docids and reuses the namespace.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
@@ -5105,19 +5113,32 @@ pub trait DeleteDocument {
 /// BM25 scores are not updated (until compaction is implemented), but the impact is minimal.
 impl DeleteDocument for IndexArc {
     async fn delete_document(&self, docid: u64) {
-        let index_ref = self.read().await;
-        let shard_number = index_ref.shard_number as u64;
-        let shard_id = docid % shard_number;
-        let doc_id = docid / shard_number;
-
-        let mut shard_mut = index_ref.shard_vec[shard_id as usize].write().await;
-
-        if doc_id as usize >= shard_mut.indexed_doc_count {
+        // Validity bound must be the synchronously allocated docid namespace,
+        // not the per-shard indexed counter: the latter is updated by the
+        // async index task (and by commit), so it lags behind and would
+        // silently drop deletes of uncommitted documents. u64 comparison
+        // throughout: narrowing `docid` to usize would truncate on 32-bit.
+        let docid_global = self.read().await.docid_global.clone();
+        let allocated_docid_count = *docid_global.read().await as u64;
+        if docid >= allocated_docid_count {
             return;
         }
-        if shard_mut.delete_hashset.insert(doc_id as usize) {
+        // Clone what is needed, then drop the read guard before taking the
+        // shard write lock, keeping the critical section minimal.
+        let (shard_number, shard) = {
+            let index_ref = self.read().await;
+            (
+                index_ref.shard_number as u64,
+                index_ref.shard_vec[(docid % index_ref.shard_number as u64) as usize].clone(),
+            )
+        };
+        let docid_local = docid / shard_number;
+
+        let mut shard_mut = shard.write().await;
+
+        if shard_mut.delete_hashset.insert(docid_local as usize) {
             let mut buffer: [u8; 8] = [0; 8];
-            write_u64(doc_id, &mut buffer, 0);
+            write_u64(docid_local, &mut buffer, 0);
             let _ = shard_mut.delete_file.write(&buffer);
             let _ = shard_mut.delete_file.flush();
         }
@@ -5134,6 +5155,8 @@ pub trait DeleteDocuments {
 /// Delete documents from index by document id
 /// Document ID can by obtained by search.
 /// Immediately effective, independent of commit.
+/// Only already allocated docids are accepted; clear_index invalidates old
+/// docids and reuses the namespace.
 /// Index space used by deleted documents is not reclaimed (until compaction is implemented), but result_count_total is updated.
 /// By manually deleting the delete.bin file the deleted documents can be recovered (until compaction).
 /// Deleted documents impact performance, especially but not limited to counting (Count, TopKCount). They also increase the size of the index (until compaction is implemented).
