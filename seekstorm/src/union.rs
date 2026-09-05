@@ -1179,7 +1179,9 @@ pub(crate) async fn union_docid_2<'a>(
     matching_blocks: &mut i32,
     query_term_count: usize,
 ) {
-    let filtered = !not_query_list.is_empty() || !field_filter_set.is_empty();
+    let filtered = !not_query_list.is_empty()
+        || !field_filter_set.is_empty()
+        || !shard.delete_hashset.is_empty();
     let mut count = 0;
     if filtered {
         single_blockid(
