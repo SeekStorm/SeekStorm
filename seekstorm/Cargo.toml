@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.3.9"
+version = "3.3.10"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -51,13 +51,13 @@ url = "2.5.8"
 sha2 = "0.11.0"
 itertools = "0.15.0"
 async-recursion = "1.1.1"
-zstd = "0.13.3"
+zstd = "0.14.0"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
 smallvec = "1.16.0"
 memmap2 = "0.9.11"
 regex-syntax = "0.8.11"
-indexmap = { version = "2.14.0", features = ["serde"]}
+indexmap = { version = "2.14.2", features = ["serde"]}
 unicode-normalization = "0.1.25"
 finl_unicode = "1.4.0"
 colored = "3.1.1"
