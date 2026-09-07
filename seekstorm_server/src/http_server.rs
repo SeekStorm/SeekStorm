@@ -108,6 +108,7 @@ enum HttpServerError {
     SynonymsNotFound,
     Unauthorized,
     BadRequest(String),
+    InternalServerError,
     NotImplemented,
     FileNotFound,
     DocumentNotFound,
@@ -133,6 +134,10 @@ impl From<HttpServerError> for Result<Response<BoxBody<Bytes, Infallible>>, Infa
             HttpServerError::BadRequest(error_message) => status(
                 StatusCode::BAD_REQUEST,
                 format!("bad request:{}", error_message),
+            ),
+            HttpServerError::InternalServerError => status(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal server error".to_string(),
             ),
             HttpServerError::NotImplemented => {
                 status(StatusCode::NOT_IMPLEMENTED, "not implemented".to_string())
@@ -612,7 +617,11 @@ pub(crate) async fn http_request_handler(
                 INDEX_RUNTIME.block_on(async move { commit_index_api(&index_arc_clone).await })
             });
 
-            match task_result.join().unwrap() {
+            let join_result = match task_result.join() {
+                Ok(join_result) => join_result,
+                Err(_) => return HttpServerError::InternalServerError.into(),
+            };
+            match join_result {
                 Ok(status_object_json) => Ok(Response::new(BoxBody::new(Full::new(
                     status_object_json.to_string().into(),
                 )))),
@@ -917,7 +926,11 @@ pub(crate) async fn http_request_handler(
 
             let task_result = std::thread::spawn(move || {
                 INDEX_RUNTIME.block_on(async move {
-                    let request_string = str::from_utf8(&request_bytes).unwrap();
+                    let Ok(request_string) = str::from_utf8(&request_bytes) else {
+                        return serde_json::to_vec(&Err::<usize, String>(
+                            "request body is not valid UTF-8".to_string(),
+                        ));
+                    };
 
                     let status_object = if !request_string.trim().starts_with('[') {
                         let document_object = serde_json::from_str(request_string)?;
@@ -930,7 +943,11 @@ pub(crate) async fn http_request_handler(
                 })
             });
 
-            match task_result.join().unwrap() {
+            let join_result = match task_result.join() {
+                Ok(join_result) => join_result,
+                Err(_) => return HttpServerError::InternalServerError.into(),
+            };
+            match join_result {
                 Ok(status_object_json) => Ok(Response::new(BoxBody::new(Full::new(
                     status_object_json.into(),
                 )))),
@@ -955,7 +972,11 @@ pub(crate) async fn http_request_handler(
                     .into();
             };
             let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
-            let request_string = str::from_utf8(&request_bytes).unwrap().trim();
+            let Ok(request_string) = str::from_utf8(&request_bytes) else {
+                return HttpServerError::BadRequest("request body is not valid UTF-8".to_string())
+                    .into();
+            };
+            let request_string = request_string.trim();
 
             let apikey_list_ref = apikey_list.read().await;
             let Some(apikey_object) = apikey_list_ref.get(&apikey_hash) else {
@@ -1165,7 +1186,12 @@ pub(crate) async fn http_request_handler(
                                 ))))
                             }
                             Err(_) => {
-                                let request_string = str::from_utf8(&request_bytes).unwrap();
+                                let Ok(request_string) = str::from_utf8(&request_bytes) else {
+                                    return HttpServerError::BadRequest(
+                                        "request body is not valid UTF-8".to_string(),
+                                    )
+                                    .into();
+                                };
                                 let is_doc_vector = request_string.trim().starts_with('[');
                                 let status_object = if !is_doc_vector {
                                     let document_id = match serde_json::from_str(request_string) {
