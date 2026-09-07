@@ -2741,6 +2741,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::U8
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2758,6 +2759,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::U16
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2775,6 +2777,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::U32
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2792,6 +2795,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::U64
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2809,6 +2813,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::I8
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2826,6 +2831,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::I16
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2843,6 +2849,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::I32
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2860,6 +2867,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::I64
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2877,6 +2885,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::Timestamp
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2894,6 +2903,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::F32
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2911,6 +2921,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::F64
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {
@@ -2996,6 +3007,7 @@ impl SearchLexicalShard for ShardArc {
                     } => {
                         if let Some(idx) = shard_ref.facets_map.get(field)
                             && shard_ref.facets[*idx].field_type == FieldType::Point
+                            && !ranges.is_empty()
                         {
                             is_range_facet = true;
                             search_result.query_facets[*idx] = ResultFacet {

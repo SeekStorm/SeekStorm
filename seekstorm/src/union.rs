@@ -1019,7 +1019,7 @@ pub(crate) async fn union_count<'a>(
                                 [(shard.facets_size_sum * docid) + facet.offset];
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::U16(_range_type, ranges) => {
@@ -1029,7 +1029,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::U32(_range_type, ranges) => {
@@ -1039,7 +1039,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::U64(_range_type, ranges) => {
@@ -1049,7 +1049,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::I8(_range_type, ranges) => {
@@ -1059,7 +1059,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::I16(_range_type, ranges) => {
@@ -1069,7 +1069,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::I32(_range_type, ranges) => {
@@ -1079,7 +1079,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::I64(_range_type, ranges) => {
@@ -1089,7 +1089,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::Timestamp(_range_type, ranges) => {
@@ -1099,7 +1099,7 @@ pub(crate) async fn union_count<'a>(
                             );
                             ranges
                                 .binary_search_by_key(&facet_value, |range| range.1)
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::F32(_range_type, ranges) => {
@@ -1111,7 +1111,7 @@ pub(crate) async fn union_count<'a>(
                                 .binary_search_by(|range| {
                                     range.1.partial_cmp(&facet_value).unwrap()
                                 })
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::F64(_range_type, ranges) => {
@@ -1123,7 +1123,7 @@ pub(crate) async fn union_count<'a>(
                                 .binary_search_by(|range| {
                                     range.1.partial_cmp(&facet_value).unwrap()
                                 })
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
                         Ranges::Point(_range_type, ranges, base, unit) => {
@@ -1137,7 +1137,7 @@ pub(crate) async fn union_count<'a>(
                                 .binary_search_by(|range| {
                                     range.1.partial_cmp(&facet_value_distance).unwrap()
                                 })
-                                .map_or_else(|idx| idx as u16 - 1, |idx| idx as u16)
+                                .map_or_else(|idx| idx.saturating_sub(1) as u16, |idx| idx as u16)
                                 as u32
                         }
 
