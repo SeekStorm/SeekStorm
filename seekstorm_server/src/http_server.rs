@@ -261,7 +261,11 @@ pub(crate) async fn http_request_handler(
                 return HttpServerError::IndexNotFound.into();
             };
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let archived_query_vector =
                 unsafe { access_unchecked::<ArchivedVec<f32>>(&request_bytes) };
@@ -341,7 +345,11 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let search_request = match serde_json::from_slice::<SearchRequestObject>(&request_bytes)
             {
@@ -472,7 +480,11 @@ pub(crate) async fn http_request_handler(
                     search_mode: SearchMode::Lexical,
                 }
             } else {
-                let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+                let Ok(collected_body) = req.into_body().collect().await else {
+                    return HttpServerError::BadRequest("failed to read request body".to_string())
+                        .into();
+                };
+                let request_bytes = collected_body.to_bytes();
 
                 match request_bytes.is_empty() {
                     true => {
@@ -512,7 +524,11 @@ pub(crate) async fn http_request_handler(
                 return HttpServerError::RateLimitExceeded.into();
             }
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let create_index_request_object =
                 match serde_json::from_slice::<CreateIndexRequest>(&request_bytes) {
@@ -754,7 +770,11 @@ pub(crate) async fn http_request_handler(
                 .to_string();
             let file_path = Path::new(&file_path);
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let apikey_list_ref = apikey_list.read().await;
 
@@ -801,7 +821,11 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
             let synonyms = match serde_json::from_slice::<Vec<Synonym>>(&request_bytes) {
                 Ok(create_index_request_object) => create_index_request_object,
                 Err(e) => {
@@ -845,7 +869,11 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
             let synonyms = match serde_json::from_slice::<Vec<Synonym>>(&request_bytes) {
                 Ok(create_index_request_object) => create_index_request_object,
                 Err(e) => {
@@ -922,7 +950,11 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
             drop(apikey_list_ref);
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let task_result = std::thread::spawn(move || {
                 INDEX_RUNTIME.block_on(async move {
@@ -971,7 +1003,11 @@ pub(crate) async fn http_request_handler(
                 return HttpServerError::BadRequest("index_id invalid or missing".to_string())
                     .into();
             };
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
             let Ok(request_string) = str::from_utf8(&request_bytes) else {
                 return HttpServerError::BadRequest("request body is not valid UTF-8".to_string())
                     .into();
@@ -992,7 +1028,7 @@ pub(crate) async fn http_request_handler(
                 if p0 + 1 < request_string.len()
                     && let Some(p1) = request_string[p0 + 1..].find('{')
                 {
-                    request_string[p0 + 1..p1].find('[').is_some()
+                    request_string[p0 + 1..p0 + 1 + p1].find('[').is_some()
                 } else {
                     false
                 }
@@ -1088,7 +1124,11 @@ pub(crate) async fn http_request_handler(
                 return HttpServerError::BadRequest("doc_id invalid or missing".to_string()).into();
             };
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let get_document_request = if !request_bytes.is_empty() {
                 let get_document_request: GetDocumentRequest =
@@ -1165,7 +1205,13 @@ pub(crate) async fn http_request_handler(
                 }
 
                 Err(_) => {
-                    let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+                    let Ok(collected_body) = req.into_body().collect().await else {
+                        return HttpServerError::BadRequest(
+                            "failed to read request body".to_string(),
+                        )
+                        .into();
+                    };
+                    let request_bytes = collected_body.to_bytes();
 
                     if *request_bytes == *b"clear" {
                         let status_object = clear_index_api(&index_arc_clone).await;
@@ -1247,7 +1293,11 @@ pub(crate) async fn http_request_handler(
                     .into();
             };
 
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let get_iterator_request = if !request_bytes.is_empty() {
                 let get_iterator_request: GetIteratorRequest =
@@ -1421,7 +1471,11 @@ pub(crate) async fn http_request_handler(
             if apikey_header != master_apikey_base64 {
                 return HttpServerError::Unauthorized.into();
             };
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
             let apikey_quota_object: ApikeyQuotaObject =
                 match serde_json::from_slice(&request_bytes) {
                     Ok(apikey_quota_object) => apikey_quota_object,
@@ -1462,7 +1516,11 @@ pub(crate) async fn http_request_handler(
             if apikey_header != master_apikey_base64 {
                 return HttpServerError::Unauthorized.into();
             };
-            let request_bytes = req.into_body().collect().await.unwrap().to_bytes();
+            let Ok(collected_body) = req.into_body().collect().await else {
+                return HttpServerError::BadRequest("failed to read request body".to_string())
+                    .into();
+            };
+            let request_bytes = collected_body.to_bytes();
 
             let request_object: DeleteApikeyRequest = match serde_json::from_slice(&request_bytes) {
                 Ok(request_object) => request_object,
