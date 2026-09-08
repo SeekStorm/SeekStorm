@@ -3113,7 +3113,8 @@ pub(crate) fn add_result_multiterm_multifield(
             plo,
             !facet_filter.is_empty(),
             phrase_query,
-            all_terms_frequent && field_filter_set.is_empty(),
+            // count-only shortcut must not skip ranking for Topk/TopkCount
+            all_terms_frequent && field_filter_set.is_empty() && result_type == &ResultType::Count,
         ) {
             facet_count(shard, search_result, docid);
 
@@ -3547,7 +3548,8 @@ pub(crate) fn add_result_multiterm_singlefield(
             plo,
             !facet_filter.is_empty(),
             phrase_query,
-            all_terms_frequent && field_filter_set.is_empty(),
+            // count-only shortcut must not skip ranking for Topk/TopkCount
+            all_terms_frequent && field_filter_set.is_empty() && result_type == &ResultType::Count,
         ) {
             facet_count(shard, search_result, docid);
 
