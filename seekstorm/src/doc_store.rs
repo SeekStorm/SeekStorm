@@ -65,29 +65,11 @@ impl Shard {
             let position = doc_id_local * 4;
             let pointer = read_u32(docstore_pointer_docs, position) as usize;
 
-            let mut previous_pointer = if doc_id == self.committed_doc_count || doc_id_local == 0 {
+            let previous_pointer = if doc_id == self.committed_doc_count || doc_id_local == 0 {
                 ROARING_BLOCK_SIZE * 4
             } else {
                 read_u32(docstore_pointer_docs, position - 4) as usize
             };
-
-            if previous_pointer < ROARING_BLOCK_SIZE * 4 {
-                // Predecessor slot(s) unwritten: documents without stored
-                // fields write no pointer, leaving stale zeros. Walk back to
-                // the nearest written slot (doc data always starts after the
-                // pointer table), so a valid doc after empty one(s) reads
-                // exactly its own bytes instead of slicing from 0 and
-                // panicking below.
-                previous_pointer = ROARING_BLOCK_SIZE * 4;
-                let mut back = position;
-                while back > 0 {
-                    back -= 4;
-                    let slot = read_u32(docstore_pointer_docs, back) as usize;
-                    if slot > previous_pointer {
-                        previous_pointer = slot;
-                    }
-                }
-            }
 
             if previous_pointer >= pointer || pointer > docstore_pointer_docs.len() {
                 // Equal means an empty slot (e.g. a document with no stored
@@ -131,25 +113,11 @@ impl Shard {
 
             let table_base = self.level_index[level].docstore_pointer_docs_pointer;
             let pointer = read_u32(&self.docstore_file_mmap, position) as usize;
-            let mut previous_pointer = if doc_id_local == 0 {
+            let previous_pointer = if doc_id_local == 0 {
                 ROARING_BLOCK_SIZE * 4
             } else {
                 read_u32(&self.docstore_file_mmap, position - 4) as usize
             };
-
-            if previous_pointer < ROARING_BLOCK_SIZE * 4 {
-                // Same stale-zero predecessor slots as in the RAM branch
-                // above: walk back within this block's table.
-                previous_pointer = ROARING_BLOCK_SIZE * 4;
-                let mut back = position;
-                while back > table_base {
-                    back -= 4;
-                    let slot = read_u32(&self.docstore_file_mmap, back) as usize;
-                    if slot > previous_pointer {
-                        previous_pointer = slot;
-                    }
-                }
-            }
 
             let start = table_base.saturating_add(previous_pointer);
             let end = table_base.saturating_add(pointer);
@@ -275,6 +243,11 @@ impl Shard {
         }
 
         if document.is_empty() {
+            write_u32(
+                self.compressed_docstore_segment_block_buffer.len() as u32,
+                &mut self.compressed_docstore_segment_block_buffer,
+                (doc_id & 0b11111111_11111111) * 4,
+            );
             return;
         }
 
