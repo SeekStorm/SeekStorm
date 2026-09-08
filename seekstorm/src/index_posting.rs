@@ -1,6 +1,7 @@
 use std::cmp;
 
 use num::FromPrimitive;
+use smallvec::SmallVec;
 
 use crate::{
     compress_postinglist::compress_positions,
@@ -49,10 +50,10 @@ impl Shard {
         };
 
         let mut positions_count_sum = 0;
-        let mut field_positions_vec: Vec<Vec<u16>> = Vec::new();
+        let mut field_positions_vec: SmallVec<[SmallVec<[u16; 8]>; 2]> = SmallVec::new();
         for positions_uncompressed in term.field_positions_vec.iter() {
             positions_count_sum += positions_uncompressed.len();
-            let mut positions: Vec<u16> = Vec::new();
+            let mut positions: SmallVec<[u16; 8]> = SmallVec::new();
             let mut previous_position: u16 = 0;
             for pos in positions_uncompressed.iter() {
                 if positions.is_empty() {
@@ -396,8 +397,8 @@ impl Shard {
         }
 
         let mut positions_sum = 0;
-        let mut positions_vec: Vec<u16> = Vec::new();
-        let mut field_vec: Vec<(usize, u32)> = Vec::new();
+        let mut positions_vec: SmallVec<[u16; 8]> = SmallVec::new();
+        let mut field_vec: SmallVec<[(usize, u32); 2]> = SmallVec::new();
         for (field_id, field) in field_positions_vec.iter().enumerate() {
             if !field.is_empty() {
                 if field_positions_vec.len() == 1 {
@@ -435,7 +436,7 @@ impl Shard {
 
                 positions_sum += field.len();
                 if self.indexed_field_vec.len() > 1 && field.len() <= 4 {
-                    positions_vec.append(&mut field.clone())
+                    positions_vec.extend(field.iter().copied())
                 };
 
                 field_vec.push((field_id, field.len() as u32));
@@ -590,7 +591,7 @@ impl Shard {
         };
 
         let compressed_position_size = if embed_flag {
-            let mut positions_vec: Vec<u16> = Vec::new();
+            let mut positions_vec: SmallVec<[u16; 8]> = SmallVec::new();
             let mut data: u32 = 0;
             for field in field_vec.iter() {
                 for pos in field_positions_vec[field.0].iter() {
