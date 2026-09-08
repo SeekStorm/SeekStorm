@@ -43,11 +43,7 @@ fn doc(title: &str) -> seekstorm::index::Document {
     serde_json::from_str(&format!(r#"{{"title":"{title}"}}"#)).unwrap()
 }
 
-async fn count(
-    index: &seekstorm::index::IndexArc,
-    query: &str,
-    uncommitted: bool,
-) -> usize {
+async fn count(index: &seekstorm::index::IndexArc, query: &str, uncommitted: bool) -> usize {
     index
         .search(
             query.into(),

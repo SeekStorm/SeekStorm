@@ -5,11 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [3.3.11] - 2026-09-05
+
+### Fixed
+
+- Fixed get_document panic on doc following doc(s) with no stored fields. Fix by @qkun-zh in #81
+- Fixed empty Topk results for all-frequent multi-term queries. Fix by @qkun-zh in #80
+- Fixed remaining request-handler panics (slice bounds, body read). Fix by @qkun-zh in #79
+- Fixed server abort on non-UTF8 request bodies. Fix by @qkun-zh in #78
+- Fixed range facet query panic on empty/uncovered ranges. Fix by @qkun-zh in #77
+
+### Changed
+
+- Removed unused seekstorm library dependencies.
+
 ## [3.3.10] - 2026-09-05
 
 ### Fixed
 
-- Fixing union_count cross-block union count jitter. Fix by @qkun-zh in #76
+- Fixed union_count cross-block union count jitter. Fix by @qkun-zh in #76
 - Fixed Bitmap AND/OR Count ignoring deleted documents. Fix by @qkun-zh in #75
 - Fixed realtime totals ignoring deleted documents. Fix by @qkun-zh in #74
 - Fixed Union Count ignoring deleted documents. Fix by @qkun-zh in #73
