@@ -6,7 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [3.3.11] - 2026-09-05
+## [3.3.12] - 2026-09-08
+
+### Improved
+
+- Cut temp allocs in Shard::index_posting via SmallVec. PR #83 by @qkun-zh
+- Write docstore pointer for empty docs (eliminate walk-back loop). PR #82 by @qkun-zh
+
+## [3.3.11] - 2026-09-08
 
 ### Fixed
 
