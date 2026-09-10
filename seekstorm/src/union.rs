@@ -11,8 +11,8 @@ use crate::{
     search::{FilterSparse, Ranges, ResultType, SearchResult},
     single::{single_blockid, single_docid},
     utils::{
-        block_copy, read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32,
-        read_u64, write_u64,
+        read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32, read_u64,
+        write_u64,
     },
 };
 
@@ -814,13 +814,7 @@ pub(crate) async fn union_count<'a>(
     facet_filter: &[FilterSparse],
     block_id: usize,
 ) {
-    query_list.sort_unstable_by(|a, b| b.p_docid_count.partial_cmp(&a.p_docid_count).unwrap());
-
-    let first_valid_idx = query_list.iter().position(|plo| !plo.end_flag).unwrap_or(0);
-    let mut result_count_local = query_list[first_valid_idx].blocks
-        [query_list[first_valid_idx].p_block as usize]
-        .posting_count as u32
-        + 1;
+    let mut result_count_local = 0u32;
 
     let mut bitmap_0: [u8; 8192] = [0u8; 8192];
     let mut first_valid = true;
@@ -829,53 +823,32 @@ pub(crate) async fn union_count<'a>(
         if plo.end_flag {
             continue;
         }
+        let is_first = first_valid;
+        first_valid = false;
 
         if plo.compression_type == CompressionType::Bitmap {
-            if first_valid {
-                block_copy(
-                    plo.byte_array,
-                    plo.compressed_doc_id_range,
-                    &mut bitmap_0,
-                    0,
-                    8192,
-                );
-                first_valid = false;
-            } else {
-                for i in (0..8192).step_by(8) {
-                    let x1 = read_u64(&bitmap_0, i);
-                    let x2 = read_u64(&plo.byte_array[plo.compressed_doc_id_range..], i);
-                    result_count_local += u64::count_ones(!x1 & x2);
-                    write_u64(x1 | x2, &mut bitmap_0, i);
-                }
+            for i in (0..8192).step_by(8) {
+                let x1 = read_u64(&bitmap_0, i);
+                let x2 = read_u64(&plo.byte_array[plo.compressed_doc_id_range..], i);
+                result_count_local += u64::count_ones(!x1 & x2);
+                write_u64(x1 | x2, &mut bitmap_0, i);
             }
         } else if plo.compression_type == CompressionType::Array {
-            if first_valid {
-                for i in 0..plo.p_docid_count {
-                    let docid =
-                        read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
-                    let byte_index = docid >> 3;
-                    let bit_index = docid & 7;
+            for i in 0..plo.p_docid_count {
+                let docid =
+                    read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
+                let byte_index = docid >> 3;
+                let bit_index = docid & 7;
 
+                if bitmap_0[byte_index] & (1 << bit_index) == 0 {
                     bitmap_0[byte_index] |= 1 << bit_index;
-                }
-                first_valid = false;
-            } else {
-                for i in 0..plo.p_docid_count {
-                    let docid =
-                        read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
-                    let byte_index = docid >> 3;
-                    let bit_index = docid & 7;
-
-                    if bitmap_0[byte_index] & (1 << bit_index) == 0 {
-                        bitmap_0[byte_index] |= 1 << bit_index;
-                        result_count_local += 1;
-                    }
+                    result_count_local += 1;
                 }
             }
         } else {
             let runs_count = read_u16(&plo.byte_array[plo.compressed_doc_id_range..], 0) as i32;
 
-            if first_valid {
+            if is_first {
                 for ii in (1..(runs_count << 1) + 1).step_by(2) {
                     let startdocid = read_u16(
                         &plo.byte_array[plo.compressed_doc_id_range..],
@@ -886,15 +859,12 @@ pub(crate) async fn union_count<'a>(
                         (ii + 1) as usize * 2,
                     ) as usize;
 
+                    result_count_local += runlength as u32 + 1;
                     for j in 0..=runlength {
                         let docid = startdocid + j;
-                        let byte_index = docid >> 3;
-                        let bit_index = docid & 7;
-
-                        bitmap_0[byte_index] |= 1 << bit_index;
+                        bitmap_0[docid >> 3] |= 1 << (docid & 7);
                     }
                 }
-                first_valid = false;
             } else {
                 for ii in (1..(runs_count << 1) + 1).step_by(2) {
                     let startdocid = read_u16(
