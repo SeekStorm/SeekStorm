@@ -6,6 +6,9 @@ seekstorm/tests/index_test/
 seekstorm/tests/index_facet_test/
 seekstorm/tests/index_delete_*/
 seekstorm/tests/index_get_*/
+seekstorm/tests/index_scan32_*/
+seekstorm/tests/index_union_*/
+seekstorm/tests/index_delete_union*/
 .vscode/
 .idea
 
