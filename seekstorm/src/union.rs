@@ -621,7 +621,8 @@ pub(crate) async fn union_scan_32<'a>(
     });
 
     let mut max_score = 0.0;
-    let mut mask = u32::MAX >> (32 - query_list.len());
+    // Bitmask holds at most `union_max` terms; clamp or `32 - len` underflows.
+    let mut mask = u32::MAX >> (union_max - cmp::min(query_list.len(), union_max));
     for plo in query_list.iter_mut().take(union_max).rev() {
         if plo.end_flag {
             continue;
@@ -759,7 +760,7 @@ pub(crate) async fn union_scan_32<'a>(
                     || query_terms_bitset & mask > 0)
             {
                 let mut query_terms_max_score_sum = 0f32;
-                for (j, plo) in query_list.iter().enumerate() {
+                for (j, plo) in query_list.iter().take(query_list_len).enumerate() {
                     if (query_terms_bitset & (1 << j)) > 0 {
                         query_terms_max_score_sum +=
                             plo.blocks[plo.p_block as usize].max_block_score;
