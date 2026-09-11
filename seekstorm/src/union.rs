@@ -1433,6 +1433,46 @@ pub(crate) async fn union_docid_3<'a>(
                     query_term_count,
                 )
                 .await;
+            } else {
+                for i in 0..search_result.topk_candidates.current_heap_size {
+                    search_result.topk_candidates.docid_hashset.insert(
+                        search_result.topk_candidates._elements[i].doc_id,
+                        search_result.topk_candidates._elements[i].score,
+                    );
+                }
+
+                let mut merged: Vec<PostingListObjectQuery> = Vec::new();
+                for queue in query_queue.iter() {
+                    if search_result.topk_candidates.current_heap_size >= top_k
+                        && queue.max_score <= search_result.topk_candidates._elements[0].score
+                    {
+                        continue;
+                    }
+                    for term in queue.query_list.iter() {
+                        if !merged
+                            .iter()
+                            .any(|m| m.term_index_unique == term.term_index_unique)
+                        {
+                            merged.push(term.clone());
+                        }
+                    }
+                }
+
+                if !merged.is_empty() {
+                    union_blockid(
+                        shard,
+                        non_unique_query_list,
+                        &mut merged,
+                        not_query_list,
+                        result_count_arc,
+                        search_result,
+                        top_k,
+                        &ResultType::Topk,
+                        field_filter_set,
+                        facet_filter,
+                    )
+                    .await;
+                }
             }
         }
     }
