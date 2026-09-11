@@ -765,7 +765,9 @@ pub(crate) async fn union_scan_32<'a>(
                             plo.blocks[plo.p_block as usize].max_block_score;
                     }
                 }
-                if query_terms_max_score_sum > search_result.topk_candidates._elements[0].score {
+                if search_result.topk_candidates.current_heap_size < top_k
+                    || query_terms_max_score_sum > search_result.topk_candidates._elements[0].score
+                {
                     for (j, query_term) in query_list.iter_mut().take(query_list_len).enumerate() {
                         query_term.bm25_flag = (query_terms_bitset & (1 << j)) > 0;
 
