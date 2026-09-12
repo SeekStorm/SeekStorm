@@ -3535,9 +3535,9 @@ impl SearchLexicalShard for ShardArc {
                         &field_filter_set,
                         &facet_filter_sparse,
                         &mut matching_blocks,
-                        0,
+                        0, // recursion_count
                         query_term_count,
-                        0,
+                        0, // empty_streak
                     )
                     .await;
                 } else {

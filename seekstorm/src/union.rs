@@ -1233,12 +1233,7 @@ pub(crate) async fn union_docid_2<'a>(
     if (search_result.topk_candidates.current_heap_size < top_k)
         || (query_list[0].max_list_score > search_result.topk_candidates._elements[0].score)
     {
-        for i in 0..search_result.topk_candidates.current_heap_size {
-            search_result.topk_candidates.docid_hashset.insert(
-                search_result.topk_candidates._elements[i].doc_id,
-                search_result.topk_candidates._elements[i].score,
-            );
-        }
+        search_result.topk_candidates.pin_heap();
 
         single_blockid(
             shard,
@@ -1259,12 +1254,7 @@ pub(crate) async fn union_docid_2<'a>(
     if (search_result.topk_candidates.current_heap_size < top_k)
         || (query_list[1].max_list_score > search_result.topk_candidates._elements[0].score)
     {
-        for i in 0..search_result.topk_candidates.current_heap_size {
-            search_result.topk_candidates.docid_hashset.insert(
-                search_result.topk_candidates._elements[i].doc_id,
-                search_result.topk_candidates._elements[i].score,
-            );
-        }
+        search_result.topk_candidates.pin_heap();
 
         single_blockid(
             shard,
@@ -1312,9 +1302,7 @@ pub(crate) async fn union_docid_3<'a>(
         let mut streak = empty_streak;
         // All terms sparse: intersections are almost surely empty, so scan
         // the union directly instead of enumerating empty subsets.
-        if recursion_count == 0
-            && query_list.iter().all(|plo| plo.posting_count < 512)
-        {
+        if recursion_count == 0 && query_list.iter().all(|plo| plo.posting_count < 512) {
             union_blockid(
                 shard,
                 non_unique_query_list,
@@ -1328,6 +1316,7 @@ pub(crate) async fn union_docid_3<'a>(
                 facet_filter,
             )
             .await;
+            // union_blockid consumes traversal state; reset it for the recount below.
             for plo in query_list.iter_mut() {
                 plo.p_block = 0;
                 plo.end_flag_block = false;
@@ -1368,12 +1357,7 @@ pub(crate) async fn union_docid_3<'a>(
                 streak = if productive { 0 } else { empty_streak + 1 };
             }
 
-            for j in 0..search_result.topk_candidates.current_heap_size {
-                search_result.topk_candidates.docid_hashset.insert(
-                    search_result.topk_candidates._elements[j].doc_id,
-                    search_result.topk_candidates._elements[j].score,
-                );
-            }
+            search_result.topk_candidates.pin_heap();
 
             {
                 for i in queue_object.query_index..query_list.len() {
@@ -1451,12 +1435,7 @@ pub(crate) async fn union_docid_3<'a>(
                 || query_queue.first().unwrap().max_score
                     > search_result.topk_candidates._elements[0].score)
         {
-            for i in 0..search_result.topk_candidates.current_heap_size {
-                search_result.topk_candidates.docid_hashset.insert(
-                    search_result.topk_candidates._elements[i].doc_id,
-                    search_result.topk_candidates._elements[i].score,
-                );
-            }
+            search_result.topk_candidates.pin_heap();
 
             // Bail out to the linear fallback below after consecutive
             // intersections without heap progress (empty subsets).
@@ -1479,21 +1458,16 @@ pub(crate) async fn union_docid_3<'a>(
                 )
                 .await;
             } else {
-                for i in 0..search_result.topk_candidates.current_heap_size {
-                    search_result.topk_candidates.docid_hashset.insert(
-                        search_result.topk_candidates._elements[i].doc_id,
-                        search_result.topk_candidates._elements[i].score,
-                    );
-                }
+                search_result.topk_candidates.pin_heap();
 
                 let mut merged: Vec<PostingListObjectQuery> = Vec::new();
-                for queue in query_queue.iter() {
+                for pending in query_queue.iter() {
                     if search_result.topk_candidates.current_heap_size >= top_k
-                        && queue.max_score <= search_result.topk_candidates._elements[0].score
+                        && pending.max_score <= search_result.topk_candidates._elements[0].score
                     {
                         continue;
                     }
-                    for term in queue.query_list.iter() {
+                    for term in pending.query_list.iter() {
                         if !merged
                             .iter()
                             .any(|m| m.term_index_unique == term.term_index_unique)

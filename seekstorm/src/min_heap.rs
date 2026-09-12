@@ -1257,4 +1257,14 @@ impl<'a> MinHeap<'a> {
             false
         }
     }
+
+    /// Remember every heap entry in docid_hashset so re-scoring a document
+    /// refreshes it instead of duplicating it.
+    #[inline(always)]
+    pub(crate) fn pin_heap(&mut self) {
+        for i in 0..self.current_heap_size {
+            self.docid_hashset
+                .insert(self._elements[i].doc_id, self._elements[i].score);
+        }
+    }
 }
