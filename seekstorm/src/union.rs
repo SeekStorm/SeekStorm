@@ -1300,9 +1300,17 @@ pub(crate) async fn union_docid_3<'a>(
 
     if result_type == &ResultType::Topk || result_type == &ResultType::TopkCount {
         let mut streak = empty_streak;
-        // All terms sparse: intersections are almost surely empty, so scan
-        // the union directly instead of enumerating empty subsets.
-        if recursion_count == 0 && query_list.iter().all(|plo| plo.posting_count < 512) {
+        // Bail out to the linear fallback after this many intersections with no heap progress.
+        const EMPTY_STREAK_LIMIT: usize = 5;
+        // All terms sparse relative to the collection: intersections are
+        // almost surely empty, so scan the union directly instead of
+        // enumerating empty subsets.
+        let sparse_threshold = shard.indexed_doc_count / 128;
+        if recursion_count == 0
+            && query_list
+                .iter()
+                .all(|plo| (plo.posting_count as usize) < sparse_threshold)
+        {
             union_blockid(
                 shard,
                 non_unique_query_list,
@@ -1322,12 +1330,7 @@ pub(crate) async fn union_docid_3<'a>(
                 plo.end_flag_block = false;
             }
         } else if query_list.len() >= 3 {
-            let heap_size_before = search_result.topk_candidates.current_heap_size;
-            let heap_min_before = if heap_size_before > 0 {
-                search_result.topk_candidates._elements[0].score
-            } else {
-                f32::NEG_INFINITY
-            };
+            let (heap_size_before, heap_min_before) = search_result.topk_candidates.heap_progress();
             intersection_blockid(
                 shard,
                 non_unique_query_list,
@@ -1346,12 +1349,8 @@ pub(crate) async fn union_docid_3<'a>(
             .await;
 
             {
-                let heap_size_after = search_result.topk_candidates.current_heap_size;
-                let heap_min_after = if heap_size_after > 0 {
-                    search_result.topk_candidates._elements[0].score
-                } else {
-                    f32::NEG_INFINITY
-                };
+                let (heap_size_after, heap_min_after) =
+                    search_result.topk_candidates.heap_progress();
                 let productive = heap_size_after > heap_size_before
                     || (heap_size_after > 0 && heap_min_after > heap_min_before);
                 streak = if productive { 0 } else { empty_streak + 1 };
@@ -1439,7 +1438,7 @@ pub(crate) async fn union_docid_3<'a>(
 
             // Bail out to the linear fallback below after consecutive
             // intersections without heap progress (empty subsets).
-            if recursion_count < 200 && streak < 5 {
+            if recursion_count < 200 && streak < EMPTY_STREAK_LIMIT {
                 union_docid_3(
                     shard,
                     non_unique_query_list,
