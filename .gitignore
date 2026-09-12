@@ -9,6 +9,7 @@ seekstorm/tests/index_get_*/
 seekstorm/tests/index_scan32_*/
 seekstorm/tests/index_union_*/
 seekstorm/tests/index_delete_union*/
+seekstorm/tests/index_docid3_*/
 .vscode/
 .idea
 

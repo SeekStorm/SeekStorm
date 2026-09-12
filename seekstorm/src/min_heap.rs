@@ -1257,4 +1257,26 @@ impl<'a> MinHeap<'a> {
             false
         }
     }
+
+    /// Snapshot (heap size, heap minimum) to detect scoring progress.
+    #[inline(always)]
+    pub(crate) fn heap_progress(&self) -> (usize, f32) {
+        let size = self.current_heap_size;
+        let min = if size > 0 {
+            self._elements[0].score
+        } else {
+            f32::NEG_INFINITY
+        };
+        (size, min)
+    }
+
+    /// Remember every heap entry in docid_hashset so re-scoring a document
+    /// refreshes it instead of duplicating it.
+    #[inline(always)]
+    pub(crate) fn pin_heap(&mut self) {
+        for i in 0..self.current_heap_size {
+            self.docid_hashset
+                .insert(self._elements[i].doc_id, self._elements[i].score);
+        }
+    }
 }

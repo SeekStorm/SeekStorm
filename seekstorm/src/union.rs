@@ -1233,12 +1233,7 @@ pub(crate) async fn union_docid_2<'a>(
     if (search_result.topk_candidates.current_heap_size < top_k)
         || (query_list[0].max_list_score > search_result.topk_candidates._elements[0].score)
     {
-        for i in 0..search_result.topk_candidates.current_heap_size {
-            search_result.topk_candidates.docid_hashset.insert(
-                search_result.topk_candidates._elements[i].doc_id,
-                search_result.topk_candidates._elements[i].score,
-            );
-        }
+        search_result.topk_candidates.pin_heap();
 
         single_blockid(
             shard,
@@ -1259,12 +1254,7 @@ pub(crate) async fn union_docid_2<'a>(
     if (search_result.topk_candidates.current_heap_size < top_k)
         || (query_list[1].max_list_score > search_result.topk_candidates._elements[0].score)
     {
-        for i in 0..search_result.topk_candidates.current_heap_size {
-            search_result.topk_candidates.docid_hashset.insert(
-                search_result.topk_candidates._elements[i].doc_id,
-                search_result.topk_candidates._elements[i].score,
-            );
-        }
+        search_result.topk_candidates.pin_heap();
 
         single_blockid(
             shard,
@@ -1302,13 +1292,45 @@ pub(crate) async fn union_docid_3<'a>(
     matching_blocks: &mut i32,
     recursion_count: usize,
     query_term_count: usize,
+    empty_streak: usize,
 ) {
     let queue_object = query_queue.remove(0);
 
     let mut query_list = queue_object.query_list;
 
     if result_type == &ResultType::Topk || result_type == &ResultType::TopkCount {
-        if query_list.len() >= 3 {
+        let mut streak = empty_streak;
+        // Bail out to the linear fallback after this many intersections with no heap progress.
+        const EMPTY_STREAK_LIMIT: usize = 5;
+        // All terms sparse relative to the collection: intersections are
+        // almost surely empty, so scan the union directly instead of
+        // enumerating empty subsets.
+        let sparse_threshold = shard.indexed_doc_count / 128;
+        if recursion_count == 0
+            && query_list
+                .iter()
+                .all(|plo| (plo.posting_count as usize) < sparse_threshold)
+        {
+            union_blockid(
+                shard,
+                non_unique_query_list,
+                &mut query_list,
+                not_query_list,
+                result_count_arc,
+                search_result,
+                top_k,
+                &ResultType::Topk,
+                field_filter_set,
+                facet_filter,
+            )
+            .await;
+            // union_blockid consumes traversal state; reset it for the recount below.
+            for plo in query_list.iter_mut() {
+                plo.p_block = 0;
+                plo.end_flag_block = false;
+            }
+        } else if query_list.len() >= 3 {
+            let (heap_size_before, heap_min_before) = search_result.topk_candidates.heap_progress();
             intersection_blockid(
                 shard,
                 non_unique_query_list,
@@ -1326,12 +1348,15 @@ pub(crate) async fn union_docid_3<'a>(
             )
             .await;
 
-            for j in 0..search_result.topk_candidates.current_heap_size {
-                search_result.topk_candidates.docid_hashset.insert(
-                    search_result.topk_candidates._elements[j].doc_id,
-                    search_result.topk_candidates._elements[j].score,
-                );
+            {
+                let (heap_size_after, heap_min_after) =
+                    search_result.topk_candidates.heap_progress();
+                let productive = heap_size_after > heap_size_before
+                    || (heap_size_after > 0 && heap_min_after > heap_min_before);
+                streak = if productive { 0 } else { empty_streak + 1 };
             }
+
+            search_result.topk_candidates.pin_heap();
 
             {
                 for i in queue_object.query_index..query_list.len() {
@@ -1409,14 +1434,11 @@ pub(crate) async fn union_docid_3<'a>(
                 || query_queue.first().unwrap().max_score
                     > search_result.topk_candidates._elements[0].score)
         {
-            for i in 0..search_result.topk_candidates.current_heap_size {
-                search_result.topk_candidates.docid_hashset.insert(
-                    search_result.topk_candidates._elements[i].doc_id,
-                    search_result.topk_candidates._elements[i].score,
-                );
-            }
+            search_result.topk_candidates.pin_heap();
 
-            if recursion_count < 200 {
+            // Bail out to the linear fallback below after consecutive
+            // intersections without heap progress (empty subsets).
+            if recursion_count < 200 && streak < EMPTY_STREAK_LIMIT {
                 union_docid_3(
                     shard,
                     non_unique_query_list,
@@ -1431,8 +1453,44 @@ pub(crate) async fn union_docid_3<'a>(
                     matching_blocks,
                     recursion_count + 1,
                     query_term_count,
+                    streak,
                 )
                 .await;
+            } else {
+                search_result.topk_candidates.pin_heap();
+
+                let mut merged: Vec<PostingListObjectQuery> = Vec::new();
+                for pending in query_queue.iter() {
+                    if search_result.topk_candidates.current_heap_size >= top_k
+                        && pending.max_score <= search_result.topk_candidates._elements[0].score
+                    {
+                        continue;
+                    }
+                    for term in pending.query_list.iter() {
+                        if !merged
+                            .iter()
+                            .any(|m| m.term_index_unique == term.term_index_unique)
+                        {
+                            merged.push(term.clone());
+                        }
+                    }
+                }
+
+                if !merged.is_empty() {
+                    union_blockid(
+                        shard,
+                        non_unique_query_list,
+                        &mut merged,
+                        not_query_list,
+                        result_count_arc,
+                        search_result,
+                        top_k,
+                        &ResultType::Topk,
+                        field_filter_set,
+                        facet_filter,
+                    )
+                    .await;
+                }
             }
         }
     }
