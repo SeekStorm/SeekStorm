@@ -3537,6 +3537,7 @@ impl SearchLexicalShard for ShardArc {
                         &mut matching_blocks,
                         0,
                         query_term_count,
+                        0,
                     )
                     .await;
                 } else {

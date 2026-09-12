@@ -1302,13 +1302,43 @@ pub(crate) async fn union_docid_3<'a>(
     matching_blocks: &mut i32,
     recursion_count: usize,
     query_term_count: usize,
+    empty_streak: usize,
 ) {
     let queue_object = query_queue.remove(0);
 
     let mut query_list = queue_object.query_list;
 
     if result_type == &ResultType::Topk || result_type == &ResultType::TopkCount {
-        if query_list.len() >= 3 {
+        let mut streak = empty_streak;
+        // All terms sparse: intersections are almost surely empty, so scan
+        // the union directly instead of enumerating empty subsets.
+        if recursion_count == 0
+            && query_list.iter().all(|plo| plo.posting_count < 512)
+        {
+            union_blockid(
+                shard,
+                non_unique_query_list,
+                &mut query_list,
+                not_query_list,
+                result_count_arc,
+                search_result,
+                top_k,
+                &ResultType::Topk,
+                field_filter_set,
+                facet_filter,
+            )
+            .await;
+            for plo in query_list.iter_mut() {
+                plo.p_block = 0;
+                plo.end_flag_block = false;
+            }
+        } else if query_list.len() >= 3 {
+            let heap_size_before = search_result.topk_candidates.current_heap_size;
+            let heap_min_before = if heap_size_before > 0 {
+                search_result.topk_candidates._elements[0].score
+            } else {
+                f32::NEG_INFINITY
+            };
             intersection_blockid(
                 shard,
                 non_unique_query_list,
@@ -1325,6 +1355,18 @@ pub(crate) async fn union_docid_3<'a>(
                 query_term_count,
             )
             .await;
+
+            {
+                let heap_size_after = search_result.topk_candidates.current_heap_size;
+                let heap_min_after = if heap_size_after > 0 {
+                    search_result.topk_candidates._elements[0].score
+                } else {
+                    f32::NEG_INFINITY
+                };
+                let productive = heap_size_after > heap_size_before
+                    || (heap_size_after > 0 && heap_min_after > heap_min_before);
+                streak = if productive { 0 } else { empty_streak + 1 };
+            }
 
             for j in 0..search_result.topk_candidates.current_heap_size {
                 search_result.topk_candidates.docid_hashset.insert(
@@ -1416,7 +1458,9 @@ pub(crate) async fn union_docid_3<'a>(
                 );
             }
 
-            if recursion_count < 200 {
+            // Bail out to the linear fallback below after consecutive
+            // intersections without heap progress (empty subsets).
+            if recursion_count < 200 && streak < 5 {
                 union_docid_3(
                     shard,
                     non_unique_query_list,
@@ -1431,6 +1475,7 @@ pub(crate) async fn union_docid_3<'a>(
                     matching_blocks,
                     recursion_count + 1,
                     query_term_count,
+                    streak,
                 )
                 .await;
             } else {
