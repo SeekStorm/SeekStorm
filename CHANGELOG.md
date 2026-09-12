@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.13] - 2026-09-12
+
+### Fixed
+
+- Fix union_scan_32 under-filling top-k heap below top_k. PR #86 by @qkun-zh
+- Fix union_scan_32 overflows past 32 query terms. PR #85 by @qkun-zh
+
+### Improved
+
+- Finish union_docid_3 subset recursion with a linear fallback at the cap. 
+  Early fallback if all terms sparse, both upfront and Per-subtree, resulting in reduced average and tail latencies. PR #87 by @qkun-zh
+- Simplify union_count counting; drop seed sort. PR #84 by @qkun-zh
 
 ## [3.3.12] - 2026-09-08
 
