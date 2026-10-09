@@ -9,7 +9,7 @@ use std::{
 use itertools::Itertools;
 use serde_json::Value;
 use std::collections::HashSet;
-use utoipa::OpenApi;
+use utoipa::{OpenApi, openapi::OpenApiVersion};
 
 use seekstorm::{
     commit::Commit,
@@ -1470,7 +1470,8 @@ tags(
 struct ApiDoc;
 
 pub fn generate_openapi() {
-    let openapi = ApiDoc::openapi();
+    let mut openapi = ApiDoc::openapi();
+    openapi.openapi = OpenApiVersion::Version32;
 
     println!("{}", openapi.to_pretty_json().unwrap());
 

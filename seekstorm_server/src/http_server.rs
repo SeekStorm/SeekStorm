@@ -240,7 +240,9 @@ pub(crate) async fn http_request_handler(
             Ok(Response::new(BoxBody::new(Full::new(live_message.into()))))
         }
 
-        ("api", "v2", "index", _, "query", _, &Method::POST) => {
+        ("api", "v2", "index", _, "query", _, method)
+            if *method == Method::POST || *method == Method::QUERY =>
+        {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -317,7 +319,9 @@ pub(crate) async fn http_request_handler(
             }
         }
 
-        ("api", "v1", "index", _, "query", _, &Method::POST) => {
+        ("api", "v1", "index", _, "query", _, method)
+            if *method == Method::POST || *method == Method::QUERY =>
+        {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -1276,7 +1280,9 @@ pub(crate) async fn http_request_handler(
             }
         }
 
-        ("api", "v1", "index", _, "iterator", "", &Method::POST) => {
+        ("api", "v1", "index", _, "iterator", "", method)
+            if *method == Method::POST || *method == Method::QUERY =>
+        {
             let Some(apikey) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };
@@ -1457,9 +1463,7 @@ pub(crate) async fn http_request_handler(
             ))))
         }
 
-        ("api", "v1", "apikey", "", "", "", method)
-            if *method == Method::POST || *method == Method::QUERY =>
-        {
+        ("api", "v1", "apikey", "", "", "", &Method::POST) => {
             let Some(apikey_header) = apikey_header else {
                 return HttpServerError::Unauthorized.into();
             };

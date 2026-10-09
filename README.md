@@ -2,7 +2,7 @@
 <img src="assets/logo.png" width="450" alt="Logo"><br>
 **SeekStorm**: **sub-millisecond**, native **vector** & **lexical search** - **in-process library** & **multi-tenancy server**, in **Rust**.
 
-Development started in 2015, in [production](https://seekstorm.com) since 2020, Rust port in 2023, open sourced in 2024, work in progress.  
+Development started in 2015, in [production](https://seekstorm.com) since 2020.  
 SeekStorm is open source licensed under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 
 ## SeekStorm in-process search library
@@ -16,7 +16,7 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![Crates.io](https://img.shields.io/crates/v/seekstorm_server.svg)](https://crates.io/crates/seekstorm_server)
 [![Downloads](https://img.shields.io/crates/d/seekstorm_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_server)
 [![Docker](https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server)](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
-[![REST API Documentation](https://docs.rs/seekstorm/badge.svg)](https://seekstorm.github.io/documentation/)
+[![REST API Documentation](https://docs.rs/seekstorm/badge.svg)](https://seekstorm.com/documentation/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 [![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
 
@@ -47,7 +47,7 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_java?tab=Apache-2.0-1-ov-file#readme)
 
 ## SeekStorm Instant search adapter
-A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend — no UI rewrite required. 
+A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend — no UI rewrite required.  
 Or, use the InstantSearch widget library to build a fresh UI from scratch, with SeekStorm's REST API as the backend.
 
 [![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm-instantsearch-adapter)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter)
@@ -59,7 +59,7 @@ Or, use the InstantSearch widget library to build a fresh UI from scratch, with 
   <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
   <a href="https://deephn.org/">Demo</a> | 
   <a href="#documentation">Library Docs</a> | 
-  <a href="https://seekstorm.github.io/documentation/">REST API Docs</a> |
+  <a href="https://seekstorm.com/documentation/">REST API Docs</a> |
   <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md">Server Readme</a> |
   <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_client/README.md">Client Readme</a> |
   <a href="#roadmap">Roadmap</a> | 
@@ -179,7 +179,7 @@ Blog Posts:
 * API-key management.
 * [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
 * Web UI with query auto correction, query auto-completion, instant search, keyword highlighting, histogram, date filter, faceting, result sorting, document preview (as demo, for testing, as template).
-* Code first OpenAPI generated [REST API documentation](https://seekstorm.github.io/documentation/)
+* Code first OpenAPI generated [REST API documentation](https://seekstorm.com/documentation/)
 * Cross-platform: runs on Linux, Windows, and macOS (other OS untested).
 * Docker file and container image at [Docker Hub](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
 * Client libraries/SDK in Rust, Python, C#, Java, TypeScript.
@@ -1891,9 +1891,9 @@ Are you missing something? Let us know via issue or discussions.
 
 * ✅ Native vector search
 * ✅ TurboQuant (TQ) for vector search
+* ✅ Model Context Protocol (MCP) server and CLI for Retrieval Augmented Generation (RAG) and agentic search.
 * Late Interaction Multimodal Retrieval
 * Geocoding, reverse geocoding, GeoJSON
-* Model Context Protocol (MCP) server and CLI for Retrieval Augmented Generation (RAG) and agentic search.
 * **Split of storage and compute**
   * Use S3 object storage as index backend
   * Use Distributed Key-Value store as index backend

@@ -1958,9 +1958,6 @@ impl Shard {
         query_list: &mut [PostingListObjectQuery],
         block_id: usize,
     ) {
-        // TODO: NOT/field/facet filters are not applied here (no params for
-        // them, unlike committed union_count); only deletes are excluded.
-        // Queries with those filters on uncommitted data may still miscount.
         query_list.sort_by(|a, b| b.posting_count.partial_cmp(&a.posting_count).unwrap());
 
         let mut result_count_local = query_list[0].posting_count;
@@ -1976,9 +1973,6 @@ impl Shard {
                     self.get_next_docid_uncommitted(item);
                     let docid = (block_id << 16) | item.docid as usize;
                     if self.delete_hashset.contains(&docid) {
-                        // Deleted docs must neither set bits (they would
-                        // shadow later terms) nor stay in the initial
-                        // posting_count-based total.
                         result_count_local -= 1;
                         continue;
                     }

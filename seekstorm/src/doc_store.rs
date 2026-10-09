@@ -72,10 +72,6 @@ impl Shard {
             };
 
             if previous_pointer >= pointer || pointer > docstore_pointer_docs.len() {
-                // Equal means an empty slot (e.g. a document with no stored
-                // fields, which writes no pointer). Greater, or an end offset
-                // past the buffer, is corrupt data; treat it the same instead
-                // of slicing an invalid range and panicking.
                 return Err("not found".to_owned());
             }
 
@@ -122,10 +118,6 @@ impl Shard {
             let start = table_base.saturating_add(previous_pointer);
             let end = table_base.saturating_add(pointer);
             if previous_pointer >= pointer || end > self.docstore_file_mmap.len() {
-                // See the RAM branch above: equal is an empty slot, greater
-                // or past the mapping is corrupt; both must return Err
-                // instead of panicking (saturating_add keeps a corrupt
-                // offset from wrapping around into a valid range).
                 return Err(format!("not found {} {}", previous_pointer, pointer));
             }
 

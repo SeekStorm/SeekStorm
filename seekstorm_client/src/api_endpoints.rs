@@ -997,6 +997,7 @@ impl RestClient {
     /// When these are mapped to global document IDs, temporary gaps can appear.
     /// As a result, simply iterating from 0 to the total document count may encounter invalid IDs near the end.
     /// The Document Iterator abstracts this complexity and reliably returns only valid document IDs.
+    ///
     /// # Parameters
     /// - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
     /// - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.

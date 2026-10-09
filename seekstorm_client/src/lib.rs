@@ -4,26 +4,20 @@
 #![doc(html_favicon_url = "http://seekstorm.com/favicon.ico")]
 
 //! # `seekstorm_client_rs`
-//!
 //! SeekStorm is an open-source, sub-millisecond vector and lexical search library & multi-tenancy server written in Rust.
 //! The **SeekStorm client library** can be embedded into your program, while the **SeekStorm server** is a standalone search server to be accessed via HTTP.
-//!
-//!
 //! ### Add required crates to your project
 //! ```text
 //! cargo add seekstorm_client_rs
 //! cargo add tokio
 //! cargo add serde_json
 //! ```
-//!
 //! ### use an asynchronous Rust runtime
 //! ```no_run
 //! use std::error::Error;
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-//!
 //! // your SeekStorm code here
-//!
 //!   Ok(())
 //! }
 //! ```
@@ -32,10 +26,8 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let result=CLIENT.live(BASE_URL).await;
 //! # });
 //! ```
@@ -44,11 +36,9 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, ApikeyQuotaObject};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static MASTER_API_KEY: &str = "/iWStCpyfpd/BVlHOFtwnMgrFrmof4jGq/OQDWXQzcM=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let apikey_quota_object=ApikeyQuotaObject {
 //!   indices_max: 10,
 //!   indices_size_max: 100_000_000_000,
@@ -58,7 +48,6 @@
 //!   demo: true,
 //!   ..Default::default()
 //! };
-//!
 //! let result = CLIENT
 //!   .create_apikey(BASE_URL, MASTER_API_KEY, &apikey_quota_object)
 //!   .await;
@@ -69,12 +58,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static MASTER_API_KEY: &str = "/iWStCpyfpd/BVlHOFtwnMgrFrmof4jGq/OQDWXQzcM=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let result = CLIENT
 //!   .delete_apikey(BASE_URL, DEMO_API_KEY, MASTER_API_KEY)
 //!   .await;
@@ -85,11 +72,9 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let result = CLIENT
 //!   .get_apikey_info(BASE_URL, DEMO_API_KEY)
 //!   .await;
@@ -100,17 +85,14 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType, Inference};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let schema_json = r#"
 //!   [{"field":"title","field_type":"Text","store":false,"index_lexical":false},
 //!   {"field":"body","field_type":"Text","store":true,"index_lexical":true,"longest":true},
 //!   {"field":"url","field_type":"Text","store":false,"index_lexical":false}]"#;
 //! let schema = serde_json::from_str(schema_json).unwrap();
-//!
 //! let create_index_request = CreateIndexRequest {
 //!   index_name: "test_index".into(),
 //!   similarity: LexicalSimilarity::Bm25f,
@@ -137,12 +119,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
 //! let index_id=0;
-//!
 //! let result = CLIENT
 //!   .get_index_info(BASE_URL, DEMO_API_KEY, index_id)
 //!   .await;
@@ -153,11 +133,9 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, Document};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let document_json = r#"
 //! {"title":"title1 test","body":"body1","url":"url1"}"#;
 //! let document=serde_json::from_str(document_json).unwrap();
@@ -169,17 +147,14 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, Document};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let documents_json = r#"
 //! [{"title":"title1 test","body":"body1","url":"url1"},
 //! {"title":"title2","body":"body2 test","url":"url2"},
 //! {"title":"title3 test","body":"body3 test","url":"url3"}]"#;
 //! let documents_vec:Vec<Document>=serde_json::from_str(documents_json).unwrap();
-//!
 //! CLIENT.index_documents(BASE_URL, DEMO_API_KEY, 0, &documents_vec).await;
 //! # });
 //! ```
@@ -188,11 +163,9 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
 //! let doc_id=1;
 //! CLIENT.delete_document_by_docid(BASE_URL, DEMO_API_KEY, index_id, doc_id).await;
@@ -203,11 +176,9 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let docid_vec=vec![1,2];
 //! CLIENT.delete_documents_by_docid(BASE_URL, DEMO_API_KEY, 0, docid_vec).await;
 //! # });
@@ -217,13 +188,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, ApikeyQuotaObject, Clustering, CreateIndexRequest, SearchRequestObject, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType, Inference, QueryRewriting, QueryType, ResultType, SearchMode};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let query = "test".into();
-//!
 //! let search_request_object = SearchRequestObject {
 //!   query_string: query,
 //!   query_vector: None,
@@ -243,7 +211,6 @@
 //!   query_facets: Vec::new(),
 //!   result_sort: Vec::new(),
 //! };
-//!
 //! CLIENT.delete_documents_by_query(BASE_URL, DEMO_API_KEY, 0, &search_request_object).await;
 //! # });
 //! ```
@@ -252,16 +219,13 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, Document};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let id_document_json = r#"
 //! [2,{"title":"title3 test","body":"body3 test","url":"url3"}]"#;
 //! let id_document=serde_json::from_str(id_document_json).unwrap();
 //! CLIENT.update_document(BASE_URL, DEMO_API_KEY, 0, id_document).await;
-//!
 //! // ### commit index
 //! let result = CLIENT.commit_index(BASE_URL, DEMO_API_KEY, 0).await;
 //! # });
@@ -271,17 +235,14 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, Document};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let id_document_vec_json = r#"
 //! [[1,{"title":"title1 test","body":"body1","url":"url1"}],
 //! [2,{"title":"title3 test","body":"body3 test","url":"url3"}]]"#;
 //! let id_document_vec=serde_json::from_str(id_document_vec_json).unwrap();
 //! CLIENT.update_documents(BASE_URL, DEMO_API_KEY, 0, id_document_vec).await;
-//!
 //! // ### commit index
 //! let result = CLIENT.commit_index(BASE_URL, DEMO_API_KEY, 0).await;
 //! # });
@@ -291,13 +252,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient,ApikeyQuotaObject, Clustering, CreateIndexRequest, SearchRequestObject, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType, Inference, QueryRewriting, QueryType, ResultType, SearchMode};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let query = "test".into();
-//!
 //! let search_request_object = SearchRequestObject {
 //!   query_string: query,
 //!   query_vector: None,
@@ -318,7 +276,6 @@
 //!   result_sort: Vec::new(),
 //! };
 //! let result_object = CLIENT.query_index(BASE_URL, DEMO_API_KEY, 0,search_request_object).await;
-//!
 //! // ### display results
 //! for result in result_object.as_ref().unwrap().results.iter() {
 //!   println!("result {:?} rank {:?} body field {:?}" , result.get("_id"),result.get("_score"), result.get("body"));
@@ -332,11 +289,9 @@
 //! use seekstorm_client_rs::{RestClient,GetDocumentRequest,Highlight};
 //! use std::sync::LazyLock;
 //! use std::collections::HashSet;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
 //! let doc_id=0;
 //! let highlights:Vec<Highlight>= vec![
@@ -349,14 +304,12 @@
 //!         ..Default::default()
 //!         },
 //!     ];    
-//!
 //!      let get_document_request = GetDocumentRequest {
 //!         query_terms: Vec::new(),
 //!         highlights: highlights,
 //!         fields: Vec::new(),
 //!         distance_fields: Vec::new(),
 //!     };
-//!
 //!     let doc=CLIENT.get_document(BASE_URL, DEMO_API_KEY, index_id,doc_id,&get_document_request).await.unwrap();
 //! # });
 //! ```
@@ -365,13 +318,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::{RestClient, GetIteratorRequest};
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
-//!
 //! let get_iterator_request = GetIteratorRequest {
 //!   document_id: Some(0),
 //!   skip: 0,
@@ -380,7 +330,6 @@
 //!   include_document: true,
 //!   fields: Vec::new(),
 //! };
-//!
 //! let result=CLIENT.document_iterator(BASE_URL, DEMO_API_KEY, index_id,get_iterator_request).await;
 //! # });
 //! ```
@@ -392,11 +341,9 @@
 //! use std::fs;
 //! use std::path::Path;
 //! use chrono::Utc;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
 //! let file_path=Path::new("C:/test.pdf");
 //! let file_date=Utc::now().timestamp();
@@ -409,14 +356,11 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
 //! let doc_id=0;
-//!
 //! let result=CLIENT.get_pdf(BASE_URL, DEMO_API_KEY, index_id, doc_id).await;
 //! # });
 //! ```
@@ -425,13 +369,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
-//!
 //! let result=CLIENT.clear_index(BASE_URL, DEMO_API_KEY, index_id).await;
 //! # });
 //! ```
@@ -440,13 +381,10 @@
 //! # tokio_test::block_on(async {
 //! use seekstorm_client_rs::RestClient;
 //! use std::sync::LazyLock;
-//!
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
-//!
 //! let index_id=0;
-//!
 //! let result=CLIENT.delete_index(BASE_URL, DEMO_API_KEY, index_id).await;
 //! # });
 //! ```
@@ -461,7 +399,7 @@
 
 /// The `api_endpoints` module contains the implementation of the REST API client for SeekStorm.
 pub mod api_endpoints;
-pub use crate::api_endpoints::RestClient;
+
 pub use seekstorm::{
     highlighter::Highlight,
     index::{
@@ -473,3 +411,5 @@ pub use seekstorm::{
     search::{QueryRewriting, QueryType, ResultType, SearchMode},
     vector::Inference,
 };
+
+pub use crate::api_endpoints::RestClient;

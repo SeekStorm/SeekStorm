@@ -6,7 +6,7 @@ SeekStorm open-source, multi-tenancy, vector & lexical search server
 [![Crates.io](https://img.shields.io/crates/v/seekstorm_server.svg)](https://crates.io/crates/seekstorm_server)
 [![Downloads](https://img.shields.io/crates/d/seekstorm_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_server)
 [![Docker](https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server)](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
-[![REST API Documentation](https://docs.rs/seekstorm/badge.svg)](https://seekstorm.github.io/documentation/)
+[![REST API Documentation](https://docs.rs/seekstorm/badge.svg)](https://seekstorm.com/documentation/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 [![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
 
@@ -135,7 +135,7 @@ The embedded Web UI is intended for demonstration, test and debugging rather tha
 
 ## REST API endpoints
 
-See full [documentation of the REST API](https://seekstorm.github.io/documentation).
+See full [documentation of the REST API](https://seekstorm.com/documentation/).
 
 You can use a REST client like [Bruno](https://www.usebruno.com/) or the VSC extension [Rest client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) to execute API calls, inspect responses and generate code snippets in your language:  
 [**interactive API endpoint examples**](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)

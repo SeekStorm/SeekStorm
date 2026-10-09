@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.3.13"
+version = "3.4.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -29,27 +29,27 @@ path = "src/lib.rs"
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.53.2", features = ["full"] }
 base64 = "0.23.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
 gxhash = { version = "3.5.0", features = ["deterministic"], optional = true }
 symspell_complete_rs = "0.0.4"
-rand = { version = "0.10.2", features = ["chacha"]}
+rand = { version = "0.10.3", features = ["chacha"]}
 futures = "0.3.34"
 num = "0.4.3"
 num-derive = "0.5.1"
 num-traits = "0.2.19"
 regex = "1.13.1"
-lazy_static = "1.5.0"
+lazy_static = "1.5.1"
 url = "2.5.8"
 sha2 = "0.11.0"
 itertools = "0.15.0"
-async-recursion = "1.1.1"
+async-recursion = "1.2.0"
 zstd = "0.14.0"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
-smallvec = "1.16.1"
+smallvec = "1.16.2"
 memmap2 = "0.9.11"
 regex-syntax = "0.8.11"
 indexmap = { version = "2.14.2", features = ["serde"]}
@@ -59,14 +59,14 @@ colored = "3.1.1"
 walkdir = "2.5.0"
 pdfium-render = { version ="0.9.4",  features = ["thread_safe"], optional = true}
 chrono = "0.4.45"
-utoipa = { version ="5.5.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
+utoipa = { version ="6.0.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
 num_cpus = "1.17.0"
 csv = "1.4.0"
-tokio-test = "0.4.5"
+tokio-test = "0.4.6"
 snap = "1.1.2"
 lz4_flex = "0.14.0"
 bytemuck = { version = "1.25.2", features = ["derive","extern_crate_alloc"] }
-model2vec-rs = "0.2.1"
+model2vec-rs = "0.3.0"
 chunk = "0.10.2"
 snowball_stemmers_rs = "1.0.1"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }

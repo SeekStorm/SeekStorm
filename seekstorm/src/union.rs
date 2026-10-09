@@ -621,7 +621,6 @@ pub(crate) async fn union_scan_32<'a>(
     });
 
     let mut max_score = 0.0;
-    // Bitmask holds at most `union_max` terms; clamp or `32 - len` underflows.
     let mut mask = u32::MAX >> (union_max - cmp::min(query_list.len(), union_max));
     for plo in query_list.iter_mut().take(union_max).rev() {
         if plo.end_flag {
@@ -1300,11 +1299,7 @@ pub(crate) async fn union_docid_3<'a>(
 
     if result_type == &ResultType::Topk || result_type == &ResultType::TopkCount {
         let mut streak = empty_streak;
-        // Bail out to the linear fallback after this many intersections with no heap progress.
         const EMPTY_STREAK_LIMIT: usize = 5;
-        // All terms sparse relative to the collection: intersections are
-        // almost surely empty, so scan the union directly instead of
-        // enumerating empty subsets.
         let sparse_threshold = shard.indexed_doc_count / 128;
         if recursion_count == 0
             && query_list
@@ -1324,7 +1319,6 @@ pub(crate) async fn union_docid_3<'a>(
                 facet_filter,
             )
             .await;
-            // union_blockid consumes traversal state; reset it for the recount below.
             for plo in query_list.iter_mut() {
                 plo.p_block = 0;
                 plo.end_flag_block = false;
@@ -1436,8 +1430,6 @@ pub(crate) async fn union_docid_3<'a>(
         {
             search_result.topk_candidates.pin_heap();
 
-            // Bail out to the linear fallback below after consecutive
-            // intersections without heap progress (empty subsets).
             if recursion_count < 200 && streak < EMPTY_STREAK_LIMIT {
                 union_docid_3(
                     shard,

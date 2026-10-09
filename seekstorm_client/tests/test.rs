@@ -3,7 +3,6 @@
 //! Use: cargo test -p seekstorm_client_rs
 //! Note: The tests will automatically build the server binary if it doesn't exist, and launch it for testing. It will also clean up the index_test folder before running the tests.
 //! If a test fails, the server process needs to be killed manually, e.g. by restarting VSC
-
 use seekstorm_client_rs::{
     ApikeyQuotaObject, Clustering, CreateIndexRequest, Document, DocumentCompression,
     FrequentwordType, GetDocumentRequest, Highlight, Inference, LexicalSimilarity, NgramSet,

@@ -195,7 +195,10 @@ async fn scan32_sparse_uniform_fills_heap() {
     index.index_documents(docs).await;
     index.commit().await;
 
-    let query = (1..=20).map(|i| format!("spar{i:02}")).collect::<Vec<_>>().join(" ");
+    let query = (1..=20)
+        .map(|i| format!("spar{i:02}"))
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let total = search(&index, &query, 0, 1, ResultType::Count).await;
     assert_eq!(total.result_count_total, 2000);
@@ -236,8 +239,15 @@ async fn scan32_distinct_scores_exact_selection() {
     let topk = search(&index, &query, 0, 100, ResultType::Topk).await;
     assert_eq!(topk.results.len(), 100);
 
-    let a: Vec<(usize, u32)> = topk.results.iter().map(|r| (r.doc_id, r.score.to_bits())).collect();
-    let b: Vec<(usize, u32)> = oracle.results[..100].iter().map(|r| (r.doc_id, r.score.to_bits())).collect();
+    let a: Vec<(usize, u32)> = topk
+        .results
+        .iter()
+        .map(|r| (r.doc_id, r.score.to_bits()))
+        .collect();
+    let b: Vec<(usize, u32)> = oracle.results[..100]
+        .iter()
+        .map(|r| (r.doc_id, r.score.to_bits()))
+        .collect();
     assert_eq!(
         strict_key(&a),
         strict_key(&b),
@@ -281,8 +291,16 @@ async fn scan32_topkcount_and_topk_agree() {
     assert_valid_topk(&topk, &oracle);
     assert_valid_topk(&topk_count, &oracle);
 
-    let a: Vec<(usize, u32)> = topk.results.iter().map(|r| (r.doc_id, r.score.to_bits())).collect();
-    let b: Vec<(usize, u32)> = topk_count.results.iter().map(|r| (r.doc_id, r.score.to_bits())).collect();
+    let a: Vec<(usize, u32)> = topk
+        .results
+        .iter()
+        .map(|r| (r.doc_id, r.score.to_bits()))
+        .collect();
+    let b: Vec<(usize, u32)> = topk_count
+        .results
+        .iter()
+        .map(|r| (r.doc_id, r.score.to_bits()))
+        .collect();
     assert_eq!(strict_key(&a), strict_key(&b));
 
     index.close().await;
@@ -309,8 +327,14 @@ async fn scan32_pagination_is_consistent() {
 
     assert_eq!(page.results.len(), 40);
     let pa: Vec<u32> = page.results.iter().map(|r| r.score.to_bits()).collect();
-    let fb: Vec<u32> = full.results[30..70].iter().map(|r| r.score.to_bits()).collect();
-    assert_eq!(pa, fb, "pagination scores must match the full ranking slice");
+    let fb: Vec<u32> = full.results[30..70]
+        .iter()
+        .map(|r| r.score.to_bits())
+        .collect();
+    assert_eq!(
+        pa, fb,
+        "pagination scores must match the full ranking slice"
+    );
 
     index.close().await;
 }

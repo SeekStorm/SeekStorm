@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-10-09
+
+### Added
+
+- Added `seekstorm_mcp_server`, a local MCP server that embeds the SeekStorm library and owns its index; it runs over stdio without a separate `seekstorm_server` process.
+  - Supports configurable schemas and index settings, document indexing/updating/deletion, retrieval and iteration, JSON/NDJSON ingestion, and PDF indexing.
+  - Supports lexical, vector, and hybrid search, including filters, facets, sorting, and highlighting.
+  - Added unit, stdio integration, and MCP contract tests.
+
+### Changed
+
+- utoipa upgraded from 5.5.0 to 6.0.0, now supporting OpenApi 3.2 and HTTP QUERY
+- get_iterator and query_index REST API endpoint now support also the HTTP QUERY verb, in addition to HTTP POST.
+- model2vec-rs upgraded from  2.1.0 to 3.0.0
+
 ## [3.3.13] - 2026-09-12
 
 ### Fixed

@@ -1942,7 +1942,6 @@ impl Search for IndexArc {
                 }
             }
         }
-
         if aggregate_results {
             match search_mode {
                 SearchMode::Lexical => {
@@ -2087,7 +2086,6 @@ impl Search for IndexArc {
                 }
                 let shard_vec =
                     futures::future::join_all(index_ref.shard_vec.iter().map(|s| s.read())).await;
-
                 result_object.results.sort_by(|a, b| {
                     result_ordering_root(
                         &shard_vec,
@@ -2121,7 +2119,6 @@ impl Search for IndexArc {
             if result_object.results.len() > length {
                 result_object.results.truncate(length);
             }
-
             result_object.result_count = result_object.results.len();
         }
 
@@ -2184,7 +2181,6 @@ pub(crate) fn decode_posting_list_count(
         .take(block_id_last + 1)
     {
         let key_count = pointer.2 as usize;
-
         let byte_array =
             &index.index_file_mmap[pointer.0 - (key_count * index.key_head_size)..pointer.0];
         let key_index = binary_search(byte_array, key_count, key_hash1, index.key_head_size);
@@ -2313,7 +2309,6 @@ pub(crate) fn decode_posting_list_object(
 
     for (block_id, pointer) in segment.byte_array_blocks_pointer.iter().enumerate() {
         let key_count = pointer.2 as usize;
-
         let byte_array =
             &shard.index_file_mmap[pointer.0 - (key_count * shard.key_head_size)..pointer.0];
         let key_index = binary_search(byte_array, key_count, key_hash1, shard.key_head_size);
@@ -2626,7 +2621,6 @@ impl SearchLexicalShard for ShardArc {
                             facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
                         }
                     }
-
                     FacetFilter::String16 { field, filter } => {
                         if let Some(idx) = shard_ref.facets_map.get(field) {
                             let facet = &shard_ref.facets[*idx];
@@ -3142,7 +3136,6 @@ impl SearchLexicalShard for ShardArc {
                                 false
                             }
                         };
-
                         if found_plo {
                             let value_new = PostingListObjectQuery {
                                 posting_count,
@@ -3421,7 +3414,6 @@ impl SearchLexicalShard for ShardArc {
                         .clone_from(&stopword_result_object.query_terms);
                     result_object.result_count = stopword_result_object.result_count;
                     result_object.result_count_total = stopword_result_object.result_count_total;
-
                     if result_type != ResultType::Count {
                         result_object
                             .results
@@ -3433,7 +3425,6 @@ impl SearchLexicalShard for ShardArc {
                             result_object.results.truncate(length);
                         }
                     }
-
                     if !search_result.query_facets.is_empty() && result_type != ResultType::Topk {
                         let mut facets: AHashMap<String, Facet> = AHashMap::new();
                         for facet in search_result.query_facets.iter() {
@@ -3452,7 +3443,6 @@ impl SearchLexicalShard for ShardArc {
                                 })
                                 .take(facet.length.max(facet_cap) as usize)
                                 .collect::<Vec<_>>();
-
                             if !v.is_empty() {
                                 facets.insert(facet.field.clone(), v);
                             }
@@ -3479,7 +3469,6 @@ impl SearchLexicalShard for ShardArc {
                 .await;
             } else if query_type_mut == QueryType::Union {
                 search_result.skip_facet_count = true;
-
                 if result_type == ResultType::Count && query_list_len != 2 {
                     union_blockid(
                         &shard_ref,
@@ -3535,9 +3524,9 @@ impl SearchLexicalShard for ShardArc {
                         &field_filter_set,
                         &facet_filter_sparse,
                         &mut matching_blocks,
-                        0, // recursion_count
+                        0,
                         query_term_count,
-                        0, // empty_streak
+                        0,
                     )
                     .await;
                 } else {
@@ -3775,7 +3764,6 @@ impl SearchLexicalShard for ShardArc {
                             })
                             .collect::<Vec<_>>()
                     };
-
                     if !v.is_empty() {
                         facets.insert(facet.field.clone(), v);
                     }
