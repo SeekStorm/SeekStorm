@@ -12,6 +12,12 @@ SeekStorm is open source licensed under the [Apache License 2.0](https://github.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
 [![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
 
+## SeekStorm MCP search server
+[![Crates.io](https://img.shields.io/crates/v/seekstorm_mcp_server.svg)](https://crates.io/crates/seekstorm_mcp_server)
+[![Downloads](https://img.shields.io/crates/d/seekstorm_mcp_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_mcp_server)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
+
 ## SeekStorm multi-tenancy search server
 [![Crates.io](https://img.shields.io/crates/v/seekstorm_server.svg)](https://crates.io/crates/seekstorm_server)
 [![Downloads](https://img.shields.io/crates/d/seekstorm_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_server)
