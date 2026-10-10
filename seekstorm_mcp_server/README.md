@@ -16,6 +16,8 @@ The server supports lexical, vector, and hybrid retrieval, plus document indexin
   - Added unit, stdio integration, and MCP contract tests.
   - The MCP server does currently implement embedded mode only; it does not connect to a remote SeekStorm server.
 
+[Learn more about AI agents, RAG, and MCP — what they mean, and how they fit together.](https://seekstorm.com/ai_agent_rag_mcp)
+
 ## Quickstart
 
 Build from the workspace root:
