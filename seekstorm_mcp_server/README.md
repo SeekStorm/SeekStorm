@@ -52,6 +52,15 @@ cargo run -p seekstorm_mcp_server
 
 MCP clients speak the stdio protocol; do not send regular output to the server's stdout.
 
+## Test it
+
+You can use a MCP client like [MCP Probe](https://github.com/conikeec/mcp-probe) to communicate with the MCP server:
+
+```powershell
+$env:SEEKSTORM_INDEX_PATH="seekstorm_index"; 
+.\mcp-probe debug --stdio "seekstorm_mcp_server.exe"
+```
+
 ## Index Configuration
 
 To create an index with a different schema or vector settings at startup, set `SEEKSTORM_INDEX_CONFIG` to a JSON file containing a SeekStorm `CreateIndexRequest`. The index path still comes from `SEEKSTORM_INDEX_PATH`.
