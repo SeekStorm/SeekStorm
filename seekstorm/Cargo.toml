@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.4.0"
+version = "3.4.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -28,7 +28,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = { version = "1.0.151", features = ["preserve_order"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 tokio = { version = "1.53.2", features = ["full"] }
 base64 = "0.23.1"
 num-format = "0.4.4"
@@ -46,10 +46,10 @@ url = "2.5.8"
 sha2 = "0.11.0"
 itertools = "0.15.0"
 async-recursion = "1.2.0"
-zstd = "0.14.0"
+zstd = "0.14.2"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
-smallvec = "1.16.2"
+smallvec = "1.16.3"
 memmap2 = "0.9.11"
 regex-syntax = "0.8.11"
 indexmap = { version = "2.14.2", features = ["serde"]}

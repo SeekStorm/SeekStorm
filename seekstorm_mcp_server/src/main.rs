@@ -30,7 +30,6 @@ use seekstorm::{
     iterator::GetIterator,
     search::{FacetFilter, QueryRewriting, QueryType, ResultType, Search, SearchMode},
     vector::{Embedding, Inference},
-    vector_similarity::AnnMode,
 };
 use serde::{
     Deserialize, Deserializer,
@@ -129,6 +128,37 @@ struct IndexDocumentsParams {
     documents: Vec<Value>,
 }
 
+/// JSON Schema mirror for the library enum, which does not depend on Schemars.
+#[allow(dead_code)]
+#[derive(schemars::JsonSchema)]
+enum EmbeddingSchema {
+    F32(Vec<f32>),
+    I8(Vec<i8>),
+}
+
+#[allow(dead_code)]
+#[derive(schemars::JsonSchema)]
+enum AnnModeSchema {
+    All,
+    Nprobe(usize),
+    Similaritythreshold(f32),
+    NprobeSimilaritythreshold(usize, f32),
+}
+
+#[allow(dead_code)]
+#[derive(schemars::JsonSchema)]
+enum SearchModeSchema {
+    Lexical,
+    Vector {
+        similarity_threshold: Option<f32>,
+        ann_mode: AnnModeSchema,
+    },
+    Hybrid {
+        similarity_threshold: Option<f32>,
+        ann_mode: AnnModeSchema,
+    },
+}
+
 /// Parameters for searching the index.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchParams {
@@ -140,21 +170,15 @@ struct SearchParams {
     /// Number of results to skip, for pagination (default 0)
     #[serde(default)]
     offset: Option<u32>,
-    /// Search mode: Lexical, Vector, or Hybrid
+    /// SeekStorm SearchMode enum. Vector and Hybrid carry their own ANN mode and threshold.
     #[serde(default)]
-    mode: Option<String>,
-    /// Optional query vector. If omitted, a configured index inference model may generate it.
+    #[schemars(with = "Option<SearchModeSchema>")]
+    search_mode: Option<SearchMode>,
+    /// SeekStorm Embedding enum: {"F32": [...]} or {"I8": [...]}.
+    /// If omitted, a configured internal inference model may generate the query vector.
     #[serde(default)]
-    query_vector: Option<Vec<f32>>,
-    /// Optional quantized signed 8-bit query vector; set this or query_vector, not both
-    #[serde(default)]
-    query_vector_i8: Option<Vec<i8>>,
-    /// ANN cluster-selection strategy, such as "All" or {"Nprobe": 8}
-    #[serde(default)]
-    ann_mode: Option<Value>,
-    /// Minimum vector similarity threshold
-    #[serde(default)]
-    similarity_threshold: Option<f32>,
+    #[schemars(with = "Option<EmbeddingSchema>")]
+    query_vector: Option<Embedding>,
     /// Include uncommitted documents in search
     #[serde(default)]
     realtime: Option<bool>,
@@ -474,33 +498,8 @@ impl SeekStormMcpServer {
             let facet_filter = parse_json_or_default(params.facet_filter.clone())?;
             let result_sort = parse_json_or_default(params.result_sort.clone())?;
             let highlights: Vec<Highlight> = parse_json_or_default(params.highlights.clone())?;
-            let ann_mode: AnnMode = parse_json_or_default(params.ann_mode.clone())?;
-            let threshold = params.similarity_threshold;
-            let search_mode = match params
-                .mode
-                .as_deref()
-                .unwrap_or("Lexical")
-                .to_ascii_lowercase()
-                .as_str()
-            {
-                "lexical" => SearchMode::Lexical,
-                "vector" => SearchMode::Vector {
-                    similarity_threshold: threshold,
-                    ann_mode,
-                },
-                "hybrid" => SearchMode::Hybrid {
-                    similarity_threshold: threshold,
-                    ann_mode,
-                },
-                other => return Err(format!("unsupported search mode: {other}")),
-            };
-            if params.query_vector.is_some() && params.query_vector_i8.is_some() {
-                return Err("set only one of query_vector or query_vector_i8".to_string());
-            }
-            let query_vector = params
-                .query_vector
-                .map(Embedding::F32)
-                .or_else(|| params.query_vector_i8.map(Embedding::I8));
+            let search_mode = params.search_mode.unwrap_or_default();
+            let query_vector = params.query_vector;
             Ok((
                 query_type,
                 result_type,
@@ -540,7 +539,7 @@ impl SeekStormMcpServer {
                 Inference::None | Inference::External { .. }
             ) {
                 return Ok(CallToolResult::error(vec![ContentBlock::text(
-                    "vector and hybrid search need query_vector/query_vector_i8 unless the index has an internal inference model configured",
+                    "vector and hybrid search need query_vector unless the index has an internal inference model configured",
                 )]));
             }
         }
@@ -981,6 +980,12 @@ impl ServerHandler for SeekStormMcpServer {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    eprintln!(
+        "Starting {} v{} (stdio transport)",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
+
     let index_path =
         env::var("SEEKSTORM_INDEX_PATH").unwrap_or_else(|_| "./seekstorm_index".to_string());
     let index_path = PathBuf::from(index_path);
@@ -1004,6 +1009,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use seekstorm::vector_similarity::AnnMode;
 
     #[test]
     fn default_schema_keeps_the_bootstrap_document_fields() {
@@ -1059,5 +1065,45 @@ mod tests {
         assert_eq!(schema.len(), 3);
         assert_eq!(schema[2].field, "published");
         assert!(schema[2].facet);
+    }
+
+    #[test]
+    fn embedding_serde_uses_the_library_enum_variants() {
+        let embedding: Embedding = serde_json::from_value(json!({"F32": [0.25, -0.5]})).unwrap();
+        assert!(matches!(&embedding, Embedding::F32(values) if values == &[0.25, -0.5]));
+        assert_eq!(
+            serde_json::to_value(&embedding).unwrap(),
+            json!({"F32": [0.25, -0.5]})
+        );
+
+        let embedding: Embedding = serde_json::from_value(json!({"I8": [1, -2]})).unwrap();
+        assert!(matches!(&embedding, Embedding::I8(values) if values == &[1, -2]));
+        assert_eq!(
+            serde_json::to_value(&embedding).unwrap(),
+            json!({"I8": [1, -2]})
+        );
+    }
+
+    #[test]
+    fn search_mode_serde_uses_library_variant_fields() {
+        let mode: SearchMode = serde_json::from_value(json!({
+            "Vector": {
+                "similarity_threshold": 0.4,
+                "ann_mode": {"Nprobe": 5}
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(&mode).unwrap(),
+            json!({"Vector": {"similarity_threshold": 0.4_f32, "ann_mode": {"Nprobe": 5}}})
+        );
+        assert!(matches!(
+            mode,
+            SearchMode::Vector {
+                similarity_threshold: Some(threshold),
+                ann_mode: AnnMode::Nprobe(5)
+            } if threshold == 0.4
+        ));
     }
 }

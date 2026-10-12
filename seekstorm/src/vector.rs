@@ -51,7 +51,7 @@ impl fmt::Display for Precision {
 }
 
 /// Embedding with different vector precisions
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Embedding {
     /// 32-bit floating point vector embedding
     F32(Vec<f32>),

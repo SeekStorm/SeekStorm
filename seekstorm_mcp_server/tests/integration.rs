@@ -61,7 +61,10 @@ async fn stdio_server_creates_indexes_streams_documents_searches_and_persists() 
     assert_eq!(committed["isError"], false);
 
     let nebula = client
-        .call_tool("search", json!({"query": "nebula", "mode": "Lexical"}))
+        .call_tool(
+            "search",
+            json!({"query": "nebula", "search_mode": "Lexical"}),
+        )
         .await;
     let nebula_response: Value = serde_json::from_str(content_text(&nebula)).unwrap();
     assert_eq!(nebula_response["result_count_total"], 1);
@@ -87,7 +90,10 @@ async fn stdio_server_creates_indexes_streams_documents_searches_and_persists() 
     client.call_tool("commit", json!({})).await;
 
     let updated_search = client
-        .call_tool("search", json!({"query": "pulsar", "mode": "Lexical"}))
+        .call_tool(
+            "search",
+            json!({"query": "pulsar", "search_mode": "Lexical"}),
+        )
         .await;
     let updated_response: Value = serde_json::from_str(content_text(&updated_search)).unwrap();
     assert_eq!(updated_response["result_count_total"], 1);
@@ -111,7 +117,10 @@ async fn stdio_server_creates_indexes_streams_documents_searches_and_persists() 
 
     let mut reopened = McpProcess::launch(&active_path).await;
     let persisted = reopened
-        .call_tool("search", json!({"query": "pulsar", "mode": "Lexical"}))
+        .call_tool(
+            "search",
+            json!({"query": "pulsar", "search_mode": "Lexical"}),
+        )
         .await;
     let persisted_response: Value = serde_json::from_str(content_text(&persisted)).unwrap();
     assert_eq!(persisted_response["result_count_total"], 1);

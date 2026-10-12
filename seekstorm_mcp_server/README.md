@@ -94,9 +94,9 @@ Documents are arbitrary JSON objects whose fields must match the active index sc
 
 ## Search
 
-`search` accepts a query, `length`, `offset`, and `mode` (`Lexical`, `Vector`, or `Hybrid`). It also supports SeekStorm query types and rewriting, real-time search, field selection, facet filters/facets, sorting, highlighting, ANN settings, and similarity thresholds.
+`search` accepts a query, `length`, `offset`, and SeekStorm's `search_mode` enum (`Lexical`, `Vector`, or `Hybrid`). It also supports SeekStorm query types and rewriting, real-time search, field selection, facet filters/facets, sorting, and highlighting.
 
-For vector or hybrid search, provide `query_vector` (float values) or `query_vector_i8` (signed 8-bit values), unless the active index is configured with an internal inference model. Explicit vectors must match the index dimensions. Vector search needs vector-indexed fields in the schema; hybrid search can combine lexical fields and vectors. `ann_mode` accepts SeekStorm's serialized `AnnMode`, for example `"All"` or `{ "Nprobe": 8 }`.
+For vector or hybrid search, provide `query_vector` as a SeekStorm `Embedding` enum (`{"F32": [...]}` or `{"I8": [...]}`), unless the active index is configured with an internal inference model. Explicit vectors must match the index dimensions. Vector search needs vector-indexed fields in the schema; hybrid search can combine lexical fields and vectors. `Vector` and `Hybrid` search modes carry their own `similarity_threshold` and `ann_mode` fields.
 
 Example lexical search tool arguments:
 
@@ -115,8 +115,13 @@ Example vector search arguments for a 3-dimensional vector index:
 ```json
 {
   "query": "related documents",
-  "mode": "Vector",
-  "query_vector": [0.12, -0.03, 0.88],
+  "search_mode": {
+    "Vector": {
+      "similarity_threshold": null,
+      "ann_mode": "All"
+    }
+  },
+  "query_vector": {"F32": [0.12, -0.03, 0.88]},
   "length": 5
 }
 ```

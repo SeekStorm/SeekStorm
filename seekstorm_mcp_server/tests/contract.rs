@@ -49,10 +49,8 @@ async fn advertises_the_embedded_seekstorm_tool_contract() {
     for field in [
         "query",
         "length",
-        "mode",
+        "search_mode",
         "query_vector",
-        "query_vector_i8",
-        "ann_mode",
         "field_filter",
         "query_facets",
         "facet_filter",
@@ -65,6 +63,18 @@ async fn advertises_the_embedded_seekstorm_tool_contract() {
         properties["limit"].is_null(),
         "search should use SeekStorm's length name"
     );
+
+    for field in [
+        "mode",
+        "query_vector_i8",
+        "ann_mode",
+        "similarity_threshold",
+    ] {
+        assert!(
+            properties[field].is_null(),
+            "unexpected flattened search field {field}"
+        );
+    }
 
     let delete_by_query = tools
         .iter()
