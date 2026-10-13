@@ -1868,6 +1868,11 @@ See roadmap below.
 ## Blog Posts
 
 - Search
+  - [Introducing the SeekStorm MCP server](https://seekstorm.com/blog/seekstorm-mcp-server/)
+  - [symspell_rs v7 - 3x faster lookup, 40% less memory consumption, 11x faster Damerau-Levenshtein edit distance](https://seekstorm.com/blog/symspell_rs-3x-faster-lookup-40-less-memory-11x-faster-levenshtein)
+  - [SeekStorm 3.0 adds vector search & hybrid search](https://seekstorm.com/blog/seekstorm-adds-vector_search-hybrid-search)
+  - [Document iterator and search with empty query string](https://seekstorm.com/blog/document-iterator-search-with-empty-query-string)
+  - [Typo-tolerant Query auto-completion (QAC)](https://seekstorm.com/blog/query-auto-completion-(QAC))
   - [N-gram index for faster phrase search: latency vs. size](https://seekstorm.com/blog/n-gram-indexing-for-faster-phrase-search/)
   - [SeekStorm sharded index architecture - using a multi-core processor like a miniature data center](https://seekstorm.com/blog/SeekStorm-sharded-index-architecture/)
   - [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
