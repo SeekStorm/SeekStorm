@@ -82,6 +82,7 @@ Blog Posts:
 - [N-gram index for faster phrase search: latency vs. size](https://seekstorm.com/blog/n-gram-indexing-for-faster-phrase-search/)
 - [Typo-tolerant Query auto-completion - derived from indexed documents](https://seekstorm.com/blog/query-auto-completion-(QAC)/)
 - [SeekStorm 3.0 adds vector search & hybrid search](https://seekstorm.com/blog/seekstorm-adds-vector_search-hybrid-search/)
+- [Introducing the SeekStorm MCP server](https://seekstorm.com/blog/seekstorm-mcp-server/)
 
 ### SeekStorm high-performance search library
 
@@ -137,6 +138,7 @@ Blog Posts:
 #### General Features
 * **True real-time search**, both for **vector search** and **lexical search**, with negligible performance impact
 * Incremental indexing
+* MCP server for agentic search
 * Unlimited field number, field length & index size
 * Compressed document store: ZStandard
 * Field filtering
