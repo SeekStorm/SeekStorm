@@ -305,7 +305,7 @@ True real-time search, as opposed to NRT: every indexed document is immediately 
 **How hybrid search works**  
 SeekStorm doesn't try to make one index do everything. It runs two native engines, an inverted index for lexical relevance and an ANN (IVF) index for vector similarity, each with its own storage layout, indexing, search, scoring and top-k candidates.
 A unified query planner (QueryModes and FusionTypes, including Reciprocal Rank Fusion) combines them per query: pure lexical, pure vector, or hybrid. Hybrid search is exhaustive, not just re-ranking of preliminary candidates.
-You are shielded from the complexity, as if it was a single index. See [ARCHITECTURE](https://seekstorm.com/architecture).
+You are shielded from the complexity, as if it was a single index. See [ARCHITECTURE.md](ARCHITECTURE.md#architecture) and  [architecture page](https://seekstorm.com/architecture).
 
 
 ```mermaid
