@@ -1,114 +1,80 @@
+<p align="center">
+  <img src="assets/logo.png" width="380" alt="SeekStorm">
+</p>
 
-<img src="assets/logo.png" width="450" alt="Logo"><br>
-**SeekStorm**: **sub-millisecond**, native **vector** & **lexical search** - **in-process library** & **multi-tenancy server**, in **Rust**.
+<h3 align="center">
+Sub-millisecond lexical, vector &amp; hybrid search in Rust.<br>
+Embed it as a library, run it as a server, or give your agents search via MCP.
+</h3>
 
-Development started in 2015, in [production](https://seekstorm.com) since 2020.  
-SeekStorm is open source licensed under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
+<p align="center">
+  <a href="https://github.com/SeekStorm/SeekStorm/stargazers"><img src="https://img.shields.io/github/stars/SeekStorm/SeekStorm?style=flat-square" alt="GitHub stars"></a>
+  <a href="https://crates.io/crates/seekstorm"><img src="https://img.shields.io/crates/v/seekstorm.svg?style=flat-square" alt="Crates.io"></a>
+  <a href="https://crates.io/crates/seekstorm"><img src="https://img.shields.io/crates/d/seekstorm.svg?style=flat-square" alt="Downloads"></a>
+  <a href="https://docs.rs/seekstorm"><img src="https://docs.rs/seekstorm/badge.svg" alt="docs.rs"></a>
+  <a href="https://hub.docker.com/r/wolfgarbe/seekstorm_server"><img src="https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server?style=flat-square" alt="Docker pulls"></a>
+  <a href="https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="Apache 2.0"></a>
+  <a href="#roadmap"><img src="https://img.shields.io/badge/Roadmap-2026-DA7F07.svg" alt="Roadmap 2026"></a>
+</p>
 
-## SeekStorm in-process search library
-[![Crates.io](https://img.shields.io/crates/v/seekstorm.svg)](https://crates.io/crates/seekstorm)
-[![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm)
-[![Documentation](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
-[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
-
-## SeekStorm MCP search server
-[![Crates.io](https://img.shields.io/crates/v/seekstorm_mcp_server.svg)](https://crates.io/crates/seekstorm_mcp_server)
-[![Downloads](https://img.shields.io/crates/d/seekstorm_mcp_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_mcp_server)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
-[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
-
-## SeekStorm multi-tenancy search server
-[![Crates.io](https://img.shields.io/crates/v/seekstorm_server.svg)](https://crates.io/crates/seekstorm_server)
-[![Downloads](https://img.shields.io/crates/d/seekstorm_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_server)
-[![Docker](https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server)](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
-[![REST API Documentation](https://docs.rs/seekstorm/badge.svg)](https://seekstorm.com/documentation/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
-[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
-
-## SeekStorm REST client (Rust)
-[![Crates.io](https://img.shields.io/crates/v/seekstorm_client_rs.svg)](https://crates.io/crates/seekstorm_client_rs)
-[![Downloads](https://img.shields.io/crates/d/seekstorm_client_rs.svg?style=flat-square)](https://crates.io/crates/seekstorm_client_rs)
-[![Documentation](https://docs.rs/seekstorm_client_rs/badge.svg)](https://docs.rs/seekstorm_client_rs)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme)
-[![Roadmap](https://img.shields.io/badge/Roadmap-2026-DA7F07.svg)](#roadmap)
-
-## SeekStorm REST client (Python)
-[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_pure_py)](https://github.com/SeekStorm/seekstorm_client_pure_py)
-[![PyPI](https://img.shields.io/pypi/v/seekstorm-client-pure-py?label=PyPI)](https://pypi.org/project/seekstorm-client-pure-py/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_pure_py?tab=Apache-2.0-1-ov-file#readme)
-
-## SeekStorm REST client (TypeScript)
-[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_ts)](https://github.com/SeekStorm/seekstorm_client_ts)
-[![npm](https://img.shields.io/npm/v/seekstorm_client_ts?label=npm)](https://www.npmjs.com/package/seekstorm_client_ts)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_pure_ts?tab=Apache-2.0-1-ov-file#readme)
-
-## SeekStorm REST client (C#)
-[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_cs)](https://github.com/SeekStorm/seekstorm_client_cs)
-[![NuGet version](https://badge.fury.io/nu/SeekStorm.Client.svg)](https://badge.fury.io/nu/SeekStorm.Client)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_cs?tab=Apache-2.0-1-ov-file#readme)
-
-## SeekStorm REST client (Java)
-[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm_client_java)](https://github.com/SeekStorm/seekstorm_client_java)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SeekStorm/seekstorm_client_java?tab=Apache-2.0-1-ov-file#readme)
-
-## SeekStorm Instant search adapter
-A drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend — no UI rewrite required.  
-Or, use the InstantSearch widget library to build a fresh UI from scratch, with SeekStorm's REST API as the backend.
-
-[![GitHub Stars](https://img.shields.io/github/stars/SeekStorm/seekstorm-instantsearch-adapter)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter)
-[![npm](https://img.shields.io/npm/v/seekstorm-instantsearch-adapter?label=npm)](https://www.npmjs.com/package/seekstorm-instantsearch-adapter)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/SeekStorm/seekstorm-instantsearch-adapter?tab=MIT-1-ov-file#readme)
-
-<p>
-  <a href="https://seekstorm.com">Website</a> | 
-  <a href="https://seekstorm.github.io/search-benchmark-game/">Benchmark</a> | 
-  <a href="https://deephn.org/">Demo</a> | 
-  <a href="#documentation">Library Docs</a> | 
-  <a href="https://seekstorm.com/documentation/">REST API Docs</a> |
-  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md">Server Readme</a> |
-  <a href="https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_client/README.md">Client Readme</a> |
-  <a href="#roadmap">Roadmap</a> | 
-  <a href="https://seekstorm.com/blog/">Blog</a> | 
+<p align="center">
+  <a href="https://seekstorm.com">Website</a> ·
+  <a href="https://deephn.org/">Live demo</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="https://docs.rs/seekstorm">Docs</a> ·
+  <a href="https://seekstorm.com/documentation/">REST API</a> ·
+  <a href="https://seekstorm.com/blog/">Blog</a> ·
+  <a href="https://discord.gg/FHCZbQwRE">Discord</a> ·
   <a href="https://x.com/seekstorm">X</a>
 </p>
 
----
+<!-- TODO: replace this screenshot with a 10-15 s GIF (e.g. assets/demo.gif): type a query, results appear instantly -->
+<p align="center">
+  <a href="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/hybrid_search_server_console_web_ui.png">
+    <img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/hybrid_search_server_console_web_ui.png" width="800"
+         alt="Hybrid search over 5M Wikipedia articles, with the SeekStorm server console and web UI">
+  </a>
+  <br>
+  <sub><em>5M Wikipedia articles · 16.6M vectors · hybrid search (click to enlarge)</em></sub>
+</p>
 
-Blog Posts: 
-- [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/)
-- [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
-- [SeekStorm sharded index architecture - using a multi-core processor like a miniature data center](https://seekstorm.com/blog/SeekStorm-sharded-index-architecture/)
-- [N-gram index for faster phrase search: latency vs. size](https://seekstorm.com/blog/n-gram-indexing-for-faster-phrase-search/)
-- [Typo-tolerant Query auto-completion - derived from indexed documents](https://seekstorm.com/blog/query-auto-completion-(QAC)/)
-- [SeekStorm 3.0 adds vector search & hybrid search](https://seekstorm.com/blog/seekstorm-adds-vector_search-hybrid-search/)
-- [Introducing the SeekStorm MCP server](https://seekstorm.com/blog/seekstorm-mcp-server/)
 
-### SeekStorm high-performance search library
+Developed since 2015, [in production](https://seekstorm.com) since 2020. Open source under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme). Independent and bootstrapped, no VC.
 
-#### Hybrid search
-* Internally, SeekStorm uses [**two separate, first-class, native index architectures**](ARCHITECTURE.md#architecture) for **vector search** and **keyword search**. Two native cores, not just a retrofit, add-on layer.
-* SeekStorm doesn’t try to make one index do everything. It runs two native search engines and lets the query planner decide how to combine them.
-* Two **native** index architectures under one roof:
-  - **Lexical search**: an inverted index optimized for lexical relevance, 
-  - **Vector search**: an ANN index optimized for vector similarity.
-* Both are first-class engines, integrated at the query planner level.
-  - Query planner with multiple QueryModes and FusionTypes
-  - **Per query choice** of lexical search, **vector search**, or **hybrid search**.
-* Separate internal index, storage layouts, indexing, search, scoring, top-k candidates - unified query planner and result fusion (Reciprocal Rank Fusion - RRF).
-* But the user is fully shielded from the complexity, as if it was only a single index.
-* Enables pure lexical, pure vector or hybrid search (exhaustive, not only re-ranking of preliminary candidates). 
+**From the author of** [SymSpell](https://github.com/wolfgarbe/SymSpell) ![stars](https://img.shields.io/github/stars/wolfgarbe/SymSpell?style=flat-square&label=%E2%98%85) (typo tolerance),
+[PruningRadixTrie](https://github.com/wolfgarbe/PruningRadixTrie) ![stars](https://img.shields.io/github/stars/wolfgarbe/PruningRadixTrie?style=flat-square&label=%E2%98%85) (instant search) and
+[WordSegmentationTM](https://github.com/wolfgarbe/WordSegmentationTM) ![stars](https://img.shields.io/github/stars/wolfgarbe/WordSegmentationTM?style=flat-square&label=%E2%98%85) (word segmentation).
+
+| | |
+|---|---|
+| ⚡ **Fast** | **306 µs** average lexical latency: **8x lower** latency and **21x lower P99** than Lucene. All query types, single field, 5M Wikipedia docs, [details](#benchmarks). |
+| 🔀 **Native hybrid** | Two first-class engines (inverted index + IVF ANN) behind one query planner. Lexical, vector or hybrid **per query**, fused with Reciprocal Rank Fusion (RRF). Field filters are active *during* vector search. |
+| 🔤 **Lexical search** | BM25F and BM25F_Proximity, intersection / union / phrase / NOT queries, 6 tokenizers incl. Chinese word segmentation, stemming for 38 languages, N-gram phrase indexing, Block-max WAND and Maxscore. |
+| 📐 **Vector search** | Multi-vector indexing, embedded Model2Vec inference or bring-your-own embeddings, F32 / I8, cosine / dot / Euclidean, TurboQuant and scalar quantization, sentence-aware chunking, sharded leveled IVF index. |
+| ⏱️ **Real-time** | True real-time, not near-real-time: every document is searchable immediately, even before and during commit. No segment merges, no JIT warm-up, no GC pauses. |
+| 🔎 **Search features** | Faceting (string and numeric range facets, histogram), sorting, result boosting, geo proximity search, typo tolerance, query completion, instant search, KWIC highlighting, synonyms. |
+| 📈 **Scales on one box** | Billion-scale indices with low latency and low RAM consumption, unlimited fields, field length and index size. 35K docs/sec indexing on a laptop, RAM or memory-mapped files. SIMD on x86-64 (AVX2) and AArch64 (NEON). Windows, Linux, macOS. |
+| 🔁 **Portable index** | The same binary index works in the library, the server and the cloud. No re-indexing, no lock-in. [More](#portable-index-library--server--cloud) |
+| 🤖 **Agent-ready** | Built-in [MCP server](#mcp-server-for-ai-agents) for RAG and agentic search. |
+| 🖥️ **Server & SDKs** | REST API with CORS, multi-tenancy, embedded web UI, CSV / JSON / NDJSON / PDF ingestion, Docker image. Client SDKs for Python, TypeScript, Rust, C#, Java. |
+
+> **About "sub-millisecond":** it refers to *average* latency. Lexical search average latency is 0.3 ms on 5M Wikipedia documents, P99 is 0.8-6.8 ms depending on query type.  
+> Vector search is sub-millisecond on SIFT1M-sized indices (188 µs at 95% recall@10), but not at larger scale:  
+> 2.7 ms on 16M Wikipedia vectors and 3.2 ms on GIST1M (960 dimensions), both at 95% recall@10. [All numbers](#benchmarks)
+
+<details>
+<summary>Full feature list</summary>
 
 #### Architecture
 * *Fast* sharded indexing: 35K docs/sec = 3 billion docs/day on a laptop.
-* *Fast* sharded search: [7x faster query latency, 17x faster tail latency (P99)](#benchmarks) for lexical search.
+* *Fast* sharded search: [7x lower query latency and 17x lower tail latency (P99) than the better of Lucene and Tantivy, 8x / 21x vs. Lucene alone](#benchmarks), for lexical search.
 * Billion-scale index
 * Index either in RAM or memory mapped files
 * Cross-platform (Windows, Linux, MacOS)
 * SIMD (Single Instruction, Multiple Data) hardware acceleration support,  
   both for x86-64 (AMD64 and Intel 64) and AArch64 (ARM, Apple Silicon).
 * Single-machine scalability: serving thousands of concurrent queries with low latency from a single commodity server without needing clusters or proprietary hardware accelerators.
-* 100% human 😎 craftsmanship - No AI 🤖 was forced into vibe coding/AI slop.
 
 #### Vector Features
 * **Multi-Vector indexing**: both from multiple fields and from multiple chunks per field.
@@ -120,7 +86,7 @@ Blog Posts:
 * **Chunking** that respects **sentence boundaries** and **Unicode segmentation** for multilingual text.
 * **K-Medoid clustering**: PAM (Partition Around Medoids) with actual data points as centers.
 * **Sharded and leveled IVF index**.
-* **Approximate Nearest Neighbor Search** (ANNS) in an **Leveled IVF index**.
+* **Approximate Nearest Neighbor Search** (ANNS) in a **Leveled IVF index**.
 * All **field filters** are directly active **during vector search**, not just as post-search filtering step.
 * SIMD (AVX2) acceleration for vector quantization and similarity calculation.
 
@@ -192,13 +158,129 @@ Blog Posts:
 * Docker file and container image at [Docker Hub](https://hub.docker.com/r/wolfgarbe/seekstorm_server)
 * Client libraries/SDK in Rust, Python, C#, Java, TypeScript.
 
+</details>
+
+---
+
+## Quick start
+
+### Server (Docker)
+
+```bash
+docker run -ti -p "8000:80" -v "$(pwd)/seekstorm_storage:/seekstorm_index:z" wolfgarbe/seekstorm_server
+```
+
+Then open the embedded web UI at [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Index and search via the [REST API](https://seekstorm.com/documentation/), or follow the [Wikipedia tutorial](#demos) to ingest data and search it in the web UI.
+
+&#x26A0; Set the `MASTER_KEY_SECRET` environment variable to a secret (e.g. add `-e MASTER_KEY_SECRET=<your-secret>` to the command above), otherwise your generated API keys will be compromised.
+
+### MCP server for AI agents
+
+```bash
+cargo install seekstorm_mcp_server
+```
+
+Add it to your MCP client configuration (Claude Desktop, Cursor, ...):
+
+```json
+{
+  "mcpServers": {
+    "seekstorm": {
+      "command": "seekstorm_mcp_server",
+      "env": { "SEEKSTORM_INDEX_PATH": "/path/to/seekstorm-index" }
+    }
+  }
+}
+```
+
+The MCP server runs as a child process over stdio and embeds SeekStorm directly: no server process or network connection required.
+If no index exists at `SEEKSTORM_INDEX_PATH`, one is created with a default schema (`title`, `body`, `path`).
+It exposes lexical, vector and hybrid `search`, plus document indexing, JSON/NDJSON ingestion, PDF indexing and index management as MCP tools.
+See the [MCP server README](seekstorm_mcp_server/README.md) for the full tool list and configuration, and [AI agents, RAG and MCP explained](https://seekstorm.com/ai_agent_rag_mcp) for background.
+
+### Rust library
+
+```bash
+cargo add seekstorm serde_json
+cargo add tokio --features full
+```
+
+```rust ,no_run
+use std::path::Path;
+use seekstorm::commit::Commit;
+use seekstorm::index::{create_index, AccessType, Clustering, DocumentCompression, FrequentwordType, IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::vector::Inference;
+
+#[tokio::main]
+async fn main() {
+    // 1. Schema: which fields exist and how they are indexed
+    let schema = serde_json::from_str(r#"[
+        {"field":"title","field_type":"Text","store":true,"index_lexical":true},
+        {"field":"body","field_type":"Text","store":true,"index_lexical":true}
+    ]"#).unwrap();
+
+    // 2. Create the index
+    let meta = IndexMetaObject {
+        id: 0,
+        name: "quickstart".into(),
+        lexical_similarity: LexicalSimilarity::Bm25f,
+        tokenizer: TokenizerType::UnicodeAlphanumeric,
+        stemmer: StemmerType::None,
+        stop_words: StopwordType::None,
+        frequent_words: FrequentwordType::English,
+        ngram_indexing: NgramSet::NgramFF as u8,
+        document_compression: DocumentCompression::Snappy,
+        access_type: AccessType::Mmap,
+        spelling_correction: None,
+        query_completion: None,
+        clustering: Clustering::None,
+        inference: Inference::None,
+    };
+    let mut index_arc = create_index(Path::new("./seekstorm_index"), meta, &schema, &Vec::new(), 11, false, None).await.unwrap();
+
+    // 3. Index documents
+    let docs = r#"[{"title":"title1 test","body":"body1"}, {"title":"title2","body":"body2 test"}]"#;
+    index_arc.index_documents(serde_json::from_str(docs).unwrap()).await;
+    index_arc.commit().await;
+
+    // 4. Search
+    let result_object = index_arc.search(
+        "test".to_string(), None, QueryType::Intersection, SearchMode::Lexical, false, 0, 10, ResultType::TopkCount, false,
+        Vec::new(), Vec::new(), Vec::new(), Vec::new(), QueryRewriting::SearchOnly,
+    ).await;
+
+    println!("{} hits", result_object.result_count_total);
+    for r in result_object.results.iter() {
+        println!("doc {} score {}", r.doc_id, r.score);
+    }
+}
+```
+
+Vector search, hybrid search, facets and more: see [Usage of the library](#usage-of-the-library).
+
+> ⭐ If SeekStorm looks useful, a star helps other developers find it.
+
+---
+
+## What can you build?
+
+* **Search for your app or site**: product and site search with facets, typo tolerance, query completion and instant search.
+* **Instant search UIs**: build on the InstantSearch widgets, or keep your existing Algolia InstantSearch frontend and swap only the backend with the [adapter](#components).
+* **RAG and agent retrieval**: hybrid search over [MCP](#mcp-server-for-ai-agents), searchable the moment a document is indexed.
+* **Search over your own data**: JSON, CSV, NDJSON and PDF, e.g. an English Wikipedia search engine in 5 steps ([tutorial](#demos)).
+* **Search inside your application**: link the library, no server to run.
+
+More in [Search API use cases](https://seekstorm.com/search-api-use-cases) and [Search API features](https://seekstorm.com/search-api-features).
+
 ---
 
 ## Why SeekStorm?
 
 **Twin-core native vector & keyword search**  
-[Two separate, first-class, native index architectures](ARCHITECTURE.md#architecture) for **vector search** and **keyword search** under one roof.  
-A query planner with 8 dedicated QueryModes and FusionTypes automatically decide how to combine the results for maximum query understanding.
+[Two separate, first-class, native index architectures](ARCHITECTURE.md#architecture) for **vector search** and **keyword search** under one roof ensures **hybrid search** with **maximum performance**.  
+A query planner with dedicated QueryModes and FusionTypes automatically decide how to combine the results for maximum query understanding.
 
 **Performance**  
 Lower latency, higher throughput, lower cost & energy consumption, esp. for multi-field and concurrent queries.  
@@ -220,90 +302,34 @@ Term proximity ranking provides more relevant results compared to BM25.
 **Real-time**  
 True real-time search, as opposed to NRT: every indexed document is immediately searchable, even before and during commit.
 
-## Benchmarks
-
-### Lexical Search
-
-<img src="assets/search_benchmark_game1.png" width="800" alt="Benchmark">
-<br>
-<br>
-<img src="assets/search_benchmark_game2.png" width="800" alt="Benchmark">
-<br>
-<br>
-<img src="assets/search_benchmark_game3.png" width="800" alt="Benchmark">
-<br>
-<br>
-<img src="assets/ranking.jpg" width="800" alt="Ranking">
-
-*the who: vanilla BM25 ranking vs. SeekStorm proximity ranking*<br><br>
-
-**Methodology**  
-Comparing different open-source search engine libraries (BM25 lexical search) using the open-source **search_benchmark_game** developed by [Tantivy](https://github.com/quickwit-oss/search-benchmark-game/) and [Jason Wolfe](https://github.com/jason-wolfe/search-index-benchmark-game).
-
-**Benefits**
-+ using a proven open-source benchmark used by other search libraries for comparability
-+ adapters written mostly by search library authors themselves for maximum authenticity and faithfulness
-+ results can be replicated by everybody on their own infrastructure
-+ detailed results per query, per query type and per result type to investigate optimization potential
-
-**Detailed benchmark results**
-https://seekstorm.github.io/search-benchmark-game/
-
-**Benchmark code repository**
-https://github.com/SeekStorm/search-benchmark-game/
-
-See our **blog posts** for more detailed information: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/) and [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
-
-### Vector search
-
-<img src="assets/vector_search_benchmark.png" width="800" alt="Benchmark">
-<br>
-<br>
-
-#### [SIFT1M dataset](http://corpus-texmex.irisa.fr/) 1 million vectors, 128 dimensions, f32 precision, Euclidean  
-- 8-bit Scalar Quantization, nprobe=16 -> recall@10=95%, average latency=188 microseconds  
-- 8-bit Scalar Quantization, nprobe=33 -> recall@10=99%, average latency=302 microseconds  
-
-<br>
-
-#### [GIST1M dataset](http://corpus-texmex.irisa.fr/) 1 million vectors, 960 dimensions, f32 precision, Euclidean  
-- 8-bit Scalar Quantization, nprobe=38 -> recall@10=95%, average latency=3,198 microseconds  
-- 8-bit Scalar Quantization, nprobe=80 -> recall@10=98%, average latency=5,737 microseconds  
+**How hybrid search works**  
+SeekStorm doesn't try to make one index do everything. It runs two native engines, an inverted index for lexical relevance and an ANN (IVF) index for vector similarity, each with its own storage layout, indexing, search, scoring and top-k candidates.
+A unified query planner (QueryModes and FusionTypes, including Reciprocal Rank Fusion) combines them per query: pure lexical, pure vector, or hybrid. Hybrid search is exhaustive, not just re-ranking of preliminary candidates.
+You are shielded from the complexity, as if it was a single index. See [ARCHITECTURE](https://seekstorm.com/architecture).
 
 
-[Benchmark code](#vector-search-sift1m-dataset)
-
-### Benchmark vector search vs. lexical search (Wikipedia)
-
-There are benchmarks of vector search engines, and benchmarks of lexical search engines.  
-But seeing the latency of lexical search and vector search stacked up against each other might offer some unique insight.
-
-<img src="assets/vector_lexical_benchmark.png" width="800" alt="Benchmark">
-<br>
-<br>
-
-**English Wikipedia**: 5 million documents, 16 million vectors  
-Lexical: 2 fields, top10, BM25, average latency	305 microseconds  
-Vector: 2 fields, nprobe=68 -> recall@10=95%, average latency 2,700 microseconds  
-Vector: 2 fields, nprobe=200 -> recall@10=99%, average latency 6,370 microseconds  
-Using [Model2Vec from MinishLab](https://github.com/MinishLab/model2vec-rs): PotionBase2M, chunks: 1000 byte 
-
-We are using the **English Wikipedia** data (*5 million entries*) and queries (*300 intersection queries*) derived from the **AOL query dataset**, both from [Tantivy’s search-benchmark-game](https://github.com/quickwit-oss/search-benchmark-game/).
-
-### Why latency matters
-
-* Search speed might be good enough for a single search. Below 10 ms people can't tell latency anymore. Search latency might be small compared to internet network latency.
-* But search engine performance still matters when used in a server or service for many concurrent users and requests for maximum scaling, throughput, low processor load, and cost.
-* With performant search technology, you can serve many concurrent users at low latency with fewer servers, less cost, less energy consumption, and a lower carbon footprint.
-* It also ensures low latency even for complex and challenging queries: instant search, fuzzy search, faceted search, and union/intersection/phrase of very frequent terms.
-* Local search performance matters, e.g. when many local queries are spawned for reranking, fallback/refinement queries, fuzzy search, data mining or RAG befor the response is transferred back over the network.
-* Besides average latencies, we also need to reduce tail latencies, which are often overlooked but can cause loss of customers, revenue, and a bad user experience.
-* It is always advisable to engineer your search infrastructure with enough performance headroom to keep those tail latencies in check, even during periods of high concurrent load.
-* Also, even if a human user might not notice the latency, it still might make a big difference in autonomous stock markets, defense applications or RAG which requires multiple queries.
-
+```mermaid
+flowchart TD
+    Q["Query: lexical / vector / hybrid"] --> P["Query planner"]
+    P --> L["Lexical engine<br/>inverted index, BM25F"]
+    P --> V["Vector engine<br/>leveled IVF, ANN"]
+    L --> F["Result fusion<br/>RRF"]
+    V --> F
+    F --> R["Final ranked results"]
+```
 ---
 
-## Keyword search remains a core building block in the advent of vector search and LLMs
+## Why hybrid search?
+
+Because lexical search and vector search **complement each other**. Combining them improves result quality by combining their strengths while compensating their shortcomings.
+
+* **Lexical search** is fast, precise, exact, and language independent, but unable to deal with meaning and semantic similarity.
+* **Vector search** understands similarity, but is language dependent, can't deal with new or rare terms it wasn't trained for, and is slower and more expensive.
+
+**Vector search is not a replacement for keyword search, but a complementary addition.**
+
+<details>
+<summary>Keyword search vs. vector search: the long version</summary>
 
 Despite what the hype-cycles https://www.bitecode.dev/p/hype-cycles want you to believe, keyword search is not dead, as NoSQL wasn't the death of SQL.
 
@@ -382,6 +408,359 @@ Vector search enables you to search not only for similar text, but for everythin
 
 > **Vector search is not a replacement for keyword search, but a complementary addition** - best to be used within a hybrid solution where the strengths of both approaches are combined. **Keyword search is not outdated, but time-proven**.
 
+</details>
+
+---
+
+## Architecture - under the hood
+
+* **A shard per processor core.** Search engines shard an index across servers. SeekStorm applies the same principle one level down, so a CPU works like a miniature data center. Shards are lock-free, a query fans out to all shards in parallel, and the aggregated top-k is re-scored with global document frequencies and average document length, so BM25 ranking stays consistent across shards. Measured on 5 million Wikipedia documents: roughly **4-6x faster indexing and 3x lower query latency** than a non-sharded index.
+* **Leveled index.** Documents accumulate in RAM. Every 64k documents per shard form a level that is committed to disk and becomes immutable. Lexical and vector indices use the same layout, which is why there are no segment merges.
+* **N-gram indexing for phrase search.** Bigrams and trigrams of frequent terms are indexed directly, moving the intersection and the position check from query time to index time. Phrase queries improved by **2.18x in mean latency and 7.63x at p99.9**, with some individual queries up to three orders of magnitude faster, while BM25 scores stay almost identical.
+* **Lexical engine.** Document-at-a-time processing, SIMD-accelerated (AVX2 / NEON) roaring-bitmap intersection and union, galloping intersection, and a faster-than-Block-Max-WAND top-k union for early termination.
+* **Vector engine.** An IVF index per level and shard, clustered with K-Medoid (PAM) instead of K-Means: cluster centers are actual data points. `nprobe` controls the recall/latency trade-off. Field filters are applied during the ANN search, not afterwards.
+* **Plain on-disk layout.** API key → index → shard → level, with `index.bin`, `vector.bin`, `facet.bin` and a Zstandard-compressed `docstore.bin`. No external dependencies.
+
+More in [ARCHITECTURE.md](ARCHITECTURE.md#architecture) and on the [architecture page](https://seekstorm.com/architecture).
+
+---
+
+## Portable index: library ↔ server ↔ cloud
+
+The same binary index works everywhere: embed the `seekstorm` library in your app, run the multi-tenancy server on your own infrastructure, or let [SeekStorm Cloud](https://seekstorm.com) run it for you.
+No re-indexing, no export/import, and you can move in either direction. No vendor lock-in.
+
+* An index is a plain directory tree of self-contained files, no database engine needed. Backup and restore is a file copy.
+* The index runs fully in RAM or memory-mapped. Both modes share one file format, so an existing index can switch access mode at any time.
+
+---
+
+## Benchmarks
+
+### Lexical search (Wikipedia)
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/search_benchmark_game1.png" width="800" alt="Query latency in µs: Lucene vs. Tantivy vs. SeekStorm">
+
+5 million English Wikipedia documents, result type top-k + count, via the [search_benchmark_game](https://github.com/SeekStorm/search-benchmark-game/) (Lucene 10.3.0-bp, Tantivy 0.25, SeekStorm 1.0.0).
+<!-- TODO: add CPU / RAM / OS of the benchmark machine -->
+
+| Query type, single field | Lucene (µs) | Tantivy (µs) | **SeekStorm (µs)** | vs. best of the two | vs. Lucene |
+|---|---:|---:|---:|---:|---:|
+| **all queries**, average latency | 2,656 | 2,205 | **306** | **7.2x** | 8.7x |
+| **all queries**, tail latency (P99) | 34,920 | 27,084 | **1,591** | **17.0x** | 21.9x |
+
+Across all eight query categories SeekStorm is **2.0x-9.5x** lower in average latency and **3.1x-17.0x** lower at P99 than the better of Lucene and Tantivy.
+Detailed results per query: [single-field](https://seekstorm.github.io/search-benchmark-game-singlefield/) · [multi-field](https://seekstorm.github.io/search-benchmark-game-multifield/)
+
+
+<details>
+<summary>Average latency and P99 per query category (µs)</summary>
+
+**Average latency**
+
+| Query type | Lucene | Tantivy | SeekStorm | vs. best of the two | vs. Lucene |
+|---|---:|---:|---:|---:|---:|
+| phrase, single field | 1,426 | 1,214 | 221 | 5.5x | 6.5x |
+| phrase, multi field | 1,449 | 1,213 | 247 | 4.9x | 5.9x |
+| intersection, single field | 524 | 683 | 257 | 2.0x | 2.0x |
+| intersection, multi field | 746 | 2,321 | 290 | 2.6x | 2.6x |
+| union, single field | 5,894 | 4,150 | 439 | 9.5x | 13.4x |
+| union, multi field | 6,227 | 4,197 | 764 | 5.5x | 8.2x |
+| all, single field | 2,656 | 2,205 | 306 | 7.2x | 8.7x |
+| all, multi field | 2,860 | 2,768 | 434 | 6.4x | 6.6x |
+
+**Tail latency (P99)**
+
+| Query type | Lucene | Tantivy | SeekStorm | vs. best of the two | vs. Lucene |
+|---|---:|---:|---:|---:|---:|
+| phrase, single field | 12,503 | 13,062 | 819 | 15.3x | 15.3x |
+| phrase, multi field | 12,256 | 12,859 | 1,015 | 12.1x | 12.1x |
+| intersection, single field | 3,454 | 3,740 | 1,119 | 3.1x | 3.1x |
+| intersection, multi field | 5,618 | 15,861 | 1,473 | 3.8x | 3.8x |
+| union, single field | 41,512 | 28,844 | 5,389 | 5.4x | 7.7x |
+| union, multi field | 43,030 | 28,681 | 6,806 | 4.2x | 6.3x |
+| all, single field | 34,920 | 27,084 | 1,591 | 17.0x | 21.9x |
+| all, multi field | 35,541 | 27,087 | 2,451 | 11.1x | 14.5x |
+
+</details>
+
+<details>
+<summary>Benchmark charts</summary>
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/search_benchmark_game1.png" width="800" alt="Query latency in µs: Lucene vs. Tantivy vs. SeekStorm">
+<br>
+<br>
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/search_benchmark_game2.png" width="800" alt="Benchmark">
+<br>
+<br>
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/search_benchmark_game3.png" width="800" alt="Query tail latency (P99) in µs: Lucene vs. Tantivy vs. SeekStorm">
+<br>
+<br>
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/ranking.jpg" width="800" alt="Ranking">
+
+*the who: vanilla BM25 ranking vs. SeekStorm proximity ranking*
+
+</details>
+
+<details>
+<summary>Methodology and benchmark code</summary>
+
+**Methodology**  
+Comparing different open-source search engine libraries (BM25 lexical search) using the open-source **search_benchmark_game** developed by [Tantivy](https://github.com/quickwit-oss/search-benchmark-game/) and [Jason Wolfe](https://github.com/jason-wolfe/search-index-benchmark-game).
+
+**Benefits**
++ using a proven open-source benchmark used by other search libraries for comparability
++ adapters written mostly by search library authors themselves for maximum authenticity and faithfulness
++ results can be replicated by everybody on their own infrastructure
++ detailed results per query, per query type and per result type to investigate optimization potential
+
+**Detailed benchmark results**
+[single-field](https://seekstorm.github.io/search-benchmark-game-singlefield/) · [multi-field](https://seekstorm.github.io/search-benchmark-game-multifield/) · [overview](https://seekstorm.github.io/search-benchmark-game/)
+
+**Benchmark code repository**
+https://github.com/SeekStorm/search-benchmark-game/
+
+See our **blog posts** for more detailed information: [SeekStorm is now Open Source](https://seekstorm.com/blog/sneak-peek-seekstorm-rust/) and [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
+
+</details>
+
+### Vector search (SIFT1M, GIST1M)
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/vector_search_benchmark.png" width="800" alt="Benchmark">
+<br>
+<br>
+
+#### [SIFT1M dataset](http://corpus-texmex.irisa.fr/) 1 million vectors, 128 dimensions, f32 precision, Euclidean  
+- 8-bit Scalar Quantization, nprobe=16 -> recall@10=95%, average latency=188 microseconds  
+- 8-bit Scalar Quantization, nprobe=33 -> recall@10=99%, average latency=302 microseconds  
+
+<br>
+
+#### [GIST1M dataset](http://corpus-texmex.irisa.fr/) 1 million vectors, 960 dimensions, f32 precision, Euclidean  
+- 8-bit Scalar Quantization, nprobe=38 -> recall@10=95%, average latency=3,198 microseconds  
+- 8-bit Scalar Quantization, nprobe=80 -> recall@10=98%, average latency=5,737 microseconds  
+
+
+[Benchmark code](#vector-search-sift1m-dataset)
+
+### Vector search vs. lexical search (Wikipedia)
+
+There are benchmarks of vector search engines, and benchmarks of lexical search engines.  
+But seeing the latency of lexical search and vector search stacked up against each other might offer some unique insight.
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/vector_lexical_benchmark.png" width="800" alt="Benchmark">
+<br>
+<br>
+
+**English Wikipedia**: 5 million documents, 16 million vectors  
+Lexical: 2 fields, top10, BM25, average latency	305 microseconds  
+Vector: 2 fields, nprobe=68 -> recall@10=95%, average latency 2,700 microseconds  
+Vector: 2 fields, nprobe=200 -> recall@10=99%, average latency 6,370 microseconds  
+Using [Model2Vec from MinishLab](https://github.com/MinishLab/model2vec-rs): PotionBase2M, chunks: 1000 byte 
+
+We are using the **English Wikipedia** data (*5 million entries*) and queries (*300 intersection queries*) derived from the **AOL query dataset**, both from [Tantivy’s search-benchmark-game](https://github.com/quickwit-oss/search-benchmark-game/).
+
+### Why latency matters
+
+1. **Tail latency.** Average latency isn't enough. Search infrastructure needs headroom for thousands of concurrent queries, complex queries and traffic spikes ([why tail latency costs you customers](https://seekstorm.com/blog/tail-latencies-and-percentiles/)).
+2. **Machines don't perceive like humans.** Real-time systems, high-frequency applications and AI agents issue requests at machine speed, often many in parallel.
+3. **Latency compounds.** When search is one step in a larger application or agent workflow, every millisecond adds up.
+4. **Cost.** Performant search serves many concurrent users with fewer servers, less energy and a lower carbon footprint.
+
+---
+
+## Components
+
+| Component | What it is | Links |
+|---|---|---|
+| **[seekstorm](https://crates.io/crates/seekstorm)** | In-process search library (lexical, vector, hybrid) | [![Crates.io](https://img.shields.io/crates/v/seekstorm.svg)](https://crates.io/crates/seekstorm) [![Downloads](https://img.shields.io/crates/d/seekstorm.svg?style=flat-square)](https://crates.io/crates/seekstorm) [![Docs](https://docs.rs/seekstorm/badge.svg)](https://docs.rs/seekstorm) |
+| **[seekstorm_mcp_server](seekstorm_mcp_server/README.md)** | Local MCP server over stdio for agentic search, embeds the library | [![Crates.io](https://img.shields.io/crates/v/seekstorm_mcp_server.svg)](https://crates.io/crates/seekstorm_mcp_server) [![Downloads](https://img.shields.io/crates/d/seekstorm_mcp_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_mcp_server) |
+| **[seekstorm_server](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md)** | Multi-tenancy search server with REST API and web UI | [![Crates.io](https://img.shields.io/crates/v/seekstorm_server.svg)](https://crates.io/crates/seekstorm_server) [![Downloads](https://img.shields.io/crates/d/seekstorm_server.svg?style=flat-square)](https://crates.io/crates/seekstorm_server) [![Docker](https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server)](https://hub.docker.com/r/wolfgarbe/seekstorm_server) [![REST API docs](https://img.shields.io/badge/REST%20API-docs-blue?style=flat-square&logo=openapiinitiative&logoColor=white)](https://seekstorm.com/documentation/) |
+| **Client SDK** | A client for every stack: Same REST API underneath, idiomatic on top. |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**[Rust](https://github.com/SeekStorm/SeekStorm/tree/main/seekstorm_client)** |  | [![Crates.io](https://img.shields.io/crates/v/seekstorm_client_rs.svg)](https://crates.io/crates/seekstorm_client_rs) [![Downloads](https://img.shields.io/crates/d/seekstorm_client_rs.svg?style=flat-square)](https://crates.io/crates/seekstorm_client_rs) [![Docs](https://docs.rs/seekstorm_client_rs/badge.svg)](https://docs.rs/seekstorm_client_rs) |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**[Python](https://github.com/SeekStorm/seekstorm_client_pure_py)** |  | [![PyPI](https://img.shields.io/pypi/v/seekstorm-client-pure-py?label=PyPI)](https://pypi.org/project/seekstorm-client-pure-py/) |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**[TypeScript](https://github.com/SeekStorm/seekstorm_client_ts)** |  | [![npm](https://img.shields.io/npm/v/seekstorm_client_ts?label=npm)](https://www.npmjs.com/package/seekstorm_client_ts) |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**[C#](https://github.com/SeekStorm/seekstorm_client_cs)** |  | [![NuGet version](https://badge.fury.io/nu/SeekStorm.Client.svg)](https://badge.fury.io/nu/SeekStorm.Client) |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**[Java](https://github.com/SeekStorm/seekstorm_client_java)** |  |  |
+| **[InstantSearch adapter](https://github.com/SeekStorm/seekstorm-instantsearch-adapter)** | Drop-in adapter to redirect an existing Algolia InstantSearch.js frontend to a SeekStorm backend, no UI rewrite required. <br>Or build a fresh UI with the InstantSearch widget library and SeekStorm's REST API as backend. MIT licensed. | [![npm](https://img.shields.io/npm/v/seekstorm-instantsearch-adapter?label=npm)](https://www.npmjs.com/package/seekstorm-instantsearch-adapter) |
+
+---
+
+## Demos
+
+### Online demo: DeepHN, Hacker News search
+
+Full-text search over 30M Hacker News posts AND linked web pages: [DeepHN.org](https://deephn.org/) ([about DeepHN](https://seekstorm.com/about-deephn))
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/deephn_demo.png" width="800" alt="DeepHN demo">
+
+The DeepHN demo is still based on the SeekStorm C# codebase.  
+We are currently porting all required missing features. See the [roadmap](#roadmap).
+
+### Run it yourself
+
+<details>
+<summary><b>Build a Wikipedia search engine with the SeekStorm server</b> (5 steps)</summary>
+
+A quick step-by-step tutorial on how to build a Wikipedia search engine from a Wikipedia corpus using the SeekStorm server in 5 easy steps.
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/wikipedia_demo.png" width="800">
+
+**Download SeekStorm**
+
+[Download SeekStorm from the GitHub repository](https://github.com/SeekStorm/SeekStorm/archive/refs/heads/main.zip)  
+Unzip in a directory of your choice, open in Visual Studio code.
+
+or alternatively
+
+```text
+git clone https://github.com/SeekStorm/SeekStorm.git
+```
+
+**Build SeekStorm**
+
+Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
+
+In the terminal of Visual Studio Code type:
+```text
+cargo build --release
+```
+
+**Get Wikipedia corpus**
+
+Preprocessed English Wikipedia corpus (5,032,105 documents, 8,28 GB decompressed). 
+Although wiki-articles.json has a .JSON extension, it is not a valid JSON file. 
+It is a text file, where every line contains a JSON object with url, title and body attributes. 
+The format is called [ndjson](https://github.com/ndjson/ndjson-spec) ("Newline delimited JSON").
+
+[Download Wikipedia corpus](https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2?dl=0)
+
+Decompresss Wikipedia corpus. 
+
+https://gnuwin32.sourceforge.net/packages/bzip2.htm
+```text
+bunzip2 wiki-articles.json.bz2
+```
+
+Move the decompressed wiki-articles.json to the release directory
+
+**Start SeekStorm server**
+```text
+cd target/release
+```
+```text
+./seekstorm_server local_ip="0.0.0.0" local_port=80
+```
+
+**Indexing** 
+
+Type 'ingest' into the command line of the running SeekStorm server: 
+```text
+ingest
+```
+
+This creates the demo index  and indexes the local wikipedia file.
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/server_info.png" width="800" alt="server info">
+<br>
+
+**Start searching within the embedded WebUI**
+
+Open embedded Web UI in browser: [http://127.0.0.1](http://127.0.0.1)
+
+Enter a query into the search box 
+
+**Testing the REST API endpoints**
+
+Open src/seekstorm_server/test_api.rest in VSC together with the VSC extension "Rest client" to execute API calls and inspect responses
+
+[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/test_api.rest)
+
+Set the 'individual API key' in test_api.rest to the api key displayed in the server console when you typed 'index' above.
+
+**Remove demo index**
+
+Type 'delete' into the command line of the running SeekStorm server: 
+```text
+delete
+```
+
+**Shutdown server**
+
+Type 'quit' into the commandline of the running SeekStorm server.
+```text
+quit
+```
+
+**Customizing**
+
+Do you want to use something similar for your own project?
+Have a look at the [ingest](/seekstorm_server/README.md#console-commands) and [web UI](/seekstorm_server/README.md#open-embedded-web-ui-in-browser) documentation.
+
+</details>
+
+<details>
+<summary><b>Build a PDF search engine with the SeekStorm server</b></summary>
+
+A quick step-by-step tutorial on how to build a PDF search engine from a directory that contains PDF files using the SeekStorm server.  
+Make all your scientific papers, ebooks, resumes, reports, contracts, documentation, manuals, letters, bank statements, invoices, delivery notes searchable - at home or in your organisation.  
+
+<img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/pdf_search.png" width="800">
+
+**Build SeekStorm**
+
+Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
+
+In the terminal of Visual Studio Code type:
+```text
+cargo build --release
+```
+
+**Download PDFium**
+
+Download and copy the Pdfium library into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries
+
+**Start SeekStorm server**
+```text
+cd target/release
+```
+```text
+./seekstorm_server local_ip="0.0.0.0" local_port=80
+```
+
+**Indexing** 
+
+Choose a directory that contains PDF files you want to index and search, e.g. your documents or download directory.
+
+Type 'ingest' into the command line of the running SeekStorm server: 
+```text
+ingest C:\Users\JohnDoe\Downloads
+```
+
+This creates the pdf_index and indexes all PDF files from the specified directory, including subdirectories.
+
+**Start searching within the embedded WebUI**
+
+Open embedded Web UI in browser: [http://127.0.0.1](http://127.0.0.1)
+
+Enter a query into the search box 
+
+**Remove demo index**
+
+Type 'delete' into the command line of the running SeekStorm server: 
+```text
+delete
+```
+
+**Shutdown server**
+
+Type 'quit' into the commandline of the running SeekStorm server.
+```text
+quit
+```
+
+</details>
+
 ---
 
 ## Why Rust
@@ -393,16 +772,12 @@ We have (partially) ported the SeekStorm codebase from C# to Rust
 + Less memory consumption (no ramping up until the next garbage collection)
 + No framework dependencies (CLR or JVM virtual machines)
 + Ahead-of-time instead of just-in-time compilation
-+ Memory safe language https://www.whitehouse.gov/oncd/briefing-room/2024/02/26/press-release-technical-report/ 
++ Memory safe language 
 
 Rust is great for performance-critical applications 🚀 that deal with big data and/or many concurrent users. 
 Fast algorithms will shine even more with a performance-conscious programming language 🙂
 
----
-
-## Architecture
-
-see [ARCHITECTURE.md](https://github.com/SeekStorm/SeekStorm/blob/main/ARCHITECTURE.md) 
+100% human 😎 craftsmanship: no vibe coding.
 
 ---
 
@@ -446,14 +821,18 @@ SeekStorm\target\doc\seekstorm_server\index.html
 
 You can disable the SeekStorm default features by using default-features = false in the cargo.toml of your application.  
 This can be useful to reduce the size of your application or if there are dependency version conflicts.
-```cargo
-[dependencies]
-seekstorm = { version = "0.12.19", default-features = false }
+```text
+cargo add seekstorm --no-default-features
 ```
+
+---
 
 ## Usage of the library
 
 ### Lexical search
+
+<details>
+<summary>Show code</summary>
 
 Add required crates to your project
 ```text
@@ -1081,8 +1460,12 @@ println!("version {}",version);
 ```
 <br/>
 
----
+</details>
+
 ### Faceted search - Quick start
+
+<details>
+<summary>Show code</summary>
 
 Facets are defined in 3 different places:
 1. The facet fields are defined in the schema at create_index.
@@ -1239,7 +1622,12 @@ println!("{}", serde_json::to_string_pretty(&result_object.facets).unwrap());
 # });
 ```
 
+</details>
+
 ### Vector search: internal inference
+
+<details>
+<summary>Show code</summary>
 
 create index
 ```rust ,no_run
@@ -1363,7 +1751,12 @@ query documents/vectors
 # });
 ```
 
+</details>
+
 ### Vector search: external inference
+
+<details>
+<summary>Show code</summary>
 
 create index
 ```rust ,no_run
@@ -1492,7 +1885,12 @@ query documents/vectors
 # });
 ```
 
+</details>
+
 ### Vector search: SIFT1M dataset
+
+<details>
+<summary>Show code</summary>
 
 - 1 million vectors, 128 dimensions, f32 precision  
 - nprobe=16 -> recall@10=95%, average latency=188 microseconds  
@@ -1683,185 +2081,7 @@ query documents/vectors
 # });
 ```
 
----
-
-## Demo time 
-
-### Build a Wikipedia search engine with the SeekStorm server
-
-A quick step-by-step tutorial on how to build a Wikipedia search engine from a Wikipedia corpus using the SeekStorm server in 5 easy steps.
-
-<img src="assets/wikipedia_demo.png" width="800">
-
-**Download SeekStorm**
-
-[Download SeekStorm from the GitHub repository](https://github.com/SeekStorm/SeekStorm/archive/refs/heads/main.zip)  
-Unzip in a directory of your choice, open in Visual Studio code.
-
-or alternatively
-
-```text
-git clone https://github.com/SeekStorm/SeekStorm.git
-```
-
-**Build SeekStorm**
-
-Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
-
-In the terminal of Visual Studio Code type:
-```text
-cargo build --release
-```
-
-**Get Wikipedia corpus**
-
-Preprocessed English Wikipedia corpus (5,032,105 documents, 8,28 GB decompressed). 
-Although wiki-articles.json has a .JSON extension, it is not a valid JSON file. 
-It is a text file, where every line contains a JSON object with url, title and body attributes. 
-The format is called [ndjson](https://github.com/ndjson/ndjson-spec) ("Newline delimited JSON").
-
-[Download Wikipedia corpus](https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2?dl=0)
-
-Decompresss Wikipedia corpus. 
-
-https://gnuwin32.sourceforge.net/packages/bzip2.htm
-```text
-bunzip2 wiki-articles.json.bz2
-```
-
-Move the decompressed wiki-articles.json to the release directory
-
-**Start SeekStorm server**
-```text
-cd target/release
-```
-```text
-./seekstorm_server local_ip="0.0.0.0" local_port=80
-```
-
-**Indexing** 
-
-Type 'ingest' into the command line of the running SeekStorm server: 
-```text
-ingest
-```
-
-This creates the demo index  and indexes the local wikipedia file.
-
-<img src="assets/server_info.png" width="800" alt="server info">
-<br>
-
-**Start searching within the embedded WebUI**
-
-Open embedded Web UI in browser: [http://127.0.0.1](http://127.0.0.1)
-
-Enter a query into the search box 
-
-**Testing the REST API endpoints**
-
-Open src/seekstorm_server/test_api.rest in VSC together with the VSC extension "Rest client" to execute API calls and inspect responses
-
-[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/test_api.rest)
-
-Set the 'individual API key' in test_api.rest to the api key displayed in the server console when you typed 'index' above.
-
-**Remove demo index**
-
-Type 'delete' into the command line of the running SeekStorm server: 
-```text
-delete
-```
-
-**Shutdown server**
-
-Type 'quit' into the commandline of the running SeekStorm server.
-```text
-quit
-```
-
-**Customizing**
-
-Do you want to use something similar for your own project?
-Have a look at the [ingest](/seekstorm_server/README.md#console-commands) and [web UI](/seekstorm_server/README.md#open-embedded-web-ui-in-browser) documentation.
-
-
-
-
-
-### Build a PDF search engine with the SeekStorm server
-
-A quick step-by-step tutorial on how to build a PDF search engine from a directory that contains PDF files using the SeekStorm server.  
-Make all your scientific papers, ebooks, resumes, reports, contracts, documentation, manuals, letters, bank statements, invoices, delivery notes searchable - at home or in your organisation.  
-
-<img src="assets/pdf_search.png" width="800">
-
-**Build SeekStorm**
-
-Install Rust (if not yet present): https://www.rust-lang.org/tools/install  
-
-In the terminal of Visual Studio Code type:
-```text
-cargo build --release
-```
-
-**Download PDFium**
-
-Download and copy the Pdfium library into the same folder as the seekstorm_server.exe: https://github.com/bblanchon/pdfium-binaries
-
-**Start SeekStorm server**
-```text
-cd target/release
-```
-```text
-./seekstorm_server local_ip="0.0.0.0" local_port=80
-```
-
-**Indexing** 
-
-Choose a directory that contains PDF files you want to index and search, e.g. your documents or download directory.
-
-Type 'ingest' into the command line of the running SeekStorm server: 
-```text
-ingest C:\Users\JohnDoe\Downloads
-```
-
-This creates the pdf_index and indexes all PDF files from the specified directory, including subdirectories.
-
-**Start searching within the embedded WebUI**
-
-Open embedded Web UI in browser: [http://127.0.0.1](http://127.0.0.1)
-
-Enter a query into the search box 
-
-**Remove demo index**
-
-Type 'delete' into the command line of the running SeekStorm server: 
-```text
-delete
-```
-
-**Shutdown server**
-
-Type 'quit' into the commandline of the running SeekStorm server.
-```text
-quit
-```
-
-
-
-
-
-### Online Demo: DeepHN Hacker News search
-
-Full-text search 30M Hacker News posts AND linked web pages
-
-[DeepHN.org](https://deephn.org/)
-
-<img src="assets/deephn_demo.png" width="800">
-
-The DeepHN demo is still based on the SeekStorm C# codebase.  
-We are currently porting all required missing features.  
-See roadmap below.  
+</details>
 
 ---
 
@@ -1894,53 +2114,35 @@ See roadmap below.
 ## Roadmap
 
 The following new features are planned to be implemented.  
-Are you missing something? Let us know via issue or discussions.
+Are you missing something? Let us know via issue or discussions, or on [Discord](https://discord.gg/FHCZbQwRE).
 
-**Improvements**
+**Done** ✅
 
-* Relevancy benchmarks: BeIR, MS MARCO
+* Native vector search
+* TurboQuant (TQ) for vector search
+* Model Context Protocol (MCP) server for Retrieval Augmented Generation (RAG) and agentic search
+* Client libraries/SDK for the SeekStorm server REST API: Rust, Python, C#, Java, TypeScript
+* SIMD for lexical and vector search: x86_64 AVX2, AArch64 NEON
 
-**New features**
+**Proof of concept**
 
-* ✅ Native vector search
-* ✅ TurboQuant (TQ) for vector search
-* ✅ Model Context Protocol (MCP) server and CLI for Retrieval Augmented Generation (RAG) and agentic search.
-* Late Interaction Multimodal Retrieval
-* Geocoding, reverse geocoding, GeoJSON
+* Distributed search cluster
+
+**Planned**
+
 * **Split of storage and compute**
   * Use S3 object storage as index backend
   * Use Distributed Key-Value store as index backend
-* Elasticity: automatic spawning and winding down of shards in the cloud depending on index size and load.
-* Distributed search cluster (currently PoC)
+* Elasticity: automatic spawning and winding down of shards in the cloud depending on index size and load
+* Late Interaction Multimodal Retrieval
+* Geocoding, reverse geocoding, GeoJSON
 * More tokenizer types (Japanese, Korean)
 * WebAssembly (Wasm)
 * Wrapper/bindings in JavaScript, Python, Java, C#, C, Go for the SeekStorm Rust library
-* Client libraries/SDK for the SeekStorm server REST API
-  * ✅ Rust
-  * ✅ Python
-  * ✅ C#
-  * ✅ Java 
-  * ✅ TypeScript
-  * Go
-  * C
-* Improved SIMD support
-  - ✅ lexical search: 
-	- ✅ x86_64 (Intel, AMD)
-	  - ✅ AVX2
-	  - AVX512
-	  - AVX10
-	- ✅ AArch64 (Apple Silicon, AWS Graviton)
-	  - ✅ NEON 
-	  - SVE/SVE2 
-	- GPU (NVIDIA)
-  - ✅ vector search: 
-	- ✅ x86_64 (Intel, AMD)
-	  - ✅ AVX2
-	  - AVX512
-	  - AVX10
-	- ✅ AArch64 (Apple Silicon, AWS Graviton)
-	  - ✅ NEON 
-	  - SVE/SVE2 
-	- GPU (NVIDIA)
+* Client library/SDK for the SeekStorm server REST API: Go, C
+* Improved SIMD support for lexical and vector search: AVX512, AVX10, SVE/SVE2, GPU (NVIDIA)
+* Relevancy benchmarks: BeIR, MS MARCO
 
+---
 
+⭐ **If SeekStorm is useful to you, please [star the repo](https://github.com/SeekStorm/SeekStorm).** Questions, ideas, missing features? Open an issue, start a discussion, or join us on [Discord](https://discord.gg/FHCZbQwRE).
