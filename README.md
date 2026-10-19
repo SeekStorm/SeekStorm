@@ -40,10 +40,10 @@ Embed it as a library, run it as a server, or give your agents search via MCP.
 </p>
 
 
-Developed since 2015, [in production](https://seekstorm.com) since 2020. Open source under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme). Independent and bootstrapped, no VC.
+[in production](https://seekstorm.com) since 2020. Open source under the [Apache License 2.0](https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme). Independent &amp; bootstrapped, no VC.
 
 **From the author of** [SymSpell](https://github.com/wolfgarbe/SymSpell) ![stars](https://img.shields.io/github/stars/wolfgarbe/SymSpell?style=flat-square&label=%E2%98%85) (typo tolerance),
-[PruningRadixTrie](https://github.com/wolfgarbe/PruningRadixTrie) ![stars](https://img.shields.io/github/stars/wolfgarbe/PruningRadixTrie?style=flat-square&label=%E2%98%85) (instant search) and
+[PruningRadixTrie](https://github.com/wolfgarbe/PruningRadixTrie) ![stars](https://img.shields.io/github/stars/wolfgarbe/PruningRadixTrie?style=flat-square&label=%E2%98%85) (auto complete) and
 [WordSegmentationTM](https://github.com/wolfgarbe/WordSegmentationTM) ![stars](https://img.shields.io/github/stars/wolfgarbe/WordSegmentationTM?style=flat-square&label=%E2%98%85) (word segmentation).
 
 | | |
