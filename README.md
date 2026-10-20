@@ -777,8 +777,6 @@ We have (partially) ported the SeekStorm codebase from C# to Rust
 Rust is great for performance-critical applications 🚀 that deal with big data and/or many concurrent users. 
 Fast algorithms will shine even more with a performance-conscious programming language 🙂
 
-100% human 😎 craftsmanship: no vibe coding.
-
 ---
 
 ### Building
