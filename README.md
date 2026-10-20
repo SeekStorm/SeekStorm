@@ -4,7 +4,7 @@
 
 <h3 align="center">
 Sub-millisecond lexical, vector &amp; hybrid search in Rust.<br>
-Embed it as a library, run it as a server, or give your agents search via MCP.
+Embed as a library, run as a multi-tenant server, or give your agents search via MCP.
 </h3>
 
 <p align="center">
