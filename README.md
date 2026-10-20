@@ -442,7 +442,7 @@ No re-indexing, no export/import, and you can move in either direction. No vendo
 <img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/search_benchmark_game1.png" width="800" alt="Query latency in µs: Lucene vs. Tantivy vs. SeekStorm">
 
 5 million English Wikipedia documents, result type top-k + count, via the [search_benchmark_game](https://github.com/SeekStorm/search-benchmark-game/) (Lucene 10.3.0-bp, Tantivy 0.25, SeekStorm 1.0.0).
-<!-- TODO: add CPU / RAM / OS of the benchmark machine -->
+<!-- CPU / RAM / OS of the benchmark machine: https://github.com/SeekStorm/search-benchmark-game/#benchmark-environment -->
 
 | Query type, single field | Lucene (µs) | Tantivy (µs) | **SeekStorm (µs)** | vs. best of the two | vs. Lucene |
 |---|---:|---:|---:|---:|---:|
