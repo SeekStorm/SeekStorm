@@ -267,10 +267,10 @@ Vector search, hybrid search, facets and more: see [Usage of the library](#usage
 ## What can you build?
 
 * **Search for your app or site**: product and site search with facets, typo tolerance, query completion and instant search.
-* **Instant search UIs**: build on the InstantSearch widgets, or keep your existing Algolia InstantSearch frontend and swap only the backend with the [adapter](#components).
 * **RAG and agent retrieval**: hybrid search over [MCP](#mcp-server-for-ai-agents), searchable the moment a document is indexed.
 * **Search over your own data**: JSON, CSV, NDJSON and PDF, e.g. an English Wikipedia search engine in 5 steps ([tutorial](#demos)).
-* **Search inside your application**: link the library, no server to run.
+* **Search inside your application**: embed the library, no server to run.
+* **Instant search UIs**: build on the InstantSearch widgets, or keep your existing Algolia InstantSearch frontend and swap only the backend with the [adapter](https://github.com/SeekStorm/seekstorm-instantsearch-adapter).
 
 More in [Search API use cases](https://seekstorm.com/search-api-use-cases) and [Search API features](https://seekstorm.com/search-api-features).
 
