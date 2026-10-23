@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2] - 2026-10-23
+
+### Added
+
+- Integrated lexical search benchmark of SeekStorm over 5 million Wikipedia articles, with 903 search queries, 
+  - of different query types (AND, OR, PHRASE) 
+  - of different keyword numbers, 
+  - of different result types (Count, TopkCount, Topk), 
+  - measuring total result number, average latency, and percentile latencies.
+  - Start benchmark with `cargo bench --features gxhash`. 
+  - ⚠️ Before running the benchmark, copy the [Wikipedia data](https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2) manually into the `benches/test_data` directory and decompress.
+  - Mainly intended for development regression tests when evaluating future search improvements.
+  - See [README.md](https://github.com/SeekStorm/SeekStorm?tab=readme-ov-file#embedded-benchmark) and the [benchmark](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm/benches/basic.rs) itself for details.
+
+### Changed
+
+- README.md revised.
+- search() result_count_total is now set to result_object.result_count for ResultType::Topk.
+
 ## [3.4.1] - 2026-10-12
 
 ### Changed

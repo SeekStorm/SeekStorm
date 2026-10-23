@@ -2120,6 +2120,10 @@ impl Search for IndexArc {
                 result_object.results.truncate(length);
             }
             result_object.result_count = result_object.results.len();
+
+            if result_type == ResultType::Topk {
+                result_object.result_count_total = result_object.result_count;
+            }
         }
 
         result_object.original_query = original_query;

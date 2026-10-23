@@ -10,6 +10,7 @@ seekstorm/tests/index_scan32_*/
 seekstorm/tests/index_union_*/
 seekstorm/tests/index_delete_union*/
 seekstorm/tests/index_docid3_*/
+seekstorm/benches/test_data/benchmark_index/
 .vscode/
 .idea
 

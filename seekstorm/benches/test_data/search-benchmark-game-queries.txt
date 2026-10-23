@@ -1,0 +1,903 @@
+{"query": "the", "tags": ["term"]}
+{"query": "+griffith +observatory", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"griffith observatory\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "griffith observatory", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+bowel +obstruction", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"bowel obstruction\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "bowel obstruction", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+vicenza +italy", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"vicenza italy\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "vicenza italy", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+digital +scanning", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"digital scanning\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "digital scanning", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+plus +size +clothing", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"plus size clothing\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "plus size clothing", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+borders +books", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"borders books\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "borders books", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+american +funds", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"american funds\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "american funds", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+scottsdale +az", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"scottsdale az\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "scottsdale az", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+wisconsin +attorney +general", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"wisconsin attorney general\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "wisconsin attorney general", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +english +restoration", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the english restoration\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the english restoration", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+freelance +work", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"freelance work\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "freelance work", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+french +culinary +institute", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"french culinary institute\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "french culinary institute", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+color +combinations", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"color combinations\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "color combinations", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+italian +translation", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"italian translation\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "italian translation", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+milwaukee +newspaper", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"milwaukee newspaper\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "milwaukee newspaper", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+robert +green +ingersoll", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"robert green ingersoll\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "robert green ingersoll", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+omaha +symphony", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"omaha symphony\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "omaha symphony", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+body +painting", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"body painting\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "body painting", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+who +dares +wins", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"who dares wins\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "who dares wins", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+west +palm +beach +florida", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"west palm beach florida\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "west palm beach florida", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+stone +mountain", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"stone mountain\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "stone mountain", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+san +francisco", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"san francisco\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "san francisco", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ford +modeling +agency", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"ford modeling agency\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "ford modeling agency", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+glass +works", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"glass works\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "glass works", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+personal +loan", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"personal loan\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "personal loan", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+texas +state +legislature", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"texas state legislature\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "texas state legislature", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+spiritual +warfare", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"spiritual warfare\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "spiritual warfare", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+georgia +public +broadcasting", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"georgia public broadcasting\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "georgia public broadcasting", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+graffiti +art", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"graffiti art\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "graffiti art", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+texas +death +row", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"texas death row\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "texas death row", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+catholic +answers", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"catholic answers\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "catholic answers", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+interest +only", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"interest only\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "interest only", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+region +iv", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"region iv\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "region iv", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+army +reserve", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"army reserve\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "army reserve", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+chicken +coop", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"chicken coop\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "chicken coop", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+people +having +sex", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"people having sex\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "people having sex", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+new +york +population", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"new york population\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "new york population", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+most +improved +player", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"most improved player\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "most improved player", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+ear +ache", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ear ache\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ear ache", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+mercury +insurance", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"mercury insurance\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "mercury insurance", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+battle +of +the +bulge", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"battle of the bulge\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "battle of the bulge", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+secretary +of +state", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"secretary of state\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "secretary of state", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+third +trimester", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"third trimester\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "third trimester", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+hempstead +new +york", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"hempstead new york\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "hempstead new york", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+university +of +washington", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"university of washington\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "university of washington", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+japan +airlines", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"japan airlines\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "japan airlines", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+freedom +tower", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"freedom tower\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "freedom tower", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+virginia +usa", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"virginia usa\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "virginia usa", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+kasota +stone", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"kasota stone\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "kasota stone", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+intramuscular +injections", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"intramuscular injections\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "intramuscular injections", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+jesus +as +a +child", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"jesus as a child\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "jesus as a child", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+montessori +schools", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"montessori schools\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "montessori schools", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+oxford +dictionary", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"oxford dictionary\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "oxford dictionary", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+state +of +louisiana", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"state of louisiana\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "state of louisiana", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+penny +stocks", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"penny stocks\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "penny stocks", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+cured +of +cancer", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"cured of cancer\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "cured of cancer", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+lord +of +the +rings", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"lord of the rings\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "lord of the rings", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+helen +of +troy", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"helen of troy\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "helen of troy", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+long +legs", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"long legs\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "long legs", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+sore +muscles", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"sore muscles\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "sore muscles", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+connecticut +post", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"connecticut post\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "connecticut post", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+danbury +ct", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"danbury ct\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "danbury ct", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+chicago +bulls", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"chicago bulls\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "chicago bulls", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+child +support", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"child support\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "child support", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+iq +scores", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"iq scores\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "iq scores", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+philadelphia +phillies", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"philadelphia phillies\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "philadelphia phillies", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+trans +siberian +orchestra", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"trans siberian orchestra\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "trans siberian orchestra", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+naomi +wallace", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"naomi wallace\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "naomi wallace", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+montgomery +college", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"montgomery college\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "montgomery college", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+belcourt +castle", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"belcourt castle\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "belcourt castle", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+binghamton +new +york", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"binghamton new york\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "binghamton new york", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+tallest +trees +in +the +world", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"tallest trees in the world\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "tallest trees in the world", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+reading +museum", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"reading museum\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "reading museum", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+merry +christmas", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"merry christmas\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "merry christmas", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+flow +meter", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"flow meter\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "flow meter", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+famous +quotes", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"famous quotes\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "famous quotes", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+georgian +architecture", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"georgian architecture\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "georgian architecture", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+prayer +times", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"prayer times\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "prayer times", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+columbia +university", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"columbia university\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "columbia university", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+fluid +power", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"fluid power\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "fluid power", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+american +south", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"american south\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "american south", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+international +baseball", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"international baseball\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "international baseball", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ace +frehley", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ace frehley\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ace frehley", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +globe +newspaper", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the globe newspaper\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the globe newspaper", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+decorative +windows", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"decorative windows\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "decorative windows", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ancient +egypt", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ancient egypt\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ancient egypt", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+american +academy +of +child +and +adolescent +psychiatry", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"american academy of child and adolescent psychiatry\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "american academy of child and adolescent psychiatry", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+york +photo", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"york photo\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "york photo", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+good +luck", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"good luck\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "good luck", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+world +bank +president", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"world bank president\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "world bank president", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+jonathan +daniel", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"jonathan daniel\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "jonathan daniel", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+clothing +optional", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"clothing optional\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "clothing optional", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+xena +warrior +princess", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"xena warrior princess\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "xena warrior princess", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+time +for +kids", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"time for kids\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "time for kids", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+tom +welling", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"tom welling\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "tom welling", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+elliott +smith", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"elliott smith\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "elliott smith", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+heart +disease", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"heart disease\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "heart disease", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+st +petersburg +high +school", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"st petersburg high school\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "st petersburg high school", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+fatherless +children", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"fatherless children\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "fatherless children", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+hotel +del +coronado", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"hotel del coronado\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "hotel del coronado", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+law +dictionary", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"law dictionary\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "law dictionary", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+anderson +hospital", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"anderson hospital\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "anderson hospital", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+kenosha +wisconsin", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"kenosha wisconsin\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "kenosha wisconsin", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+false +prophets", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"false prophets\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "false prophets", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+cheap +hotels", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"cheap hotels\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "cheap hotels", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+walk +the +line", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"walk the line\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "walk the line", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+missy +elliott", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"missy elliott\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "missy elliott", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+portrait +studio", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"portrait studio\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "portrait studio", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+calvin +klein", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"calvin klein\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "calvin klein", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+kitchen +accessories", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"kitchen accessories\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "kitchen accessories", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+consumer +affairs", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"consumer affairs\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "consumer affairs", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+adobe +buildings", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"adobe buildings\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "adobe buildings", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+national +book +award", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"national book award\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "national book award", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+back +surgery", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"back surgery\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "back surgery", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+mid +continent +airport", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"mid continent airport\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "mid continent airport", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+developmental +delays", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"developmental delays\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "developmental delays", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+elise +neal", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"elise neal\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "elise neal", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+canadian +real +estate", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"canadian real estate\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "canadian real estate", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+barrett +jackson", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"barrett jackson\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "barrett jackson", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+bmw +engines", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"bmw engines\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "bmw engines", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+john +donne", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"john donne\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "john donne", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+evening +wear", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"evening wear\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "evening wear", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+toxic +encephalopathy", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"toxic encephalopathy\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "toxic encephalopathy", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+critical +care +nurse", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"critical care nurse\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "critical care nurse", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +breakfast +club", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the breakfast club\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the breakfast club", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+lost +episode", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"lost episode\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "lost episode", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+seal +pictures", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"seal pictures\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "seal pictures", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+critical +care +medicine", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"critical care medicine\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "critical care medicine", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+hurricane +wilma", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"hurricane wilma\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "hurricane wilma", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+john +wilkes +booth", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"john wilkes booth\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "john wilkes booth", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+sesame +street", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"sesame street\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "sesame street", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ellen +degeneres +show", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"ellen degeneres show\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "ellen degeneres show", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+jaguar +x +type", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"jaguar x type\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "jaguar x type", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +movement", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"the movement\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "the movement", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+sarah +fisher", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"sarah fisher\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "sarah fisher", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+dexter +michigan", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"dexter michigan\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "dexter michigan", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+little +brown +jug", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"little brown jug\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "little brown jug", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+books +on +cd", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"books on cd\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "books on cd", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+carolyn +jones", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"carolyn jones\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "carolyn jones", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+aishwarya +rai", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"aishwarya rai\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "aishwarya rai", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+trendy +clothes", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"trendy clothes\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "trendy clothes", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+weather +underground", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"weather underground\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "weather underground", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+mercedes +benz", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"mercedes benz\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "mercedes benz", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+analog +computer", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"analog computer\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "analog computer", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+pump +it +up", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"pump it up\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "pump it up", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+food +carts", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"food carts\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "food carts", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+graduate +management +admission +test", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"graduate management admission test\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "graduate management admission test", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+big +boss +man", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"big boss man\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "big boss man", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+gun +magazines", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"gun magazines\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "gun magazines", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+bankruptcy +laws", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"bankruptcy laws\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "bankruptcy laws", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+antonio +cromartie", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"antonio cromartie\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "antonio cromartie", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+sky +news", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"sky news\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "sky news", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+phone +cases", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"phone cases\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "phone cases", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +incredibles", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"the incredibles\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "the incredibles", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+padre +island", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"padre island\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "padre island", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+worcester +state +college", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"worcester state college\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "worcester state college", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+little +cars", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"little cars\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "little cars", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+jefferson +davis +high +school", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"jefferson davis high school\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "jefferson davis high school", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+game +downloads", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"game downloads\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "game downloads", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+chicken +noodle +soup", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"chicken noodle soup\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "chicken noodle soup", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+music +stands", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"music stands\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "music stands", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+microsoft +frontpage", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"microsoft frontpage\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "microsoft frontpage", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+camp +claiborne", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"camp claiborne\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "camp claiborne", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+william +wallace", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"william wallace\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "william wallace", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+home +loan", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"home loan\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "home loan", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+cherry +blossom", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"cherry blossom\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "cherry blossom", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+miami +dade +college", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"miami dade college\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "miami dade college", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+time +in +denver", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"time in denver\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "time in denver", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+naked +news", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"naked news\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "naked news", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+wildlife +photography", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"wildlife photography\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "wildlife photography", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+david +kim", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"david kim\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "david kim", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+printer +ink", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"printer ink\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "printer ink", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+all +funds", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"all funds\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "all funds", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+zion +national +park", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"zion national park\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "zion national park", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+john +klein", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"john klein\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "john klein", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+edith +wharton", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"edith wharton\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "edith wharton", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+times +union", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"times union\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "times union", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+milan +tennessee", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"milan tennessee\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "milan tennessee", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+western +herald", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"western herald\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "western herald", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+care +a +lot", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"care a lot\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "care a lot", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+costume +designers", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"costume designers\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "costume designers", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +actors +studio", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the actors studio\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the actors studio", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+personal +chef", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"personal chef\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "personal chef", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+david +koresh", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"david koresh\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "david koresh", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+bismarck +state +college", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"bismarck state college\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "bismarck state college", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +oregonian +newspaper", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the oregonian newspaper\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the oregonian newspaper", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+justin +timberlake", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"justin timberlake\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "justin timberlake", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+hawk +mountain", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"hawk mountain\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "hawk mountain", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+kristanna +loken", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"kristanna loken\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "kristanna loken", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+chicago +teachers +union", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"chicago teachers union\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "chicago teachers union", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+connecticut +historical +society", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"connecticut historical society\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "connecticut historical society", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+shih +tzu", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"shih tzu\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "shih tzu", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+robert +fuller", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"robert fuller\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "robert fuller", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+zip +code", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"zip code\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "zip code", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+bass +fishing", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"bass fishing\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "bass fishing", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ford +parts", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ford parts\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ford parts", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+automatic +writing", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"automatic writing\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "automatic writing", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+roundabout +theatre", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"roundabout theatre\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "roundabout theatre", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+table +lamps", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"table lamps\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "table lamps", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +garden +of +eden", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"the garden of eden\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "the garden of eden", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+immigration +to +mexico", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"immigration to mexico\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "immigration to mexico", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +daily +breeze", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the daily breeze\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the daily breeze", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+debra +jo +rupp", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"debra jo rupp\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "debra jo rupp", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+term +life +insurance", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"term life insurance\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "term life insurance", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+tennis +elbow", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"tennis elbow\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "tennis elbow", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+kidney +transplant", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"kidney transplant\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "kidney transplant", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+us +coast +guard", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"us coast guard\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "us coast guard", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+car +stereo", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"car stereo\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "car stereo", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+playa +del +rey", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"playa del rey\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "playa del rey", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+domain +names", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"domain names\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "domain names", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+premier +wine", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"premier wine\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "premier wine", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+too +faced", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"too faced\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "too faced", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+avon +school", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"avon school\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "avon school", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+jungle +boy", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"jungle boy\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "jungle boy", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ventura +college", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ventura college\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ventura college", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+kansas +city +kings", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"kansas city kings\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "kansas city kings", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+new +haven", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"new haven\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "new haven", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ron +keel", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ron keel\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ron keel", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+business +consultants", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"business consultants\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "business consultants", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+open +source +software", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"open source software\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "open source software", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+ambassador +of +italy", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"ambassador of italy\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "ambassador of italy", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+los +angeles +daily +news", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"los angeles daily news\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "los angeles daily news", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+napa +auto +parts", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"napa auto parts\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "napa auto parts", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+law +school +rankings", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"law school rankings\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "law school rankings", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+hsbc +bank", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"hsbc bank\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "hsbc bank", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+cognitive +impairment", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"cognitive impairment\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "cognitive impairment", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+mushroom +kingdom", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"mushroom kingdom\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "mushroom kingdom", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +progressive", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"the progressive\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "the progressive", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+mood +swings", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"mood swings\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "mood swings", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+ugly +people", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"ugly people\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "ugly people", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+little +shop +of +horrors", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"little shop of horrors\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "little shop of horrors", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+abilene +tx", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"abilene tx\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "abilene tx", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+internet +fraud", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"internet fraud\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "internet fraud", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+tv +party", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"tv party\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "tv party", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+new +jersey +police", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"new jersey police\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "new jersey police", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+university +of +akron", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"university of akron\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "university of akron", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +news +journal", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the news journal\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the news journal", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+cartoon +network", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"cartoon network\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "cartoon network", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+robert +reed", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"robert reed\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "robert reed", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+interracial +love", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"interracial love\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "interracial love", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+round +table", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"round table\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "round table", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+low +estrogen", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"low estrogen\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "low estrogen", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+akron +beacon", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"akron beacon\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "akron beacon", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+john +wellington", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"john wellington\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "john wellington", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+city +in +iran", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"city in iran\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "city in iran", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+corpus +christi +tx", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"corpus christi tx\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "corpus christi tx", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+becoming +a +widow", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"becoming a widow\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "becoming a widow", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+king +kalakaua", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"king kalakaua\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "king kalakaua", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+centerville +high +school", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"centerville high school\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "centerville high school", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+foam +mattress", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"foam mattress\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "foam mattress", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+music +videos", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"music videos\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "music videos", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+farmers +almanac", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"farmers almanac\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "farmers almanac", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+civil +war +battlefields", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"civil war battlefields\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "civil war battlefields", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+national +security +cutter", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"national security cutter\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "national security cutter", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+eastern +mennonite +university", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"eastern mennonite university\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "eastern mennonite university", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+new +york +times +best +sellers +list", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"new york times best sellers list\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "new york times best sellers list", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+usb +hub", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"usb hub\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "usb hub", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+rob +halford", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"rob halford\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "rob halford", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+new +york +towns", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"new york towns\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "new york towns", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+medal +of +honor", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"medal of honor\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "medal of honor", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+hot +springs +south +dakota", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"hot springs south dakota\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "hot springs south dakota", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+home +business", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"home business\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "home business", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+perfume +bottles", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"perfume bottles\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "perfume bottles", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+old +photos", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"old photos\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "old photos", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+edith +head", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"edith head\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "edith head", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+danube +river", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"danube river\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "danube river", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+bladder +tumor", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"bladder tumor\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "bladder tumor", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +british +embassy", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"the british embassy\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "the british embassy", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+human +trafficking", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"human trafficking\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "human trafficking", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+new +england +aquarium", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"new england aquarium\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "new england aquarium", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+the +book +of +life", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"the book of life\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "the book of life", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+rolex +watches", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"rolex watches\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "rolex watches", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+water +filters", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"water filters\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "water filters", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+general +motors", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"general motors\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "general motors", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+the +preakness", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"the preakness\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "the preakness", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+blue +ridge +parkway", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"blue ridge parkway\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "blue ridge parkway", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+elizabeth +vargas", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"elizabeth vargas\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "elizabeth vargas", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+canon +powershot", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"canon powershot\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "canon powershot", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+air +mattress", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"air mattress\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "air mattress", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+pocket +pc", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"pocket pc\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "pocket pc", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+chicago +public +schools", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"chicago public schools\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "chicago public schools", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+george +r +brown +convention +center", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"george r brown convention center\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "george r brown convention center", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+warren +county", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"warren county\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "warren county", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+animal +rights", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"animal rights\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "animal rights", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+david +lee +roth", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"david lee roth\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "david lee roth", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+central +community +college", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"central community college\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "central community college", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+power +rangers +ninja +storm", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"power rangers ninja storm\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "power rangers ninja storm", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+movie +theatres", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"movie theatres\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "movie theatres", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+canary +bird", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"canary bird\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "canary bird", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+health +literacy", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"health literacy\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "health literacy", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+david +thornton", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"david thornton\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "david thornton", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+jamie +murray", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"jamie murray\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "jamie murray", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+boulder +city +nevada", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"boulder city nevada\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "boulder city nevada", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+united +states +constitution", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"united states constitution\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "united states constitution", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+niceville +high +school", "tags": ["intersection", "global", "intersection:num_tokens_3"]}
+{"query": "\"niceville high school\"", "tags": ["phrase", "phrase:num_tokens_3"]}
+{"query": "niceville high school", "tags": ["union", "global", "union:num_tokens_3"]}
+{"query": "+sleep +study", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"sleep study\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "sleep study", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+true +religion", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"true religion\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "true religion", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+google +satellite", "tags": ["intersection", "global", "intersection:num_tokens_2"]}
+{"query": "\"google satellite\"", "tags": ["phrase", "phrase:num_tokens_2"]}
+{"query": "google satellite", "tags": ["union", "global", "union:num_tokens_2"]}
+{"query": "+laborers +international +union +of +north +america", "tags": ["intersection", "global", "intersection:num_tokens_>3"]}
+{"query": "\"laborers international union of north america\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "laborers international union of north america", "tags": ["union", "global", "union:num_tokens_>3"]}
+{"query": "+\"the who\" +uk", "tags": ["two-phase-critic"]}
+{"query": "+to +be +or +not +to +be", "tags": ["intersection", "intersection:num_tokens_>3"]}
+{"query": "\"to be or not to be\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
+{"query": "to be or not to be", "tags": ["union", "union:num_tokens_>3"]}
+{"query": "a search engine is an information retrieval software system designed to help find information stored on one or more computer systems", "tags": ["union", "union:num_tokens_>3"]}

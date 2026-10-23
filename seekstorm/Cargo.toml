@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.4.1"
+version = "3.4.2"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -26,10 +26,15 @@ gxhash = ["dep:gxhash", "symspell_complete_rs/gxhash"] # Activate gxhash when yo
 name = "seekstorm"
 path = "src/lib.rs"
 
+[[bench]]
+name = "basic"
+path = "benches/basic.rs"
+harness = false
+
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
-tokio = { version = "1.53.2", features = ["full"] }
+tokio = { version = "1.54.1", features = ["full"] }
 base64 = "0.23.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
@@ -50,10 +55,10 @@ zstd = "0.14.2"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
 smallvec = "1.16.3"
-memmap2 = "0.9.11"
+memmap2 = "0.9.12"
 regex-syntax = "0.8.11"
 indexmap = { version = "2.14.2", features = ["serde"]}
-unicode-normalization = "0.1.25"
+unicode-normalization = "0.1.26"
 finl_unicode = "1.4.0"
 colored = "3.1.1"
 walkdir = "2.5.0"
@@ -72,9 +77,6 @@ snowball_stemmers_rs = "1.0.1"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }
 tabled = { version = "0.22.0", features = ["ansi"]}
 rkyv = "0.8.18"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version ="0.3.9",  features = ["winbase"]}
 
 [lints]
 workspace = true

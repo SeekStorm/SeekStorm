@@ -560,6 +560,25 @@ Using [Model2Vec from MinishLab](https://github.com/MinishLab/model2vec-rs): Pot
 
 We are using the **English Wikipedia** data (*5 million entries*) and queries (*300 intersection queries*) derived from the **AOL query dataset**, both from [Tantivy’s search-benchmark-game](https://github.com/quickwit-oss/search-benchmark-game/).
 
+### Embedded benchmark
+
+While the lexical benchmark mentioned above is used for our published benchmark results, we also have a benchmark embedded into this repository for development purposes.
+
+Lexical search benchmark of SeekStorm over 5 million Wikipedia articles, with 903 search queries 
+- of different query types (AND, OR, PHRASE) 
+- of different keyword numbers, 
+- of different result types (Count, TopkCount, Topk), 
+- measuring total result number, average latency, and percentile latencies.
+
+Start benchmark with `cargo bench --features gxhash`. 
+- ⚠️ Before running the benchmark, copy the Wikipedia data manually from https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2 into the `benches/test_data` directory and decompress.
+- ⚠️ Make sure the console buffer of your IDE is large enough to display all benchmark output.
+
+This benchmark is loosely based on https://github.com/quickwit-oss/search-benchmark-game (benchmark data and methodology).
+- It is intended mainly for development regression tests when evaluating future search improvements.
+- It runs on any platform, whereas the original search-benchmark-game relies on unix-specific dependencies, commands and shell syntax.
+- By using per-query median latency (of 5 non-consecutive runs per query), it separates the latency attributable to the search algorithm/implementation from incidental execution noise that is outside your control.
+
 ### Why latency matters
 
 1. **Tail latency.** Average latency isn't enough. Search infrastructure needs headroom for thousands of concurrent queries, complex queries and traffic spikes ([why tail latency costs you customers](https://seekstorm.com/blog/tail-latencies-and-percentiles/)).

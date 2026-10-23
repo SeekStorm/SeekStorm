@@ -121,11 +121,6 @@ use std::env;
 use std::error::Error;
 use std::str;
 use std::sync::LazyLock;
-#[cfg(target_os = "windows")]
-use winapi::um::{
-    processthreadsapi::{GetCurrentProcess, SetPriorityClass},
-    winbase::ABOVE_NORMAL_PRIORITY_CLASS,
-};
 
 use crate::server::initialize;
 
@@ -147,12 +142,6 @@ pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[doc(hidden)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    #[cfg(target_os = "windows")]
-    unsafe {
-        let process = GetCurrentProcess();
-        SetPriorityClass(process, ABOVE_NORMAL_PRIORITY_CLASS);
-    }
-
     let args: Vec<String> = env::args().collect();
     let mut params = HashMap::new();
     if args.len() > 1 {
