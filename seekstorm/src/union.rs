@@ -980,6 +980,9 @@ pub(crate) async fn union_count<'a>(
                     continue 'next;
                 }
 
+                if search_result.query_facets.is_empty() {
+                    continue 'next;
+                }
                 for (i, facet) in shard.facets.iter().enumerate() {
                     if search_result.query_facets[i].length == 0 {
                         continue;
