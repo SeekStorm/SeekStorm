@@ -1,3 +1,9 @@
+use crate::add_result::{facet_count, is_facet_filter};
+use crate::min_heap::MinHeap;
+use crate::search::{
+    FacetFilter, QueryFacet, ResultSortIndex, SearchResult, get_query_facets,
+    set_facet_filter_sparse, set_query_facets,
+};
 use crate::vector_similarity::VectorSimilarity;
 use crate::{
     clustering::{ClusterHeader, Medoid, ParentMedoid},
@@ -1105,12 +1111,15 @@ impl Shard {
 pub(crate) trait SearchVectorShard {
     async fn search_vector_shard(
         &self,
+        query_string: String,
         query_vector: Option<(Embedding, f32, f32, i16, i32)>,
         length: usize,
         include_uncommitted: bool,
         similarity_threshold: Option<f32>,
         cluster_search: AnnMode,
         field_filter: Vec<String>,
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
     ) -> ResultObject;
 }
 
@@ -1201,12 +1210,15 @@ impl Shard {
 impl SearchVectorShard for ShardArc {
     async fn search_vector_shard(
         &self,
+        query_string: String,
         query_vector: Option<(Embedding, f32, f32, i16, i32)>,
         length: usize,
         include_uncommitted: bool,
         similarity_threshold: Option<f32>,
         ann_mode: AnnMode,
         field_filter: Vec<String>,
+        query_facets: Vec<QueryFacet>,
+        facet_filter: Vec<FacetFilter>,
     ) -> ResultObject {
         let mut result_object: ResultObject = Default::default();
 
@@ -1216,6 +1228,28 @@ impl SearchVectorShard for ShardArc {
 
         let shard_ref = self.read().await;
         let mut observed_cluster_count = 0;
+
+        let enable_empty_query = false;
+        let facet_cap = if shard_ref.shard_number == 1 {
+            0
+        } else {
+            u32::MAX
+        };
+        let result_sort_index: Vec<ResultSortIndex> = Vec::new();
+        let mut search_result = SearchResult {
+            topk_candidates: MinHeap::new(
+                0,
+                &shard_ref,
+                query_string.is_empty(),
+                &result_sort_index,
+            ),
+            query_facets: Vec::new(),
+            skip_facet_count: false,
+        };
+
+        let facet_filter_sparse = set_facet_filter_sparse(&shard_ref, &facet_filter);
+
+        let _ = set_query_facets(&shard_ref, &mut search_result, &query_facets);
 
         let non_affine = shard_ref.max_vector_value == f32::MIN;
 
@@ -1227,7 +1261,7 @@ impl SearchVectorShard for ShardArc {
         for item in field_filter.iter() {
             match shard_ref.schema_map.get(item) {
                 Some(value) => {
-                    if value.index_lexical {
+                    if value.index_vector {
                         field_filter_set.insert(value.indexed_field_id as u16);
                     }
                 }
@@ -1411,45 +1445,53 @@ impl SearchVectorShard for ShardArc {
                         if field_filter_set.is_empty()
                             || field_filter_set.contains(&(record.header.field_id as u16))
                         {
-                            let scale_norm = if enable_scale {
-                                Some((
-                                    query_embedding.1,
-                                    query_embedding.2,
-                                    query_embedding.3,
-                                    query_embedding.4,
-                                    record.header.scale,
-                                    record.header.norm,
-                                    record.header.zero_point,
-                                    record.header.sum_q,
-                                ))
-                            } else {
-                                None
-                            };
-                            let similarity = if shard_ref.is_simd {
-                                similarity_embedding_view_simd(
-                                    &query_simd,
-                                    &record.embedding,
-                                    scale_norm,
-                                    vector_similarity,
-                                    shard_ref.quantization,
-                                    non_affine,
-                                )
-                            } else {
-                                similarity_embedding_view(
-                                    &query_embedding.0,
-                                    &record.embedding,
-                                    scale_norm,
-                                    vector_similarity,
-                                    shard_ref.quantization,
-                                    non_affine,
-                                )
-                            };
-
                             let doc_id = (level_id << 16) | (record.header.doc_id as usize);
 
                             if shard_ref.delete_hashset.is_empty()
                                 || !shard_ref.delete_hashset.contains(&doc_id)
                             {
+                                if !facet_filter.is_empty()
+                                    && is_facet_filter(&shard_ref, &facet_filter_sparse, doc_id)
+                                {
+                                    continue;
+                                };
+
+                                facet_count(&shard_ref, &mut search_result, doc_id);
+
+                                let scale_norm = if enable_scale {
+                                    Some((
+                                        query_embedding.1,
+                                        query_embedding.2,
+                                        query_embedding.3,
+                                        query_embedding.4,
+                                        record.header.scale,
+                                        record.header.norm,
+                                        record.header.zero_point,
+                                        record.header.sum_q,
+                                    ))
+                                } else {
+                                    None
+                                };
+                                let similarity = if shard_ref.is_simd {
+                                    similarity_embedding_view_simd(
+                                        &query_simd,
+                                        &record.embedding,
+                                        scale_norm,
+                                        vector_similarity,
+                                        shard_ref.quantization,
+                                        non_affine,
+                                    )
+                                } else {
+                                    similarity_embedding_view(
+                                        &query_embedding.0,
+                                        &record.embedding,
+                                        scale_norm,
+                                        vector_similarity,
+                                        shard_ref.quantization,
+                                        non_affine,
+                                    )
+                                };
+
                                 top_k.push(
                                     doc_id,
                                     record.header.field_id,
@@ -1509,6 +1551,16 @@ impl SearchVectorShard for ShardArc {
         result_object.result_count_total = top_k.result_count_total;
         result_object.observed_vector_count = top_k.observed_vector_count;
         result_object.observed_cluster_count = observed_cluster_count;
+
+        get_query_facets(
+            &shard_ref,
+            &mut search_result,
+            &query_string,
+            enable_empty_query,
+            query_facets,
+            &mut result_object,
+            facet_cap,
+        );
 
         result_object
     }

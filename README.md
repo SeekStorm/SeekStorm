@@ -49,7 +49,7 @@ In [production](https://seekstorm.com) since 2020. Open source under the [Apache
 | | |
 |---|---|
 | ⚡ **Fast** | **306 µs** average lexical latency: **8x lower** latency and **21x lower P99** than Lucene. All query types, single field, 5M Wikipedia docs, [details](#benchmarks). |
-| 🔀 **Native hybrid** | Two first-class engines (inverted index + IVF ANN) behind one query planner. Lexical, vector or hybrid **per query**, fused with Reciprocal Rank Fusion (RRF). Field filters are active *during* vector search. |
+| 🔀 **Native hybrid** | Two first-class engines (inverted index + IVF ANN) behind one query planner. Lexical, vector or hybrid **per query**, fused with Reciprocal Rank Fusion (RRF). Filters &amp; facets are active *during* vector &amp; lexical search. |
 | 🔤 **Lexical search** | BM25F and BM25F_Proximity, intersection / union / phrase / NOT queries, 6 tokenizers incl. Chinese word segmentation, stemming for 38 languages, N-gram phrase indexing, Block-max WAND and Maxscore. |
 | 📐 **Vector search** | Multi-vector indexing, embedded Model2Vec inference or bring-your-own embeddings, F32 / I8, cosine / dot / Euclidean, TurboQuant and scalar quantization, sentence-aware chunking, sharded leveled IVF index. |
 | ⏱️ **Real-time** | True real-time, not near-real-time: every document is searchable immediately, even before and during commit. No segment merges, no JIT warm-up, no GC pauses. |

@@ -982,8 +982,8 @@ pub type Point = Vec<f64>;
 ///
 /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
 /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
-/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
-/// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
+/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched. Field filters are active *during* vector and lexical search.
+/// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned. Query facets are active *during* vector and lexical search.
 ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
 ///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
 ///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
@@ -994,7 +994,7 @@ pub type Point = Vec<f64>;
 ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
 ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
 ///
-/// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
+/// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered. Facet filters are active *during* vector and lexical search.
 ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
 ///   If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
 ///   the query facets are counted over all documents matching the query and the facet filter.
@@ -1085,8 +1085,8 @@ pub trait Search {
     ///
     /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
     /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
-    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched.
-    /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned.
+    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched. Field filters are active *during* vector and lexical search.
+    /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned. Query facets are active *during* vector and lexical search.
     ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
     ///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
     ///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
@@ -1097,7 +1097,7 @@ pub trait Search {
     ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
     ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
     ///
-    /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
+    /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered. Facet filters are active *during* vector and lexical search.
     ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
     ///   If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
     ///   the query facets are counted over all documents matching the query and the facet filter.
@@ -1647,7 +1647,9 @@ impl Search for IndexArc {
             let result_type_clone = result_type.clone();
             let field_filter_clone = field_filter.clone();
             let query_facets_clone = query_facets.clone();
+            let query_facets_clone2 = query_facets.clone();
             let facet_filter_clone = facet_filter.clone();
+            let facet_filter_clone2 = facet_filter.clone();
             let result_sort_clone = result_sort.clone();
             let shard_id = shard.read().await.meta.id;
 
@@ -1683,12 +1685,15 @@ impl Search for IndexArc {
                     } => {
                         let mut rlo_vector = shard_clone
                             .search_vector_shard(
+                                query_string_clone,
                                 query_vector_clone,
                                 offset + length,
                                 include_uncommitted,
                                 similarity_threshold,
                                 cluster_search,
                                 field_filter_clone,
+                                query_facets_clone,
+                                facet_filter_clone,
                             )
                             .await;
 
@@ -1726,12 +1731,15 @@ impl Search for IndexArc {
                         }
                         let mut rlo_vector = shard_clone
                             .search_vector_shard(
+                                query_string_clone,
                                 query_vector_clone,
                                 offset + length,
                                 include_uncommitted,
                                 similarity_threshold,
                                 ann_mode,
                                 field_filter_clone,
+                                query_facets_clone2,
+                                facet_filter_clone2,
                             )
                             .await;
 
@@ -1934,6 +1942,18 @@ impl Search for IndexArc {
                 && !rlo_shard_lexical.facets.is_empty()
             {
                 for facet in rlo_shard_lexical.facets.iter() {
+                    if let Some(existing) = result_facets.get_mut(facet.0) {
+                        for (key, value) in facet.1.iter() {
+                            *existing.0.entry(key.clone()).or_insert(0) += value;
+                        }
+                    };
+                }
+            }
+
+            if let Some(rlo_shard_vector) = rlo_shard_hybrid_options.1
+                && !rlo_shard_vector.facets.is_empty()
+            {
+                for facet in rlo_shard_vector.facets.iter() {
                     if let Some(existing) = result_facets.get_mut(facet.0) {
                         for (key, value) in facet.1.iter() {
                             *existing.0.entry(key.clone()).or_insert(0) += value;
@@ -2425,6 +2445,677 @@ pub(crate) fn decode_posting_list_object(
     }
 }
 
+pub(crate) fn set_facet_filter_sparse(
+    shard_ref: &Shard,
+    facet_filter: &[FacetFilter],
+) -> Vec<FilterSparse> {
+    let mut facet_filter_sparse: Vec<FilterSparse> = Vec::new();
+    if !facet_filter.is_empty() {
+        facet_filter_sparse = vec![FilterSparse::None; shard_ref.facets.len()];
+        for facet_filter_item in facet_filter.iter() {
+            match &facet_filter_item {
+                FacetFilter::U8 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U8
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::U8(filter.clone())
+                    }
+                }
+                FacetFilter::U16 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U16
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::U16(filter.clone())
+                    }
+                }
+                FacetFilter::U32 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U32
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::U32(filter.clone())
+                    }
+                }
+                FacetFilter::U64 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U64
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::U64(filter.clone())
+                    }
+                }
+                FacetFilter::I8 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I8
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::I8(filter.clone())
+                    }
+                }
+                FacetFilter::I16 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I16
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::I16(filter.clone())
+                    }
+                }
+                FacetFilter::I32 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I32
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::I32(filter.clone())
+                    }
+                }
+                FacetFilter::I64 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I64
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::I64(filter.clone())
+                    }
+                }
+                FacetFilter::Timestamp { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::Timestamp
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::Timestamp(filter.clone())
+                    }
+                }
+                FacetFilter::F32 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::F32
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::F32(filter.clone())
+                    }
+                }
+                FacetFilter::F64 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::F64
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
+                    }
+                }
+
+                FacetFilter::String16 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field) {
+                        let facet = &shard_ref.facets[*idx];
+                        if shard_ref.facets[*idx].field_type == FieldType::String16 {
+                            let mut string_id_vec = Vec::new();
+                            for value in filter.iter() {
+                                let key = [value.clone()];
+                                if let Some(facet_value_id) = facet.values.get_index_of(&key[0]) {
+                                    string_id_vec.push(facet_value_id as u16);
+                                }
+                            }
+                            facet_filter_sparse[*idx] = FilterSparse::String16(string_id_vec);
+                        }
+                    }
+                }
+
+                FacetFilter::StringSet16 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field) {
+                        let facet = &shard_ref.facets[*idx];
+                        if shard_ref.facets[*idx].field_type == FieldType::StringSet16 {
+                            let mut string_id_vec = Vec::new();
+                            for value in filter.iter() {
+                                let key = [value.clone()];
+                                if let Some(facet_value_id) =
+                                    facet.values.get_index_of(&key.join("_"))
+                                {
+                                    string_id_vec.push(facet_value_id as u16);
+                                }
+                                if let Some(facet_value_ids) = shard_ref
+                                    .string_set_to_single_term_id_vec[*idx]
+                                    .get(&value.clone())
+                                {
+                                    for code in facet_value_ids.iter() {
+                                        string_id_vec.push(*code as u16);
+                                    }
+                                }
+                            }
+                            facet_filter_sparse[*idx] = FilterSparse::String16(string_id_vec);
+                        }
+                    }
+                }
+
+                FacetFilter::String32 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field) {
+                        let facet = &shard_ref.facets[*idx];
+
+                        if shard_ref.facets[*idx].field_type == FieldType::String32 {
+                            let mut string_id_vec = Vec::new();
+                            for value in filter.iter() {
+                                let key = [value.clone()];
+                                if let Some(facet_value_id) = facet.values.get_index_of(&key[0]) {
+                                    string_id_vec.push(facet_value_id as u32);
+                                }
+                            }
+                            facet_filter_sparse[*idx] = FilterSparse::String32(string_id_vec);
+                        }
+                    }
+                }
+
+                FacetFilter::StringSet32 { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field) {
+                        let facet = &shard_ref.facets[*idx];
+                        if shard_ref.facets[*idx].field_type == FieldType::StringSet32 {
+                            let mut string_id_vec = Vec::new();
+                            for value in filter.iter() {
+                                let key = [value.clone()];
+                                if let Some(facet_value_id) =
+                                    facet.values.get_index_of(&key.join("_"))
+                                {
+                                    string_id_vec.push(facet_value_id as u32);
+                                }
+                                if let Some(facet_value_ids) = shard_ref
+                                    .string_set_to_single_term_id_vec[*idx]
+                                    .get(&value.clone())
+                                {
+                                    for code in facet_value_ids.iter() {
+                                        string_id_vec.push(*code);
+                                    }
+                                }
+                            }
+                            facet_filter_sparse[*idx] = FilterSparse::String32(string_id_vec);
+                        }
+                    }
+                }
+
+                FacetFilter::Point { field, filter } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::Point
+                    {
+                        facet_filter_sparse[*idx] = FilterSparse::Point(
+                            filter.0.clone(),
+                            filter.1.clone(),
+                            filter.2.clone(),
+                            point_distance_to_morton_range(&filter.0, filter.1.end, &filter.2),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    facet_filter_sparse
+}
+
+pub(crate) fn set_query_facets(
+    shard_ref: &Shard,
+    search_result: &mut SearchResult,
+    query_facets: &[QueryFacet],
+) -> bool {
+    let mut is_range_facet = false;
+    if !query_facets.is_empty() {
+        search_result.query_facets = vec![ResultFacet::default(); shard_ref.facets.len()];
+        for query_facet in query_facets.iter() {
+            match &query_facet {
+                QueryFacet::U8 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U8
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::U8(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::U16 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U16
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::U16(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::U32 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U32
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::U32(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::U64 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::U64
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::U64(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::I8 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I8
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::I8(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::I16 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I16
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::I16(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::I32 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I32
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::I32(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::I64 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::I64
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::I64(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::Timestamp {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::Timestamp
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::Timestamp(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::F32 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::F32
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::F32(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::F64 {
+                    field,
+                    range_type,
+                    ranges,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::F64
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::F64(range_type.clone(), ranges.clone()),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::String16 {
+                    field,
+                    prefix,
+                    length,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::String16
+                    {
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            prefix: prefix.clone(),
+                            length: *length as u32,
+                            ..Default::default()
+                        }
+                    }
+                }
+                QueryFacet::StringSet16 {
+                    field,
+                    prefix,
+                    length,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::StringSet16
+                    {
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            prefix: prefix.clone(),
+                            length: *length as u32,
+                            ..Default::default()
+                        }
+                    }
+                }
+
+                QueryFacet::String32 {
+                    field,
+                    prefix,
+                    length,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::String32
+                    {
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            prefix: prefix.clone(),
+                            length: *length,
+                            ..Default::default()
+                        }
+                    }
+                }
+                QueryFacet::StringSet32 {
+                    field,
+                    prefix,
+                    length,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::StringSet32
+                    {
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            prefix: prefix.clone(),
+                            length: *length,
+                            ..Default::default()
+                        }
+                    }
+                }
+
+                QueryFacet::Point {
+                    field,
+                    range_type,
+                    ranges,
+                    base,
+                    unit,
+                } => {
+                    if let Some(idx) = shard_ref.facets_map.get(field)
+                        && shard_ref.facets[*idx].field_type == FieldType::Point
+                        && !ranges.is_empty()
+                    {
+                        is_range_facet = true;
+                        search_result.query_facets[*idx] = ResultFacet {
+                            field: field.clone(),
+                            length: u16::MAX as u32,
+                            ranges: Ranges::Point(
+                                range_type.clone(),
+                                ranges.clone(),
+                                base.clone(),
+                                unit.clone(),
+                            ),
+                            ..Default::default()
+                        };
+                    }
+                }
+                QueryFacet::None => {}
+            };
+        }
+    }
+    is_range_facet
+}
+
+pub(crate) fn get_query_facets(
+    shard_ref: &Shard,
+    search_result: &mut SearchResult,
+    query_string: &str,
+    enable_empty_query: bool,
+    query_facets: Vec<QueryFacet>,
+    result_object: &mut ResultObject,
+    facet_cap: u32,
+) {
+    if !search_result.query_facets.is_empty() {
+        result_object.facets = if query_string.is_empty() && !enable_empty_query {
+            shard_ref
+                .get_index_string_facets_shard(query_facets)
+                .unwrap_or_default()
+        } else {
+            let mut facets: AHashMap<String, Facet> = AHashMap::new();
+            for (i, facet) in search_result.query_facets.iter_mut().enumerate() {
+                if facet.length == 0 || facet.values.is_empty() {
+                    continue;
+                }
+
+                let v = if facet.ranges == Ranges::None {
+                    if shard_ref.facets[i].values.is_empty() {
+                        continue;
+                    }
+                    if shard_ref.facets[i].field_type == FieldType::StringSet16
+                        || shard_ref.facets[i].field_type == FieldType::StringSet32
+                    {
+                        let mut hash_map: AHashMap<String, usize> = AHashMap::new();
+                        for value in facet.values.iter() {
+                            let value2 = shard_ref.facets[i]
+                                .values
+                                .get_index(*value.0 as usize)
+                                .unwrap();
+
+                            for term in value2.1.0.iter() {
+                                *hash_map.entry(term.clone()).or_insert(0) += value.1;
+                            }
+                        }
+
+                        hash_map
+                            .iter()
+                            .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                            .map(|(a, c)| (a.clone(), *c))
+                            .filter(|(a, _c)| {
+                                facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                            })
+                            .take(facet.length.max(facet_cap) as usize)
+                            .collect::<Vec<_>>()
+                    } else {
+                        facet
+                            .values
+                            .iter()
+                            .sorted_unstable_by(|a, b| b.1.cmp(a.1))
+                            .map(|(a, c)| {
+                                (
+                                    shard_ref.facets[i]
+                                        .values
+                                        .get_index(*a as usize)
+                                        .unwrap()
+                                        .0
+                                        .clone(),
+                                    *c,
+                                )
+                            })
+                            .filter(|(a, _c)| {
+                                facet.prefix.is_empty() || a.starts_with(&facet.prefix)
+                            })
+                            .take(facet.length.max(facet_cap) as usize)
+                            .collect::<Vec<_>>()
+                    }
+                } else {
+                    let range_type = match &facet.ranges {
+                        Ranges::U8(range_type, _ranges) => range_type.clone(),
+                        Ranges::U16(range_type, _ranges) => range_type.clone(),
+                        Ranges::U32(range_type, _ranges) => range_type.clone(),
+                        Ranges::U64(range_type, _ranges) => range_type.clone(),
+                        Ranges::I8(range_type, _ranges) => range_type.clone(),
+                        Ranges::I16(range_type, _ranges) => range_type.clone(),
+                        Ranges::I32(range_type, _ranges) => range_type.clone(),
+                        Ranges::I64(range_type, _ranges) => range_type.clone(),
+                        Ranges::Timestamp(range_type, _ranges) => range_type.clone(),
+                        Ranges::F32(range_type, _ranges) => range_type.clone(),
+                        Ranges::F64(range_type, _ranges) => range_type.clone(),
+                        Ranges::Point(range_type, _ranges, _base, _unit) => range_type.clone(),
+                        _ => RangeType::CountWithinRange,
+                    };
+
+                    match range_type {
+                        RangeType::CountAboveRange => {
+                            let mut sum = 0usize;
+                            for value in facet
+                                .values
+                                .iter_mut()
+                                .sorted_unstable_by(|a, b| b.0.cmp(a.0))
+                            {
+                                sum += *value.1;
+                                *value.1 = sum;
+                            }
+                        }
+                        RangeType::CountBelowRange => {
+                            let mut sum = 0usize;
+                            for value in facet
+                                .values
+                                .iter_mut()
+                                .sorted_unstable_by(|a, b| a.0.cmp(b.0))
+                            {
+                                sum += *value.1;
+                                *value.1 = sum;
+                            }
+                        }
+                        RangeType::CountWithinRange => {}
+                    }
+
+                    facet
+                        .values
+                        .iter()
+                        .sorted_unstable_by(|a, b| a.0.cmp(b.0))
+                        .filter_map(|(a, c)| {
+                            let range_index = *a as usize;
+                            let label = match &facet.ranges {
+                                Ranges::U8(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::U16(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::U32(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::U64(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::I8(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::I16(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::I32(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::I64(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::Timestamp(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::F32(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::F64(_range_type, ranges) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                Ranges::Point(_range_type, ranges, _base, _unit) => {
+                                    ranges.get(range_index).map(|value| value.0.clone())
+                                }
+                                _ => return None,
+                            }?;
+
+                            Some((label, *c))
+                        })
+                        .filter(|(a, _c)| facet.prefix.is_empty() || a.starts_with(&facet.prefix))
+                        .collect::<Vec<_>>()
+                };
+
+                if !v.is_empty() {
+                    facets.insert(facet.field.clone(), v);
+                }
+            }
+            facets
+        };
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(async_fn_in_trait)]
 pub(crate) trait SearchLexicalShard {
@@ -2543,489 +3234,9 @@ impl SearchLexicalShard for ShardArc {
             skip_facet_count: false,
         };
 
-        let mut facet_filter_sparse: Vec<FilterSparse> = Vec::new();
-        if !facet_filter.is_empty() {
-            facet_filter_sparse = vec![FilterSparse::None; shard_ref.facets.len()];
-            for facet_filter_item in facet_filter.iter() {
-                match &facet_filter_item {
-                    FacetFilter::U8 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U8
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::U8(filter.clone())
-                        }
-                    }
-                    FacetFilter::U16 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U16
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::U16(filter.clone())
-                        }
-                    }
-                    FacetFilter::U32 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U32
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::U32(filter.clone())
-                        }
-                    }
-                    FacetFilter::U64 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U64
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::U64(filter.clone())
-                        }
-                    }
-                    FacetFilter::I8 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I8
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::I8(filter.clone())
-                        }
-                    }
-                    FacetFilter::I16 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I16
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::I16(filter.clone())
-                        }
-                    }
-                    FacetFilter::I32 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I32
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::I32(filter.clone())
-                        }
-                    }
-                    FacetFilter::I64 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I64
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::I64(filter.clone())
-                        }
-                    }
-                    FacetFilter::Timestamp { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::Timestamp
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::Timestamp(filter.clone())
-                        }
-                    }
-                    FacetFilter::F32 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::F32
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::F32(filter.clone())
-                        }
-                    }
-                    FacetFilter::F64 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::F64
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::F64(filter.clone())
-                        }
-                    }
-                    FacetFilter::String16 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field) {
-                            let facet = &shard_ref.facets[*idx];
-                            if shard_ref.facets[*idx].field_type == FieldType::String16 {
-                                let mut string_id_vec = Vec::new();
-                                for value in filter.iter() {
-                                    let key = [value.clone()];
-                                    if let Some(facet_value_id) = facet.values.get_index_of(&key[0])
-                                    {
-                                        string_id_vec.push(facet_value_id as u16);
-                                    }
-                                }
-                                facet_filter_sparse[*idx] = FilterSparse::String16(string_id_vec);
-                            }
-                        }
-                    }
+        let facet_filter_sparse = set_facet_filter_sparse(&shard_ref, &facet_filter);
 
-                    FacetFilter::StringSet16 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field) {
-                            let facet = &shard_ref.facets[*idx];
-                            if shard_ref.facets[*idx].field_type == FieldType::StringSet16 {
-                                let mut string_id_vec = Vec::new();
-                                for value in filter.iter() {
-                                    let key = [value.clone()];
-                                    if let Some(facet_value_id) =
-                                        facet.values.get_index_of(&key.join("_"))
-                                    {
-                                        string_id_vec.push(facet_value_id as u16);
-                                    }
-                                    if let Some(facet_value_ids) = shard_ref
-                                        .string_set_to_single_term_id_vec[*idx]
-                                        .get(&value.clone())
-                                    {
-                                        for code in facet_value_ids.iter() {
-                                            string_id_vec.push(*code as u16);
-                                        }
-                                    }
-                                }
-                                facet_filter_sparse[*idx] = FilterSparse::String16(string_id_vec);
-                            }
-                        }
-                    }
-                    FacetFilter::String32 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field) {
-                            let facet = &shard_ref.facets[*idx];
-
-                            if shard_ref.facets[*idx].field_type == FieldType::String32 {
-                                let mut string_id_vec = Vec::new();
-                                for value in filter.iter() {
-                                    let key = [value.clone()];
-                                    if let Some(facet_value_id) = facet.values.get_index_of(&key[0])
-                                    {
-                                        string_id_vec.push(facet_value_id as u32);
-                                    }
-                                }
-                                facet_filter_sparse[*idx] = FilterSparse::String32(string_id_vec);
-                            }
-                        }
-                    }
-
-                    FacetFilter::StringSet32 { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field) {
-                            let facet = &shard_ref.facets[*idx];
-                            if shard_ref.facets[*idx].field_type == FieldType::StringSet32 {
-                                let mut string_id_vec = Vec::new();
-                                for value in filter.iter() {
-                                    let key = [value.clone()];
-                                    if let Some(facet_value_id) =
-                                        facet.values.get_index_of(&key.join("_"))
-                                    {
-                                        string_id_vec.push(facet_value_id as u32);
-                                    }
-                                    if let Some(facet_value_ids) = shard_ref
-                                        .string_set_to_single_term_id_vec[*idx]
-                                        .get(&value.clone())
-                                    {
-                                        for code in facet_value_ids.iter() {
-                                            string_id_vec.push(*code);
-                                        }
-                                    }
-                                }
-                                facet_filter_sparse[*idx] = FilterSparse::String32(string_id_vec);
-                            }
-                        }
-                    }
-
-                    FacetFilter::Point { field, filter } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::Point
-                        {
-                            facet_filter_sparse[*idx] = FilterSparse::Point(
-                                filter.0.clone(),
-                                filter.1.clone(),
-                                filter.2.clone(),
-                                point_distance_to_morton_range(&filter.0, filter.1.end, &filter.2),
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut is_range_facet = false;
-        if !query_facets.is_empty() {
-            search_result.query_facets = vec![ResultFacet::default(); shard_ref.facets.len()];
-            for query_facet in query_facets.iter() {
-                match &query_facet {
-                    QueryFacet::U8 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U8
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::U8(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::U16 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U16
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::U16(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::U32 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U32
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::U32(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::U64 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::U64
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::U64(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::I8 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I8
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::I8(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::I16 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I16
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::I16(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::I32 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I32
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::I32(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::I64 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::I64
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::I64(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::Timestamp {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::Timestamp
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::Timestamp(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::F32 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::F32
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::F32(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::F64 {
-                        field,
-                        range_type,
-                        ranges,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::F64
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::F64(range_type.clone(), ranges.clone()),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                    QueryFacet::String16 {
-                        field,
-                        prefix,
-                        length,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::String16
-                        {
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                prefix: prefix.clone(),
-                                length: *length as u32,
-                                ..Default::default()
-                            }
-                        }
-                    }
-                    QueryFacet::StringSet16 {
-                        field,
-                        prefix,
-                        length,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::StringSet16
-                        {
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                prefix: prefix.clone(),
-                                length: *length as u32,
-                                ..Default::default()
-                            }
-                        }
-                    }
-
-                    QueryFacet::String32 {
-                        field,
-                        prefix,
-                        length,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::String32
-                        {
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                prefix: prefix.clone(),
-                                length: *length,
-                                ..Default::default()
-                            }
-                        }
-                    }
-                    QueryFacet::StringSet32 {
-                        field,
-                        prefix,
-                        length,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::StringSet32
-                        {
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                prefix: prefix.clone(),
-                                length: *length,
-                                ..Default::default()
-                            }
-                        }
-                    }
-
-                    QueryFacet::Point {
-                        field,
-                        range_type,
-                        ranges,
-                        base,
-                        unit,
-                    } => {
-                        if let Some(idx) = shard_ref.facets_map.get(field)
-                            && shard_ref.facets[*idx].field_type == FieldType::Point
-                            && !ranges.is_empty()
-                        {
-                            is_range_facet = true;
-                            search_result.query_facets[*idx] = ResultFacet {
-                                field: field.clone(),
-                                length: u16::MAX as u32,
-                                ranges: Ranges::Point(
-                                    range_type.clone(),
-                                    ranges.clone(),
-                                    base.clone(),
-                                    unit.clone(),
-                                ),
-                                ..Default::default()
-                            };
-                        }
-                    }
-
-                    QueryFacet::None => {}
-                };
-            }
-        }
+        let is_range_facet = set_query_facets(&shard_ref, &mut search_result, &query_facets);
 
         let result_count_arc = Arc::new(AtomicUsize::new(0));
         let result_count_uncommitted_arc = Arc::new(AtomicUsize::new(0));
@@ -3609,172 +3820,15 @@ impl SearchLexicalShard for ShardArc {
 
         result_object.result_count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
             + result_count_arc.load(Ordering::Relaxed);
-
-        if !search_result.query_facets.is_empty() {
-            result_object.facets = if query_string.is_empty() && !enable_empty_query {
-                shard_ref
-                    .get_index_string_facets_shard(query_facets)
-                    .unwrap_or_default()
-            } else {
-                let mut facets: AHashMap<String, Facet> = AHashMap::new();
-                for (i, facet) in search_result.query_facets.iter_mut().enumerate() {
-                    if facet.length == 0 || facet.values.is_empty() {
-                        continue;
-                    }
-
-                    let v = if facet.ranges == Ranges::None {
-                        if shard_ref.facets[i].values.is_empty() {
-                            continue;
-                        }
-
-                        if shard_ref.facets[i].field_type == FieldType::StringSet16
-                            || shard_ref.facets[i].field_type == FieldType::StringSet32
-                        {
-                            let mut hash_map: AHashMap<String, usize> = AHashMap::new();
-                            for value in facet.values.iter() {
-                                let value2 = shard_ref.facets[i]
-                                    .values
-                                    .get_index(*value.0 as usize)
-                                    .unwrap();
-
-                                for term in value2.1.0.iter() {
-                                    *hash_map.entry(term.clone()).or_insert(0) += value.1;
-                                }
-                            }
-                            hash_map
-                                .iter()
-                                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
-                                .map(|(a, c)| (a.clone(), *c))
-                                .filter(|(a, _c)| {
-                                    facet.prefix.is_empty() || a.starts_with(&facet.prefix)
-                                })
-                                .take(facet.length.max(facet_cap) as usize)
-                                .collect::<Vec<_>>()
-                        } else {
-                            facet
-                                .values
-                                .iter()
-                                .sorted_unstable_by(|a, b| b.1.cmp(a.1))
-                                .map(|(a, c)| {
-                                    (
-                                        shard_ref.facets[i]
-                                            .values
-                                            .get_index(*a as usize)
-                                            .unwrap()
-                                            .0
-                                            .clone(),
-                                        *c,
-                                    )
-                                })
-                                .filter(|(a, _c)| {
-                                    facet.prefix.is_empty() || a.starts_with(&facet.prefix)
-                                })
-                                .take(facet.length.max(facet_cap) as usize)
-                                .collect::<Vec<_>>()
-                        }
-                    } else {
-                        let range_type = match &facet.ranges {
-                            Ranges::U8(range_type, _ranges) => range_type.clone(),
-                            Ranges::U16(range_type, _ranges) => range_type.clone(),
-                            Ranges::U32(range_type, _ranges) => range_type.clone(),
-                            Ranges::U64(range_type, _ranges) => range_type.clone(),
-                            Ranges::I8(range_type, _ranges) => range_type.clone(),
-                            Ranges::I16(range_type, _ranges) => range_type.clone(),
-                            Ranges::I32(range_type, _ranges) => range_type.clone(),
-                            Ranges::I64(range_type, _ranges) => range_type.clone(),
-                            Ranges::Timestamp(range_type, _ranges) => range_type.clone(),
-                            Ranges::F32(range_type, _ranges) => range_type.clone(),
-                            Ranges::F64(range_type, _ranges) => range_type.clone(),
-                            Ranges::Point(range_type, _ranges, _base, _unit) => range_type.clone(),
-                            _ => RangeType::CountWithinRange,
-                        };
-
-                        match range_type {
-                            RangeType::CountAboveRange => {
-                                let mut sum = 0usize;
-                                for value in facet
-                                    .values
-                                    .iter_mut()
-                                    .sorted_unstable_by(|a, b| b.0.cmp(a.0))
-                                {
-                                    sum += *value.1;
-                                    *value.1 = sum;
-                                }
-                            }
-                            RangeType::CountBelowRange => {
-                                let mut sum = 0usize;
-                                for value in facet
-                                    .values
-                                    .iter_mut()
-                                    .sorted_unstable_by(|a, b| a.0.cmp(b.0))
-                                {
-                                    sum += *value.1;
-                                    *value.1 = sum;
-                                }
-                            }
-                            RangeType::CountWithinRange => {}
-                        }
-
-                        facet
-                            .values
-                            .iter()
-                            .sorted_unstable_by(|a, b| a.0.cmp(b.0))
-                            .filter_map(|(a, c)| {
-                                let range_index = *a as usize;
-                                let label = match &facet.ranges {
-                                    Ranges::U8(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::U16(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::U32(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::U64(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::I8(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::I16(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::I32(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::I64(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::Timestamp(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::F32(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::F64(_range_type, ranges) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    Ranges::Point(_range_type, ranges, _base, _unit) => {
-                                        ranges.get(range_index).map(|value| value.0.clone())
-                                    }
-                                    _ => return None,
-                                }?;
-
-                                Some((label, *c))
-                            })
-                            .filter(|(a, _c)| {
-                                facet.prefix.is_empty() || a.starts_with(&facet.prefix)
-                            })
-                            .collect::<Vec<_>>()
-                    };
-                    if !v.is_empty() {
-                        facets.insert(facet.field.clone(), v);
-                    }
-                }
-                facets
-            };
-        }
+        get_query_facets(
+            &shard_ref,
+            &mut search_result,
+            &query_string,
+            enable_empty_query,
+            query_facets,
+            &mut result_object,
+            facet_cap,
+        );
 
         result_object
     }
