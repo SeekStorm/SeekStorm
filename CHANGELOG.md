@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- for consistency and latency, for result_type=TopK in vector search no facet_count() is invoked anymore.
+- For consistency and latency, for result_type=TopK in vector search no facet_count() is invoked anymore.
 
 ## [3.4.4] - 2026-10-26
 
