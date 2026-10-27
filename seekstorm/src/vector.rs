@@ -1,7 +1,7 @@
 use crate::add_result::{facet_count, is_facet_filter};
 use crate::min_heap::MinHeap;
 use crate::search::{
-    FacetFilter, QueryFacet, ResultSortIndex, SearchResult, get_query_facets,
+    FacetFilter, QueryFacet, ResultSortIndex, ResultType, SearchResult, get_query_facets,
     set_facet_filter_sparse, set_query_facets,
 };
 use crate::vector_similarity::VectorSimilarity;
@@ -1114,6 +1114,7 @@ pub(crate) trait SearchVectorShard {
         query_string: String,
         query_vector: Option<(Embedding, f32, f32, i16, i32)>,
         length: usize,
+        result_type: ResultType,
         include_uncommitted: bool,
         similarity_threshold: Option<f32>,
         cluster_search: AnnMode,
@@ -1213,6 +1214,7 @@ impl SearchVectorShard for ShardArc {
         query_string: String,
         query_vector: Option<(Embedding, f32, f32, i16, i32)>,
         length: usize,
+        result_type: ResultType,
         include_uncommitted: bool,
         similarity_threshold: Option<f32>,
         ann_mode: AnnMode,
@@ -1456,7 +1458,9 @@ impl SearchVectorShard for ShardArc {
                                     continue;
                                 };
 
-                                facet_count(&shard_ref, &mut search_result, doc_id);
+                                if result_type != ResultType::Topk {
+                                    facet_count(&shard_ref, &mut search_result, doc_id);
+                                }
 
                                 let scale_norm = if enable_scale {
                                     Some((

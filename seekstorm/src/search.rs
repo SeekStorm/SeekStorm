@@ -1463,7 +1463,7 @@ impl Search for IndexArc {
         let shard_number = index_ref.shard_number;
         let aggregate_results = result_type != ResultType::Count;
 
-        let query_vector = if index_ref.is_vector_indexing {
+        let query_vector = if index_ref.is_vector_indexing && search_mode != SearchMode::Lexical {
             Some(if let Some(mut qv) = query_vector {
                 if index_ref.vector_similarity == VectorSimilarity::Cosine
                     && matches!(index_ref.meta.inference, Inference::External { .. })
@@ -1643,18 +1643,16 @@ impl Search for IndexArc {
             let query_vector_clone = query_vector.clone();
             let shard_clone = shard.clone();
             let query_type_clone = query_type_default.clone();
-            let query_mode_clone = search_mode.clone();
+            let search_mode_clone = search_mode.clone();
             let result_type_clone = result_type.clone();
             let field_filter_clone = field_filter.clone();
             let query_facets_clone = query_facets.clone();
-            let query_facets_clone2 = query_facets.clone();
             let facet_filter_clone = facet_filter.clone();
-            let facet_filter_clone2 = facet_filter.clone();
             let result_sort_clone = result_sort.clone();
             let shard_id = shard.read().await.meta.id;
 
             result_object_list.push(INDEX_RUNTIME.handle().spawn(async move {
-                match query_mode_clone {
+                match search_mode_clone {
                     SearchMode::Lexical => {
                         let mut rlo_lexical = shard_clone
                             .search_lexical_shard(
@@ -1688,6 +1686,7 @@ impl Search for IndexArc {
                                 query_string_clone,
                                 query_vector_clone,
                                 offset + length,
+                                result_type_clone,
                                 include_uncommitted,
                                 similarity_threshold,
                                 cluster_search,
@@ -1715,11 +1714,11 @@ impl Search for IndexArc {
                                 enable_empty_query,
                                 0,
                                 offset + length,
-                                result_type_clone,
+                                result_type_clone.clone(),
                                 include_uncommitted,
                                 field_filter_clone.clone(),
-                                query_facets_clone,
-                                facet_filter_clone,
+                                query_facets_clone.clone(),
+                                facet_filter_clone.clone(),
                                 result_sort_clone,
                             )
                             .await;
@@ -1734,12 +1733,13 @@ impl Search for IndexArc {
                                 query_string_clone,
                                 query_vector_clone,
                                 offset + length,
+                                result_type_clone,
                                 include_uncommitted,
                                 similarity_threshold,
                                 ann_mode,
                                 field_filter_clone,
-                                query_facets_clone2,
-                                facet_filter_clone2,
+                                query_facets_clone,
+                                facet_filter_clone,
                             )
                             .await;
 
