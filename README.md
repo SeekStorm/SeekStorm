@@ -2162,4 +2162,12 @@ Are you missing something? Let us know via issue or discussions, or on [Discord]
 
 ---
 
+## Issues are welcome
+
+Something doesn’t work as expected? Please [open an issue](https://github.com/SeekStorm/SeekStorm/issues) instead of working around it. If it’s a bug, it gets fixed, fast.  
+Don’t know how to use a function, or it behaved differently than you expected? That’s a **documentation bug**, and we want to know about it.  
+Not all heroes 🦸 write code. Some [file issues](https://github.com/SeekStorm/SeekStorm/issues), and make life better for every SeekStorm user to come. 
+
+---
+
 ⭐ **If SeekStorm is useful to you, please [star the repo](https://github.com/SeekStorm/SeekStorm).** Questions, ideas, missing features? Open an issue, start a discussion, or join us on [Discord](https://discord.gg/FHCZbQwRE).
