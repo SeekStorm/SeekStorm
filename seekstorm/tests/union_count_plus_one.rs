@@ -26,6 +26,7 @@ fn meta() -> IndexMetaObject {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     }
 }
 
@@ -70,7 +71,7 @@ async fn union_count_overlap_same_block() {
     let dir = "tests/index_union_plus_one/";
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    let index = create_index(path, meta(), &schema(), &Vec::new(), 11, true, Some(1))
+    let index = create_index(path, meta(), &schema(), &Vec::new(), true, Some(1))
         .await
         .unwrap();
 

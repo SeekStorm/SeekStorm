@@ -38,8 +38,9 @@ async fn repro_range_facet_empty_ranges_no_panic() {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     };
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), 11, false, None)
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, None)
         .await
         .unwrap();
 

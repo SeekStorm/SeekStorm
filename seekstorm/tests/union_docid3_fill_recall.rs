@@ -43,6 +43,7 @@ fn meta() -> IndexMetaObject {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     }
 }
 
@@ -86,7 +87,7 @@ async fn search(
 async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, meta(), &schema(), &Vec::new(), 11, true, None)
+    create_index(path, meta(), &schema(), &Vec::new(), true, None)
         .await
         .unwrap()
 }

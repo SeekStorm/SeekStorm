@@ -32,6 +32,7 @@ fn meta(access_type: AccessType) -> IndexMetaObject {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     }
 }
 
@@ -45,17 +46,9 @@ fn schema() -> Vec<seekstorm::index::SchemaField> {
 async fn fresh(dir: &str, access_type: AccessType) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(
-        path,
-        meta(access_type),
-        &schema(),
-        &Vec::new(),
-        11,
-        true,
-        None,
-    )
-    .await
-    .unwrap()
+    create_index(path, meta(access_type), &schema(), &Vec::new(), true, None)
+        .await
+        .unwrap()
 }
 
 async fn index_one(index: &seekstorm::index::IndexArc, json: &str) {

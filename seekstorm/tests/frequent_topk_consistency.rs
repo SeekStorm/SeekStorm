@@ -60,9 +60,10 @@ async fn frequent_terms_topk_returns_results() {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     };
     // NOTE: keep on the single-shard fast path; multi-shard covered by suite.
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), 11, false, Some(1))
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(1))
         .await
         .unwrap();
 

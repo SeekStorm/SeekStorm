@@ -69,6 +69,7 @@ fn index_meta(
         query_completion: request.query_completion,
         clustering: request.clustering,
         inference: request.inference,
+        segment_number_bits: 11,
     };
     (meta, request.schema, request.synonyms)
 }
@@ -101,7 +102,7 @@ async fn open_or_create_index(index_path: &Path) -> Result<IndexArc, String> {
             },
         };
         let (meta, schema, synonyms) = index_meta(request);
-        create_index_library(index_path, meta, &schema, &synonyms, 11, true, None).await
+        create_index_library(index_path, meta, &schema, &synonyms, true, None).await
     }
 }
 
@@ -701,8 +702,7 @@ impl SeekStormMcpServer {
         }
         let (meta, schema, synonyms) = index_meta(request);
         let new_index =
-            match create_index_library(&index_path, meta, &schema, &synonyms, 11, true, None).await
-            {
+            match create_index_library(&index_path, meta, &schema, &synonyms, true, None).await {
                 Ok(index) => index,
                 Err(err) => return Ok(CallToolResult::error(vec![ContentBlock::text(err)])),
             };

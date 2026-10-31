@@ -50,10 +50,10 @@
 //! query_completion: None,
 //! clustering: Clustering::None,
 //! inference: Inference::None,
+//! segment_number_bits:11
 //! };
-//! let segment_number_bits1=11;
 //! let serialize_schema=true;
-//! let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+//! let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
 //! # });
 //! ```
 //! ### open index (alternatively to create index)
@@ -383,10 +383,10 @@
 //!     query_completion: None,
 //!     clustering: Clustering::None,
 //!     inference: Inference::None,
+//!     segment_number_bits:11
 //! };
 //! let serialize_schema=true;
-//! let segment_number_bits1=11;
-//! let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+//! let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
 //! # });
 //! ```
 //! ### index documents

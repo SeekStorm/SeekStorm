@@ -19,7 +19,7 @@ use crate::{
         AccessType, BlockObjectIndex, CompressionType, DOCUMENT_LENGTH_COMPRESSION,
         FACET_VALUES_FILENAME, IndexArc, LevelIndex, MAX_POSITIONS_PER_TERM, NgramType,
         NonUniquePostingListObjectQuery, POSTING_BUFFER_SIZE, PostingListObjectIndex,
-        PostingListObjectQuery, ROARING_BLOCK_SIZE, Shard, TermObject,
+        PostingListObjectQuery, ROARING_BLOCK_SIZE, SEGMENT_BLOCK_CAPACITY, Shard, TermObject,
         update_list_max_impact_score, warmup,
     },
     utils::{
@@ -242,7 +242,7 @@ impl Shard {
                     }
                 }
 
-                for key0 in 0..self.segment_number1 {
+                for key0 in 0..self.segment_number {
                     for item in self.segments_index[key0].segment.iter_mut() {
                         if let Some(block) = item.1.blocks.last()
                             && block.block_id as usize == idx
@@ -312,7 +312,7 @@ impl Shard {
 
         let segment_head_position = self.index_file.stream_position().unwrap() as usize;
         self.index_file
-            .seek(SeekFrom::Current((self.segment_number1 * 8) as i64))
+            .seek(SeekFrom::Current((self.segment_number * 8) as i64))
             .unwrap();
 
         self.document_length_normalized_average =
@@ -324,7 +324,7 @@ impl Shard {
             *component = K * (1.0 - B + B * document_length_quotient);
         }
 
-        for k0 in 0..self.segment_number1 {
+        for k0 in 0..self.segment_number {
             let strip_compressed = self.commit_segment(k0);
             self.strip_compressed_sum += strip_compressed as u64;
             self.key_count_sum += self.segments_level0[k0].segment.len() as u64;
@@ -357,7 +357,7 @@ impl Shard {
             .seek(SeekFrom::Start(segment_head_position as u64))
             .unwrap();
         let segment_head_position3 =
-            self.compressed_index_segment_block_buffer.len() - (self.segment_number1 * 8);
+            self.compressed_index_segment_block_buffer.len() - (self.segment_number * 8);
         let _ = self
             .index_file
             .write(&self.compressed_index_segment_block_buffer[segment_head_position3..]);
@@ -427,7 +427,7 @@ impl Shard {
 
             if let Some(symspell) = root_index.symspell_option.as_ref() {
                 if symspell.read().await.get_dictionary_size() < root_index.max_dictionary_entries {
-                    for key0 in 0..self.segment_number1 {
+                    for key0 in 0..self.segment_number {
                         for key in self.segments_level0[key0].segment.keys() {
                             let plo = self.segments_level0[key0].segment.get(key).unwrap();
 
@@ -448,7 +448,8 @@ impl Shard {
             };
         };
 
-        self.compressed_index_segment_block_buffer = vec![0; 10_000_000];
+        self.compressed_index_segment_block_buffer =
+            vec![0; SEGMENT_BLOCK_CAPACITY[self.meta.segment_number_bits - 8]];
         self.postings_buffer = vec![0; POSTING_BUFFER_SIZE];
 
         self.postings_buffer_pointer = 0;
@@ -457,6 +458,7 @@ impl Shard {
         for segment in self.segments_level0.iter_mut() {
             segment.segment.clear();
         }
+        self.key_count_sum = 0;
 
         self.modified = true;
 
@@ -469,7 +471,7 @@ impl Shard {
 
         let mut key_head_pointer_w: usize = 0;
         let segment_head_position = self.compressed_index_segment_block_buffer.len()
-            - (self.segment_number1 * 8)
+            - (self.segment_number * 8)
             + (key0 * 8)
             + 4;
         write_u32(
@@ -529,7 +531,7 @@ impl Shard {
         let compressed_segment_block_size = key_body_pointer_w;
 
         let segment_head_position = self.compressed_index_segment_block_buffer.len()
-            - (self.segment_number1 * 8)
+            - (self.segment_number * 8)
             + (key0 * 8);
 
         write_u32(
@@ -1013,7 +1015,7 @@ impl Shard {
             }
         }
 
-        for key0 in 0..self.segment_number1 {
+        for key0 in 0..self.segment_number {
             if self.meta.access_type == AccessType::Mmap {
                 let pointer = self.segments_index[key0].byte_array_blocks_pointer[block_id];
 

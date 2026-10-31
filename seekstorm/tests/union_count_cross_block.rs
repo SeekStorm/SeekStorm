@@ -30,6 +30,7 @@ fn meta() -> IndexMetaObject {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     }
 }
 
@@ -74,7 +75,7 @@ async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let _ = fs::remove_dir_all(path);
     // Single shard so terms span multiple blocks (with default sharding each
     // shard holds a single block and the bug is unreachable).
-    create_index(path, meta(), &schema(), &Vec::new(), 11, true, Some(1))
+    create_index(path, meta(), &schema(), &Vec::new(), true, Some(1))
         .await
         .unwrap()
 }

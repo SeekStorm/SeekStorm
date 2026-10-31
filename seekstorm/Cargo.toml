@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "3.4.5"
+version = "4.0.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -71,7 +71,7 @@ tokio-test = "0.4.6"
 snap = "1.1.2"
 lz4_flex = "0.14.0"
 bytemuck = { version = "1.25.2", features = ["derive","extern_crate_alloc"] }
-model2vec-rs = "0.3.0"
+model2vec-rs = "0.4.0"
 chunk = "0.10.2"
 snowball_stemmers_rs = "1.0.1"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }

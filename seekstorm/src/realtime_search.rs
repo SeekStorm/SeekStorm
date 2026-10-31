@@ -907,7 +907,7 @@ pub(crate) fn get_bm25f_multiterm_multifield_uncommitted(
 impl Shard {
     pub(crate) fn get_posting_count_uncommitted(&self, term_string: &str) -> usize {
         let term_bytes = term_string.as_bytes();
-        let key0 = hash32(term_bytes) & self.segment_number_mask1;
+        let key0 = hash32(term_bytes) & self.segment_number_mask;
         let key_hash = hash64(term_bytes);
 
         match self.segments_level0[key0 as usize].segment.get(&key_hash) {

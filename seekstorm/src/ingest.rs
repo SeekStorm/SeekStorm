@@ -772,7 +772,7 @@ pub async fn display_index_info(
         },
         Info {
             entry: "segments",
-            value: index_ref.segment_number1.to_string(),
+            value: index_ref.segment_number.to_string(),
         },
         Info {
             entry: "n-grams",

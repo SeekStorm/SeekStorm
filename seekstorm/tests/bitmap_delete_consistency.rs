@@ -48,6 +48,7 @@ fn meta() -> IndexMetaObject {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     }
 }
 
@@ -90,7 +91,7 @@ async fn setup() -> (seekstorm::index::IndexArc, HashSet<u64>, HashSet<u64>) {
     let _ = fs::remove_dir_all(path);
     // Single shard: per-shard postings stay >= 4096 scattered docs, which
     // forces Bitmap encoding (RLE aborts past 2048 runs).
-    let index = create_index(path, meta(), &schema(), &Vec::new(), 11, true, Some(1))
+    let index = create_index(path, meta(), &schema(), &Vec::new(), true, Some(1))
         .await
         .unwrap();
     let mut rng = Rng(0xabc);

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-10-31
+
+### Changed
+
+- Parameter segment_number_bits1 renamed to segment_number_bits and moved from create_index to IndexMetaObject. 
+  - It is now persistent after index reload (via index.json).
+  - Backward compatibility: Existing indices (with segment_number_bits1=11) can still be loaded.
+  - The segment_number_bits value is clamped in create_index to a safe range (8..=12). 
+  - The size of compressed_index_segment_block_buffer and segment HashMap capacity is set inverse proportional to segment_number_bits (fewer segments mean more keys per segment).
+
 ## [3.4.5] - 2026-10-27
 
 ### Fixed

@@ -392,6 +392,7 @@ pub(crate) async fn create_index_api<'a>(
         query_completion,
         clustering,
         inference,
+        segment_number_bits: 11,
     };
 
     let index_arc = create_index(
@@ -399,7 +400,6 @@ pub(crate) async fn create_index_api<'a>(
         meta,
         &schema,
         &synonyms,
-        11,
         mute,
         force_shard_number,
     )

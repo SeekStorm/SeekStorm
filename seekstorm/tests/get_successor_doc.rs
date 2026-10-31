@@ -35,8 +35,9 @@ async fn run_case(access: AccessType, compression: DocumentCompression, tag: &st
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     };
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), 11, false, Some(1))
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(1))
         .await
         .unwrap();
     // doc 0: indexed-only field -> no stored content -> slot stays 0.

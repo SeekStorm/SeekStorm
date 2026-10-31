@@ -119,7 +119,9 @@ pub(crate) const SORT_FLAG: bool = true;
 
 pub(crate) const POSTING_BUFFER_SIZE: usize = 400_000_000;
 pub(crate) const MAX_QUERY_TERM_NUMBER: usize = 100;
-pub(crate) const SEGMENT_KEY_CAPACITY: usize = 1000;
+pub(crate) const SEGMENT_KEY_CAPACITY: [usize; 5] = [8192, 4096, 2048, 1024, 512];
+pub(crate) const SEGMENT_BLOCK_CAPACITY: [usize; 5] =
+    [67_108_864, 33_554_432, 16_777_216, 8_388_608, 4_194_304];
 
 use tabled::Tabled;
 
@@ -538,7 +540,7 @@ impl fmt::Display for DocumentCompression {
 /// - Mmap (the index is accessed via memory-mapped files). See architecture.md for details.
 /// - At commit the data is serialized to disk for persistence both in Ram and Mmap mode.
 /// - The serialization format is identical for Ram and Mmap mode, allowing to change it retrospectively.
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, ToSchema)]
 pub enum AccessType {
     /// Ram (the complete index is preloaded to Ram when opening the index).
     /// - Index size is limited by available RAM size.
@@ -594,7 +596,7 @@ impl fmt::Display for LexicalSimilarity {
 /// UnicodeAlphanumericZH
 /// - Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
 /// - Supports mixed Latin and Chinese texts
-/// - Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.
+/// - Supports Chinese sentence boundary chars for KWIC snippets and highlighting.
 /// - Requires feature #[cfg(feature = "zh")]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Copy, Default, ToSchema)]
 pub enum TokenizerType {
@@ -1335,7 +1337,7 @@ impl fmt::Display for Clustering {
 }
 
 /// Specifies LexicalSimilarity, TokenizerType and AccessType when creating an new index
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct IndexMetaObject {
     /// unique index ID
     /// Only used in SeekStorm server, not by the SeekStorm library itself.
@@ -1417,6 +1419,18 @@ pub struct IndexMetaObject {
     /// vector source: External vectors field (Json array field or Base64 encoded text field) or internal vector generation from text field via model2vec
     #[serde(default)]
     pub inference: Inference,
+
+    /// segment_number_bits determines the number of index segments, which are uniformely partitioned by term hash: Default is 11 bits = 2048 segments.
+    /// segment_number_bits is clamped in create_index to a safe range (8..=12).
+    /// The number of segments is always a power of two (segment_number = 2^segment_number_bits = 1<<segment_number_bits).
+    /// The size of compressed_index_segment_block_buffer and segment HashMap capacity is set inverse proportional to segment_number_bits (fewer segments mean more keys per segment).
+    ///
+    /// Why is the index partitioned into segments:
+    /// - Partitioned read/write locks increase the read/write concurrency for real-time search during indexing.
+    /// - By combining segment hashes and key hashes per segment, we effectively increase the number of bits per hash without additional RAM consumption of the hashtable, while reducing hash collisons for large index sizes.
+    #[schema(ignore)]
+    #[serde(default = "segment_number_bits_default")]
+    pub segment_number_bits: usize,
 }
 
 fn ngram_indexing_default() -> u8 {
@@ -1425,6 +1439,10 @@ fn ngram_indexing_default() -> u8 {
 
 fn doc_store_compression_default() -> DocumentCompression {
     DocumentCompression::Snappy
+}
+
+fn segment_number_bits_default() -> usize {
+    11
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1600,8 +1618,8 @@ pub struct Shard {
     pub(crate) compressed_index_segment_block_buffer: Vec<u8>,
     pub(crate) compressed_docstore_segment_block_buffer: Vec<u8>,
 
-    pub(crate) segment_number1: usize,
-    pub(crate) segment_number_bits1: usize,
+    pub(crate) segment_number: usize,
+    pub(crate) segment_number_bits: usize,
 
     pub(crate) document_length_normalized_average: f32,
     pub(crate) positions_sum_normalized: u64,
@@ -1616,7 +1634,7 @@ pub struct Shard {
     pub(crate) enable_inter_query_threading: bool,
     pub(crate) enable_inter_query_threading_auto: bool,
 
-    pub(crate) segment_number_mask1: u32,
+    pub(crate) segment_number_mask: u32,
 
     pub(crate) indexed_field_vec: Vec<IndexedField>,
     pub(crate) indexed_field_id_bits: usize,
@@ -1668,7 +1686,6 @@ pub struct Shard {
     pub(crate) level_terms: AHashMap<u32, String>,
     pub(crate) level_completions: Arc<RwLock<AHashMap<Vec<String>, usize>>>,
 
-    /// AVX2 (x86_64) support enabled.
     pub(crate) is_avx2: bool,
     /// NEON (aarch64) support enabled.
     pub(crate) is_neon: bool,
@@ -1725,8 +1742,8 @@ pub struct Index {
 
     pub(crate) compressed_index_segment_block_buffer: Vec<u8>,
 
-    pub(crate) segment_number1: usize,
-    pub(crate) segment_number_mask1: u32,
+    pub(crate) segment_number: usize,
+    pub(crate) segment_number_mask: u32,
 
     pub(crate) indexed_field_vec: Vec<IndexedField>,
 
@@ -1878,7 +1895,6 @@ pub(crate) enum NgramType {
 /// * `meta` - index meta object.  
 /// * `schema` - schema.  
 /// * `synonyms` - vector of synonyms.
-/// * `segment_number_bits1` - number of index segments: e.g. 11 bits for 2048 segments.  
 /// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
 /// * `force_shard_number` - set number of shards manually or automatically.
 ///   - none: number of shards is set automatically = number of physical processor cores (default)
@@ -1889,7 +1905,6 @@ pub async fn create_index(
     meta: IndexMetaObject,
     schema: &Vec<SchemaField>,
     synonyms: &Vec<Synonym>,
-    segment_number_bits1: usize,
     mute: bool,
     force_shard_number: Option<usize>,
 ) -> Result<IndexArc, String> {
@@ -1899,7 +1914,6 @@ pub async fn create_index(
         schema,
         true,
         synonyms,
-        segment_number_bits1,
         mute,
         force_shard_number,
     )
@@ -1913,10 +1927,12 @@ pub(crate) async fn create_index_root(
     #[allow(clippy::ptr_arg)] schema: &Vec<SchemaField>,
     serialize_schema: bool,
     synonyms: &Vec<Synonym>,
-    segment_number_bits1: usize,
     mute: bool,
     force_shard_number: Option<usize>,
 ) -> Result<IndexArc, String> {
+    let mut meta = meta;
+    meta.segment_number_bits = meta.segment_number_bits.clamp(8, 12);
+
     let frequent_hashset: AHashSet<String> = match &meta.frequent_words {
         FrequentwordType::None => AHashSet::new(),
         FrequentwordType::English => FREQUENT_EN.lines().map(|x| x.to_string()).collect(),
@@ -1926,8 +1942,8 @@ pub(crate) async fn create_index_root(
         FrequentwordType::Custom { terms } => terms.iter().map(|x| x.to_string()).collect(),
     };
 
-    let segment_number1 = 1usize << segment_number_bits1;
-    let segment_number_mask1 = (1u32 << segment_number_bits1) - 1;
+    let segment_number = 1usize << meta.segment_number_bits;
+    let segment_number_mask = (1u32 << meta.segment_number_bits) - 1;
 
     let index_path_buf = index_path.to_path_buf();
     let index_path_string = index_path_buf.to_str().unwrap();
@@ -2051,7 +2067,7 @@ pub(crate) async fn create_index_root(
                 facets_vec = facets;
             }
 
-            let synonyms_map = get_synonyms_map(synonyms, segment_number_mask1);
+            let synonyms_map = get_synonyms_map(synonyms, segment_number_mask);
 
             let shard_number = if let Some(shard_number) = force_shard_number {
                 shard_number
@@ -2248,7 +2264,6 @@ pub(crate) async fn create_index_root(
                             &schema_clone,
                             serialize_schema,
                             &Vec::new(),
-                            segment_number_bits1,
                             mute,
                             longest_field_id_option,
                         )
@@ -2284,13 +2299,13 @@ pub(crate) async fn create_index_root(
                 index_path_string: index_path_string.to_owned(),
                 stored_field_names,
 
-                compressed_index_segment_block_buffer: vec![0; 10_000_000],
+                compressed_index_segment_block_buffer: vec![0; INDEX_HEADER_SIZE as usize],
                 indexed_doc_count: 0,
                 indexed_vector_count: 0,
                 indexed_cluster_count: 0,
                 deleted_doc_count: 0,
-                segment_number1: 0,
-                segment_number_mask1: 0,
+                segment_number: 0,
+                segment_number_mask: 0,
                 schema_map,
                 indexed_field_vec,
                 meta: meta.clone(),
@@ -2383,8 +2398,8 @@ pub(crate) async fn create_index_root(
                 }
             }
 
-            index.segment_number1 = segment_number1;
-            index.segment_number_mask1 = segment_number_mask1;
+            index.segment_number = segment_number;
+            index.segment_number_mask = segment_number_mask;
 
             if serialize_schema {
                 serde_json::to_writer(
@@ -2432,12 +2447,11 @@ pub(crate) fn create_shard(
     schema: &Vec<SchemaField>,
     serialize_schema: bool,
     synonyms: &Vec<Synonym>,
-    segment_number_bits1: usize,
     mute: bool,
     longest_field_id_option: Option<usize>,
 ) -> Result<Shard, String> {
-    let segment_number1 = 1usize << segment_number_bits1;
-    let segment_number_mask1 = (1u32 << segment_number_bits1) - 1;
+    let segment_number = 1usize << meta.segment_number_bits;
+    let segment_number_mask = (1u32 << meta.segment_number_bits) - 1;
 
     let index_path_buf = index_path.to_path_buf();
     let index_path_string = index_path_buf.to_str().unwrap();
@@ -2618,7 +2632,7 @@ pub(crate) fn create_shard(
             let vector_file_mmap =
                 unsafe { Mmap::map(&vector_file).expect("Unable to create Mmap") };
 
-            let synonyms_map = get_synonyms_map(synonyms, segment_number_mask1);
+            let synonyms_map = get_synonyms_map(synonyms, segment_number_mask);
 
             let facets_len = facets_vec.len();
 
@@ -2736,7 +2750,11 @@ pub(crate) fn create_shard(
                 index_file_mmap,
                 docstore_file_mmap,
                 stored_field_names,
-                compressed_index_segment_block_buffer: vec![0; 10_000_000],
+                compressed_index_segment_block_buffer: vec![
+                    0;
+                    SEGMENT_BLOCK_CAPACITY
+                        [meta.segment_number_bits - 8]
+                ],
                 compressed_docstore_segment_block_buffer: if stored_fields_flag {
                     vec![0; ROARING_BLOCK_SIZE * 4]
                 } else {
@@ -2750,9 +2768,9 @@ pub(crate) fn create_shard(
                 last_level_docstore_file_start_pos: 0,
                 last_level_vector_file_start_pos: 0,
                 positions_sum_normalized: 0,
-                segment_number1: 0,
-                segment_number_bits1,
-                segment_number_mask1: 0,
+                segment_number: 0,
+                segment_number_bits: meta.segment_number_bits,
+                segment_number_mask: 0,
                 level_index: Vec::new(),
                 segments_index: Vec::new(),
                 segments_level0: Vec::new(),
@@ -2873,18 +2891,20 @@ pub(crate) fn create_shard(
                 }
             }
 
-            index.segment_number1 = segment_number1;
-            index.segment_number_mask1 = segment_number_mask1;
+            index.segment_number = segment_number;
+            index.segment_number_mask = segment_number_mask;
             index.segments_level0 = vec![
                 SegmentLevel0 {
-                    segment: AHashMap::with_capacity(SEGMENT_KEY_CAPACITY),
+                    segment: AHashMap::with_capacity(
+                        SEGMENT_KEY_CAPACITY[meta.segment_number_bits - 8]
+                    ),
                     ..Default::default()
                 };
-                index.segment_number1
+                index.segment_number
             ];
 
             index.segments_index = Vec::new();
-            for _i in 0..index.segment_number1 {
+            for _i in 0..index.segment_number {
                 index.segments_index.push(SegmentIndex {
                     byte_array_blocks: Vec::new(),
                     byte_array_blocks_pointer: Vec::new(),
@@ -3205,7 +3225,7 @@ pub(crate) fn update_list_max_impact_score(index: &mut Shard) {
         return;
     }
 
-    for key0 in 0..index.segment_number1 {
+    for key0 in 0..index.segment_number {
         let keys: Vec<u64> = index.segments_index[key0].segment.keys().cloned().collect();
         for key in keys {
             let ngram_type = FromPrimitive::from_u64(key & 0b111).unwrap_or(NgramType::SingleTerm);
@@ -3288,8 +3308,7 @@ pub(crate) async fn open_shard(
                         Vec::new()
                     };
 
-                    match create_shard(index_path, &meta, &schema, false, &synonyms, 11, mute, None)
-                    {
+                    match create_shard(index_path, &meta, &schema, false, &synonyms, mute, None) {
                         Ok(mut shard) => {
                             let mut block_count_sum = 0;
 
@@ -3308,7 +3327,7 @@ pub(crate) async fn open_shard(
                             } < file_len
                             {
                                 let mut segment_head_vec: Vec<(u32, u32)> = Vec::new();
-                                for key0 in 0..shard.segment_number1 {
+                                for key0 in 0..shard.segment_number {
                                     if key0 == 0 {
                                         shard.last_level_index_file_start_pos = if is_mmap {
                                             index_mmap_position as u64
@@ -3430,7 +3449,7 @@ pub(crate) async fn open_shard(
                                                 &mut index_mmap_position,
                                             );
 
-                                            for _key0 in 0..shard.segment_number1 {
+                                            for _key0 in 0..shard.segment_number {
                                                 let block_length = read_u32_ref(
                                                     &shard.index_file_mmap,
                                                     &mut index_mmap_position,
@@ -3459,7 +3478,7 @@ pub(crate) async fn open_shard(
                                                 8,
                                             );
 
-                                            for _key0 in 0..shard.segment_number1 {
+                                            for _key0 in 0..shard.segment_number {
                                                 let _ = shard.index_file.read(
                                                     &mut shard
                                                         .compressed_index_segment_block_buffer
@@ -3495,7 +3514,7 @@ pub(crate) async fn open_shard(
                                     let key_count = segment_head_vec[key0].1;
 
                                     let block_id =
-                                        (block_count_sum >> shard.segment_number_bits1) as u32;
+                                        (block_count_sum >> shard.segment_number_bits) as u32;
                                     block_count_sum += 1;
 
                                     let key_body_pointer_write_start: u32 =
@@ -3865,7 +3884,6 @@ pub async fn open_index(index_path: &Path) -> Result<IndexArc, String> {
                         &schema,
                         false,
                         &synonyms,
-                        11,
                         false,
                         Some(shard_number),
                     )
@@ -4986,7 +5004,7 @@ impl Index {
         )
         .unwrap();
 
-        self.synonyms_map = get_synonyms_map(synonyms, self.segment_number_mask1);
+        self.synonyms_map = get_synonyms_map(synonyms, self.segment_number_mask);
         Ok(synonyms.len())
     }
 
@@ -5009,7 +5027,7 @@ impl Index {
         )
         .unwrap();
 
-        self.synonyms_map = get_synonyms_map(&merged_synonyms, self.segment_number_mask1);
+        self.synonyms_map = get_synonyms_map(&merged_synonyms, self.segment_number_mask);
         Ok(merged_synonyms.len())
     }
 }
@@ -5357,7 +5375,7 @@ impl IndexDocumentShard for ShardArc {
         let ngram_indexing = shard_ref.meta.ngram_indexing;
         let indexed_field_vec_len = shard_ref.indexed_field_vec.len();
         let tokenizer_type = shard_ref.meta.tokenizer;
-        let segment_number_mask1 = shard_ref.segment_number_mask1;
+        let segment_number_mask1 = shard_ref.segment_number_mask;
 
         drop(shard_ref);
 

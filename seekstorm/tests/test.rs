@@ -45,20 +45,12 @@ async fn test_01_create_index() {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     };
 
-    let segment_number_bits1 = 11;
-    let index_arc = create_index(
-        index_path,
-        meta,
-        &schema,
-        &Vec::new(),
-        segment_number_bits1,
-        false,
-        None,
-    )
-    .await
-    .unwrap();
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, None)
+        .await
+        .unwrap();
     let index = index_arc.read().await;
 
     let result = index.meta.id;
@@ -523,20 +515,12 @@ async fn test_09_create_index_vector_internal() {
             chunk_size: 1000,
             quantization: Quantization::ScalarQuantizationI8,
         },
+        segment_number_bits: 11,
     };
 
-    let segment_number_bits1 = 11;
-    let index_arc = create_index(
-        index_path,
-        meta,
-        &schema,
-        &Vec::new(),
-        segment_number_bits1,
-        false,
-        None,
-    )
-    .await
-    .unwrap();
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, None)
+        .await
+        .unwrap();
     let index = index_arc.read().await;
 
     let result = index.meta.id;
@@ -644,20 +628,12 @@ async fn test_12_create_index_vector_external() {
             quantization: Quantization::None,
             similarity: VectorSimilarity::Euclidean,
         },
+        segment_number_bits: 11,
     };
 
-    let segment_number_bits1 = 11;
-    let index_arc = create_index(
-        index_path,
-        meta,
-        &schema,
-        &Vec::new(),
-        segment_number_bits1,
-        false,
-        Some(2),
-    )
-    .await
-    .unwrap();
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(2))
+        .await
+        .unwrap();
     let index = index_arc.read().await;
 
     let result = index.meta.id;
@@ -772,10 +748,11 @@ async fn test_15_facet_scope() {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits: 11,
     };
 
     // 3 shards: the 3 documents are distributed round-robin, one document per shard
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), 11, false, Some(3))
+    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(3))
         .await
         .unwrap();
 

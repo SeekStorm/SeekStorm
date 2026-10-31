@@ -192,6 +192,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 return Ok(());
             }
 
+            let start_time = Instant::now();
+
             let wikipedia_schema_json = r#"
                 [{"field":"title","field_type":"Text","store":false,"index_lexical":false},
                 {"field":"body","field_type":"Text","store":false,"index_lexical":true,"longest":true},
@@ -220,15 +222,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 query_completion: None,
                 clustering: Clustering::None,
                 inference: Inference::None,
+                segment_number_bits: 11,
             };
 
-            let mut index_arc =
-                create_index(&index_path, meta, &schema, &Vec::new(), 11, false, None)
-                    .await
-                    .unwrap();
+            let mut index_arc = create_index(&index_path, meta, &schema, &Vec::new(), false, None)
+                .await
+                .unwrap();
 
             // ingest data
             index_arc.ingest_json(&ingest_path).await;
+
+            let index_time = start_time.elapsed().as_secs();
+            println!("Indexing time: {} s", index_time);
 
             index_arc
         }

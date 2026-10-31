@@ -103,7 +103,7 @@ Example lexical search tool arguments:
 ```json
 {
   "query": "indexing pipeline",
-  "mode": "Lexical",
+  "search_mode": "Lexical",
   "length": 5,
   "offset": 0,
   "field_filter": ["title", "body"]

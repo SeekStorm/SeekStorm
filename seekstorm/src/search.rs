@@ -1631,6 +1631,9 @@ impl Search for IndexArc {
                     (Embedding::F32(fvecs), 0.0, 0.0, 0, 0)
                 }
             } else {
+                println!(
+                    "No/invalid query_vector specified for vector search in external vector index"
+                );
                 let result_object: ResultObject = Default::default();
                 return result_object;
             })
@@ -3251,7 +3254,7 @@ impl SearchLexicalShard for ShardArc {
                 &mut unique_terms,
                 &mut non_unique_terms,
                 shard_ref.meta.tokenizer,
-                shard_ref.segment_number_mask1,
+                shard_ref.segment_number_mask,
                 &mut nonunique_terms_count,
                 u16::MAX as u32,
                 MAX_POSITIONS_PER_TERM,

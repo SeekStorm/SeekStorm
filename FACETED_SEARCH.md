@@ -148,12 +148,12 @@ let meta = IndexMetaObject {
     query_completion: None,
     clustering: Clustering::None,
     inference: Inference::None,
+    segment_number_bits:11
 };
 
 let synonyms=Vec::new();
 
-let segment_number_bits1=11;
-let index_arc=create_index(index_path,meta,&schema,&synonyms,segment_number_bits1,false,None).await.unwrap();
+let index_arc=create_index(index_path,meta,&schema,&synonyms,false,None).await.unwrap();
 
 # });
 ```

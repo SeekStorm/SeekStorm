@@ -237,8 +237,9 @@ async fn main() {
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::None,
+        segment_number_bits:11
     };
-    let mut index_arc = create_index(Path::new("./seekstorm_index"), meta, &schema, &Vec::new(), 11, false, None).await.unwrap();
+    let mut index_arc = create_index(Path::new("./seekstorm_index"), meta, &schema, &Vec::new(), false, None).await.unwrap();
 
     // 3. Index documents
     let docs = r#"[{"title":"title1 test","body":"body1"}, {"title":"title2","body":"body2 test"}]"#;
@@ -924,10 +925,10 @@ let meta = IndexMetaObject {
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
     clustering: Clustering::None,
     inference: Inference::None,
+    segment_number_bits:11
 };
 
-let segment_number_bits1=11;
-let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
 
 # });
 ```
@@ -1232,10 +1233,10 @@ let meta = IndexMetaObject {
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
     clustering: Clustering::None,
     inference: Inference::None,
+    segment_number_bits:11
 };
 
-let segment_number_bits1=11;
-let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
 
 # });
 ```
@@ -1297,10 +1298,10 @@ let meta = IndexMetaObject {
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
     clustering: Clustering::None,
     inference: Inference::None,
+    segment_number_bits:11
 };
 
-let segment_number_bits1=11;
-let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
 
 # });
 ```
@@ -1544,12 +1545,12 @@ let meta = IndexMetaObject {
     query_completion: None,
     clustering: Clustering::None,
     inference: Inference::None,
+    segment_number_bits:11
 };
 
 let synonyms=Vec::new();
 
-let segment_number_bits1=11;
-let index_arc=create_index(index_path,meta,&schema,&synonyms,segment_number_bits1,false,None).await.unwrap();
+let index_arc=create_index(index_path,meta,&schema,&synonyms,false,None).await.unwrap();
 
 # });
 ```
@@ -1679,10 +1680,10 @@ create index
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::Model2Vec { model: Model::PotionBase2M, chunk_size: 1000, quantization: Quantization::ScalarQuantizationI8 },
+        segment_number_bits:11
     };
     
-    let segment_number_bits1=11;
-    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
     let index=index_arc.read().await;
 
     let result=index.meta.id;
@@ -1807,10 +1808,10 @@ create index
         query_completion: None,
         clustering: Clustering::None,
         inference: Inference::External { dimensions: 128, precision: Precision::F32,  quantization: Quantization::None,similarity:VectorSimilarity::Euclidean },
+        segment_number_bits:11
     };
     
-    let segment_number_bits1=11;
-    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
     let index=index_arc.read().await;
 
     let result=index.meta.id;
@@ -1947,10 +1948,10 @@ create index
         query_completion: None,
         clustering: Clustering::Auto,
         inference: Inference::External { dimensions: 128, precision: Precision::F32, quantization: Quantization::ScalarQuantizationI8, similarity:VectorSimilarity::Euclidean },
+        segment_number_bits:11
     };
     
-    let segment_number_bits1=11;
-    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),segment_number_bits1,false,None).await.unwrap();
+    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
     let index=index_arc.read().await;
 
     let result=index.meta.id;
@@ -2106,10 +2107,8 @@ query documents/vectors
 
 - Search
   - [Introducing the SeekStorm MCP server](https://seekstorm.com/blog/seekstorm-mcp-server/)
-  - [symspell_rs v7 - 3x faster lookup, 40% less memory consumption, 11x faster Damerau-Levenshtein edit distance](https://seekstorm.com/blog/symspell_rs-3x-faster-lookup-40-less-memory-11x-faster-levenshtein)
   - [SeekStorm 3.0 adds vector search & hybrid search](https://seekstorm.com/blog/seekstorm-adds-vector_search-hybrid-search)
   - [Document iterator and search with empty query string](https://seekstorm.com/blog/document-iterator-search-with-empty-query-string)
-  - [Typo-tolerant Query auto-completion (QAC)](https://seekstorm.com/blog/query-auto-completion-(QAC))
   - [N-gram index for faster phrase search: latency vs. size](https://seekstorm.com/blog/n-gram-indexing-for-faster-phrase-search/)
   - [SeekStorm sharded index architecture - using a multi-core processor like a miniature data center](https://seekstorm.com/blog/SeekStorm-sharded-index-architecture/)
   - [SeekStorm gets Faceted search, Geo proximity search, Result sorting](https://seekstorm.com/blog/faceted_search-geo-proximity-search/)
@@ -2120,6 +2119,7 @@ query documents/vectors
   - [Typo-tolerant Query auto-completion (QAC) - derived from indexed documents](https://seekstorm.com/blog/query-auto-completion-(QAC)/)
   - [The Pruning Radix Trie — a Radix Trie on steroids](https://seekstorm.com/blog/pruning-radix-trie/)
 - Query spelling correction
+  - [symspell_rs v7 - 3x faster lookup, 40% less memory consumption, 11x faster Damerau-Levenshtein edit distance](https://seekstorm.com/blog/symspell_rs-3x-faster-lookup-40-less-memory-11x-faster-levenshtein)
   - [Sub-millisecond compound aware automatic spelling correction](https://seekstorm.com/blog/sub-millisecond-compound-aware-automatic.spelling-correction/)
   - [SymSpell vs. BK-tree: 100x faster fuzzy string search & spell checking](https://seekstorm.com/blog/symspell-vs-bk-tree/)
   - [1000x Faster Spelling Correction algorithm](https://seekstorm.com/blog/1000x-spelling-correction/)
