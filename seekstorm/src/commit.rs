@@ -428,9 +428,7 @@ impl Shard {
             if let Some(symspell) = root_index.symspell_option.as_ref() {
                 if symspell.read().await.get_dictionary_size() < root_index.max_dictionary_entries {
                     for key0 in 0..self.segment_number {
-                        for key in self.segments_level0[key0].segment.keys() {
-                            let plo = self.segments_level0[key0].segment.get(key).unwrap();
-
+                        for (key, plo) in self.segments_level0[key0].segment.iter() {
                             if self.meta.spelling_correction.is_some()
                                 && symspell.read().await.get_dictionary_size()
                                     < root_index.max_dictionary_entries

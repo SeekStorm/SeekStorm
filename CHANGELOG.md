@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-10-31
+
+### Fixed
+
+- Fixed a panic that could occur when committing an empty term while the automatic creation of a spelling correction dictionary during indexing was activated (dictionary_source=true in schema).
+  - Fixed panic that occurred with a empty term in create_dictionary_entry().
+  - Fixed panic that occurred with a empty input string in lookup().
+  - Both problems were fixed in the symspell_complete_rs v0.0.5 upstream dependency.
+
 ## [4.0.0] - 2026-10-31
 
 ### Changed

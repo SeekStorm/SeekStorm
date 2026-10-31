@@ -1281,6 +1281,9 @@ pub enum FrequentwordType {
 }
 
 /// Defines spelling correction (fuzzy search) and dictionary generation settings for an index.
+///
+/// ⚠️ Either set indexed=true and dictionary_source=true in the schema for a field, then a spelling correction dictionary is automatically derived from the terms in this field during indexing.
+/// Or place a manually generated frequency dictionary at the following location: {index_path}/dictionary.csv
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct SpellingCorrection {
     /// The edit distance thresholds for suggestions: 1..2 recommended; higher values increase latency and memory consumption.

@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "4.0.0"
+version = "4.0.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -39,7 +39,7 @@ base64 = "0.23.1"
 num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
 gxhash = { version = "3.5.0", features = ["deterministic"], optional = true }
-symspell_complete_rs = "0.0.4"
+symspell_complete_rs = "0.0.5"
 rand = { version = "0.10.3", features = ["chacha"]}
 futures = "0.3.34"
 num = "0.4.3"
