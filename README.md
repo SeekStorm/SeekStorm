@@ -9,11 +9,11 @@ Embed as a library, run as a multi-tenant server, or give your agents search via
 
 <p align="center">
   <a href="https://github.com/SeekStorm/SeekStorm/stargazers"><img src="https://img.shields.io/github/stars/SeekStorm/SeekStorm?style=flat-square" alt="GitHub stars"></a>
-  <a href="https://news.ycombinator.com/item?id=42295792"><img src="https://img.shields.io/badge/Hacker%20News-245%20points-FF6600?style=flat-square&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRkY2NjAwIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTUuNSA0aDMuMmwzLjMgNi4yTDE1LjMgNGgzLjJsLTUgOS4zVjIwaC0zdi02Ljd6Ii8+PC9zdmc+Cg==" alt="Hacker News, 245 points"></a>
+  <a href="https://news.ycombinator.com/item?id=42295792"><img src="https://img.shields.io/badge/Hacker%20News-245%20points-FF6600?style=flat-square&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRkY2NjAwIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTUuNSA0aDMuMmwzLjMgNi4yTDE1LjMgNGgzLjJsLTUgOS4zVjIwaC0zdi02Ljd6Ii8+PC9zdmc+Cg==" alt="Hacker News, 245"></a>
   <a href="https://crates.io/crates/seekstorm"><img src="https://img.shields.io/crates/v/seekstorm.svg?style=flat-square" alt="Crates.io"></a>
   <a href="https://crates.io/crates/seekstorm"><img src="https://img.shields.io/crates/d/seekstorm.svg?style=flat-square" alt="Downloads"></a>
   <a href="https://docs.rs/seekstorm"><img src="https://docs.rs/seekstorm/badge.svg" alt="docs.rs"></a>
-  <a href="https://hub.docker.com/r/wolfgarbe/seekstorm_server"><img src="https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server?style=flat-square" alt="Docker pulls"></a>
+  <a href="https://hub.docker.com/r/wolfgarbe/seekstorm_server"><img src="https://img.shields.io/docker/pulls/wolfgarbe/seekstorm_server?style=flat-square" alt="Docker"></a>
   <a href="https://github.com/SeekStorm/SeekStorm?tab=Apache-2.0-1-ov-file#readme"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="Apache 2.0"></a>
   <a href="#roadmap"><img src="https://img.shields.io/badge/Roadmap-2026-DA7F07.svg" alt="Roadmap 2026"></a>
 </p>
