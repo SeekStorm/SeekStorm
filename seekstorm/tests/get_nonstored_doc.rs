@@ -9,30 +9,20 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexDocuments,
-    IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexConfig,
+    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
     create_index,
 };
 use seekstorm::vector::Inference;
 use std::{collections::HashSet, fs, path::Path};
 
-fn meta(access_type: AccessType) -> IndexMetaObject {
-    IndexMetaObject {
-        id: 0,
+fn index_config(access_type: AccessType) -> IndexConfig {
+    IndexConfig {
         name: "get_nonstored_doc".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
-        frequent_words: FrequentwordType::None,
-        ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
         access_type,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     }
 }
 
@@ -46,7 +36,7 @@ fn schema() -> Vec<seekstorm::index::SchemaField> {
 async fn fresh(dir: &str, access_type: AccessType) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, meta(access_type), &schema(), &Vec::new(), true, None)
+    create_index(path, index_config(access_type), &schema(), &[], true, None)
         .await
         .unwrap()
 }

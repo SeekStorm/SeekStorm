@@ -231,7 +231,7 @@ impl Shard {
 
         let vector_count_block = self.block_vector_buffer.len();
 
-        let cluster_number = match self.meta.clustering {
+        let cluster_number = match self.index_config.clustering {
             Clustering::Auto => (vector_count_block.sqrt() * 2).max(1),
             Clustering::None => 1,
             Clustering::Fixed(n) => n.min(vector_count_block).max(1),

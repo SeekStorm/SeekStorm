@@ -1,9 +1,22 @@
 mod common;
 
-use serde_json::json;
+use serde_json::{Value, json};
 use tempfile::tempdir;
 
 use common::McpProcess;
+
+fn object_schema<'a>(schema: &'a Value, root: &'a Value) -> Option<&'a Value> {
+    if schema["properties"].is_object() {
+        return Some(schema);
+    }
+    if let Some(reference) = schema["$ref"].as_str() {
+        return object_schema(root.pointer(reference.strip_prefix('#')?)?, root);
+    }
+    schema["anyOf"]
+        .as_array()?
+        .iter()
+        .find_map(|variant| object_schema(variant, root))
+}
 
 #[tokio::test]
 async fn advertises_the_embedded_seekstorm_tool_contract() {
@@ -55,15 +68,26 @@ async fn advertises_the_embedded_seekstorm_tool_contract() {
         "query_facets",
         "facet_filter",
         "result_sort",
-        "highlights",
+        "return_documents",
     ] {
         assert!(properties[field].is_object(), "search input misses {field}");
+    }
+    let document_options = object_schema(&properties["return_documents"], &search["inputSchema"])
+        .expect("return_documents must describe document options");
+    for field in ["fields", "distance_fields", "highlights"] {
+        assert!(
+            document_options["properties"][field].is_object(),
+            "return_documents misses {field}"
+        );
+        assert!(
+            properties[field].is_null(),
+            "unexpected top-level search field {field}"
+        );
     }
     assert!(
         properties["limit"].is_null(),
         "search should use SeekStorm's length name"
     );
-
     for field in [
         "mode",
         "query_vector_i8",

@@ -6,31 +6,23 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexDocuments,
-    IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexConfig,
+    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
     create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
+fn index_config() -> IndexConfig {
+    IndexConfig {
         id: 0,
         name: "union_count_cross_block".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::None,
         ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     }
 }
 
@@ -49,24 +41,14 @@ async fn search(
     index: &seekstorm::index::IndexArc,
     query: &str,
     result_type: ResultType,
-) -> seekstorm::search::ResultObject {
+) -> seekstorm::search::SearchResult {
     index
-        .search(
-            query.into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            100,
-            result_type,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            length: 100,
+            result_type: result_type,
+            ..Default::default()
+        })
         .await
 }
 
@@ -75,7 +57,7 @@ async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let _ = fs::remove_dir_all(path);
     // Single shard so terms span multiple blocks (with default sharding each
     // shard holds a single block and the bug is unreachable).
-    create_index(path, meta(), &schema(), &Vec::new(), true, Some(1))
+    create_index(path, index_config(), &schema(), &[], true, Some(1))
         .await
         .unwrap()
 }
@@ -117,21 +99,21 @@ async fn union_count_cross_block_consistent() {
         let topk_count = search(&index, "alpha beta gamma", ResultType::TopkCount).await;
 
         assert_eq!(
-            count.result_count_total, 70_000,
+            count.count_total, 70_000,
             "Count absolute value mismatch at rep {rep}: expected 70_000, got {}",
-            count.result_count_total
+            count.count_total
         );
         if rep == 0 {
-            prev_count = count.result_count_total;
+            prev_count = count.count_total;
         } else {
             assert_eq!(
-                count.result_count_total, prev_count,
+                count.count_total, prev_count,
                 "Count jitter at rep {rep}: {prev_count} vs {}",
-                count.result_count_total
+                count.count_total
             );
         }
         assert_eq!(
-            count.result_count_total, topk_count.result_count_total,
+            count.count_total, topk_count.count_total,
             "Count and TopkCount mismatch at rep {rep}"
         );
     }
@@ -158,8 +140,8 @@ async fn union_count_two_terms_stable() {
     let count = search(&index, "alpha beta", ResultType::Count).await;
     let topk_count = search(&index, "alpha beta", ResultType::TopkCount).await;
 
-    assert_eq!(count.result_count_total, 20);
-    assert_eq!(topk_count.result_count_total, 20);
+    assert_eq!(count.count_total, 20);
+    assert_eq!(topk_count.count_total, 20);
 
     index.close().await;
 }

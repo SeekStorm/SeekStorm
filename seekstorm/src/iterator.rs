@@ -15,7 +15,7 @@ use crate::{
     add_result::{PostingListObjectSingle, add_result_singleterm_multifield},
     index::{Index, IndexArc, NgramType, Shard},
     min_heap::Result,
-    search::{FilterSparse, ResultObject, ResultSort, ResultType, SearchResult, SortOrder},
+    search::{FilterSparse, ResultSort, ResultType, SearchResult, SearchResultObject, SortOrder},
 };
 
 /// Iterator result
@@ -318,7 +318,7 @@ pub(crate) async fn search_iterator_shard(
     result_type: ResultType,
     _include_uncommitted: bool,
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     facet_filter: &[FilterSparse],
 ) {
@@ -364,18 +364,22 @@ pub(crate) async fn search_iterator_index(
     result_type: ResultType,
     _include_uncommitted: bool,
     result_sort: Vec<ResultSort>,
-) -> ResultObject {
-    let mut result_object = ResultObject {
+) -> SearchResult {
+    let mut result_object = SearchResult {
         original_query: "".to_string(),
         query: "".to_string(),
         query_terms: Vec::new(),
-        result_count: 0,
-        result_count_total: 0,
+        offset,
+        length,
+        count: 0,
+        count_total: 0,
         observed_vector_count: 0,
         observed_cluster_count: 0,
         results: Vec::new(),
+        documents: Vec::new(),
         facets: AHashMap::new(),
         suggestions: Vec::new(),
+        time: 0,
     };
 
     if result_type != ResultType::Count {
@@ -403,9 +407,9 @@ pub(crate) async fn search_iterator_index(
             });
         }
 
-        result_object.result_count = result_object.results.len();
+        result_object.count = result_object.results.len();
     }
-    result_object.result_count_total = index_arc.read().await.current_doc_count().await;
+    result_object.count_total = index_arc.read().await.current_doc_count().await;
 
     result_object
 }

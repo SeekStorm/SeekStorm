@@ -16,19 +16,22 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router,
     transport::stdio,
 };
+
 use seekstorm::{
     commit::Commit,
     highlighter::{Highlight, highlighter},
     index::{
-        AccessType, Clustering, CreateIndexRequest, DeleteDocuments, DeleteDocumentsByQuery,
-        Document, DocumentCompression, FileType, FrequentwordType, IndexArc, IndexDocument,
-        IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, SchemaField, StemmerType,
-        StopwordType, TokenizerType, UpdateDocument, UpdateDocuments,
+        AccessType, CreateIndexRequest, DeleteDocuments, DeleteDocumentsByQuery, Document,
+        FileType, FrequentwordType, IndexArc, IndexConfig, IndexDocument, IndexDocuments,
+        LexicalSimilarity, SchemaField, TokenizerType, UpdateDocument, UpdateDocuments,
         create_index as create_index_library, open_index as open_index_library,
     },
     ingest::IndexPdfFile,
     iterator::GetIterator,
-    search::{FacetFilter, QueryRewriting, QueryType, ResultType, Search, SearchMode},
+    search::{
+        DocumentOption, FacetFilter, QueryRewriting, QueryType, ResultType, Search, SearchMode,
+        SearchRequest,
+    },
     vector::{Embedding, Inference},
 };
 use serde::{
@@ -47,31 +50,19 @@ fn default_schema() -> Vec<SchemaField> {
     serde_json::from_str(schema_json).expect("valid default schema")
 }
 
-fn index_meta(
+fn create_index_request(
     request: CreateIndexRequest,
 ) -> (
-    IndexMetaObject,
+    IndexConfig,
     Vec<SchemaField>,
     Vec<seekstorm::index::Synonym>,
 ) {
-    let meta = IndexMetaObject {
-        id: 0,
-        name: request.index_name,
-        lexical_similarity: request.similarity,
-        tokenizer: request.tokenizer,
-        stemmer: request.stemmer,
-        stop_words: request.stop_words,
-        frequent_words: request.frequent_words,
-        ngram_indexing: request.ngram_indexing,
-        document_compression: request.document_compression,
-        access_type: AccessType::Mmap,
-        spelling_correction: request.spelling_correction,
-        query_completion: request.query_completion,
-        clustering: request.clustering,
-        inference: request.inference,
-        segment_number_bits: 11,
-    };
-    (meta, request.schema, request.synonyms)
+    let index_config = request
+        .index_config
+        .id(0)
+        .access_type(AccessType::Mmap)
+        .segment_number_bits(11);
+    (index_config, request.schema, request.synonyms)
 }
 
 /// Opens the index at `index_path`, creating it from a REST-compatible config file or defaults.
@@ -84,25 +75,23 @@ async fn open_or_create_index(index_path: &Path) -> Result<IndexArc, String> {
                 let config = std::fs::read_to_string(config_path).map_err(|e| e.to_string())?;
                 serde_json::from_str::<CreateIndexRequest>(&config).map_err(|e| e.to_string())?
             }
-            Err(_) => CreateIndexRequest {
-                index_name: "seekstorm_mcp_index".to_string(),
-                schema: default_schema(),
-                similarity: LexicalSimilarity::Bm25f,
-                tokenizer: TokenizerType::UnicodeAlphanumericFolded,
-                stemmer: StemmerType::English,
-                stop_words: StopwordType::None,
-                frequent_words: FrequentwordType::English,
-                ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
-                document_compression: DocumentCompression::Zstd,
-                synonyms: Vec::new(),
-                spelling_correction: None,
-                query_completion: None,
-                clustering: Clustering::None,
-                inference: Inference::None,
-            },
+            Err(_) => {
+                let index_config = IndexConfig {
+                    name: "seekstorm_mcp_index".to_string(),
+                    lexical_similarity: LexicalSimilarity::Bm25f,
+                    tokenizer: TokenizerType::UnicodeAlphanumericFolded,
+                    frequent_words: FrequentwordType::English,
+                    ..Default::default()
+                };
+                CreateIndexRequest {
+                    index_config,
+                    schema: default_schema(),
+                    synonyms: Vec::new(),
+                }
+            }
         };
-        let (meta, schema, synonyms) = index_meta(request);
-        create_index_library(index_path, meta, &schema, &synonyms, true, None).await
+        let (index_config, schema, synonyms) = create_index_request(request);
+        create_index_library(index_path, index_config, &schema, &synonyms, true, None).await
     }
 }
 
@@ -139,6 +128,20 @@ enum EmbeddingSchema {
 
 #[allow(dead_code)]
 #[derive(schemars::JsonSchema)]
+struct DocumentOptionSchema {
+    /// Specify names of fields to return in the search results
+    #[serde(default)]
+    fields: Vec<String>,
+    /// Specify distance fields to derive at query time and return in the search results
+    #[serde(default)]
+    distance_fields: Vec<Value>,
+    /// Specify field names where to create keyword-in-context fragments and highlight query terms
+    #[serde(default)]
+    highlights: Vec<Value>,
+}
+
+#[allow(dead_code)]
+#[derive(schemars::JsonSchema)]
 enum AnnModeSchema {
     All,
     Nprobe(usize),
@@ -160,17 +163,20 @@ enum SearchModeSchema {
     },
 }
 
-/// Parameters for searching the index.
+/// MCP wrapper for SearchRequest deserialization.
+/// Since SearchRequest uses borrowed strings, we deserialize into this struct with owned strings,
+/// then convert to SearchRequest with owned string data passed to the library methods.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct SearchParams {
-    /// The search query string
+struct SearchRequestParams {
+    /// The search query string. Alias "query_string" is also supported for consistency with library API.
+    #[serde(alias = "query_string")]
     query: String,
     /// Number of search results to return (default 10)
     #[serde(default)]
-    length: Option<u32>,
+    length: Option<usize>,
     /// Number of results to skip, for pagination (default 0)
     #[serde(default)]
-    offset: Option<u32>,
+    offset: Option<usize>,
     /// SeekStorm SearchMode enum. Vector and Hybrid carry their own ANN mode and threshold.
     #[serde(default)]
     #[schemars(with = "Option<SearchModeSchema>")]
@@ -182,7 +188,7 @@ struct SearchParams {
     query_vector: Option<Embedding>,
     /// Include uncommitted documents in search
     #[serde(default)]
-    realtime: Option<bool>,
+    include_uncommitted: Option<bool>,
     /// Enable empty-query browsing
     #[serde(default)]
     enable_empty_query: Option<bool>,
@@ -198,18 +204,19 @@ struct SearchParams {
     /// Search only these indexed fields; empty means all indexed fields
     #[serde(default)]
     field_filter: Vec<String>,
-    /// Return only these stored fields; empty means all stored fields
-    #[serde(default)]
-    fields: Vec<String>,
-    /// Facet definitions, filters, sort rules, and highlighting in SeekStorm's serialized formats
+    /// Which query facets to return
     #[serde(default)]
     query_facets: Option<Value>,
     #[serde(default)]
+    /// Facet filter to apply at query time
     facet_filter: Option<Value>,
+    /// Result sort rules to apply at query time
     #[serde(default)]
     result_sort: Option<Value>,
+    /// Options for returning documents in search results, including stored fields, distance fields, and highlights.
     #[serde(default)]
-    highlights: Option<Value>,
+    #[schemars(with = "Option<DocumentOptionSchema>")]
+    return_documents: Option<DocumentOption>,
 }
 
 fn parse_json_or_default<T: DeserializeOwned + Default>(value: Option<Value>) -> Result<T, String> {
@@ -381,19 +388,24 @@ struct GetDocumentParams {
     highlights: Option<Value>,
 }
 
+/// MCP wrapper for SearchRequest when used with delete_documents_by_query.
+/// Supports query, vector, and hybrid deletion with filters and pagination.
+/// Ignores: result_type, query_rewriting, query_facets, fields, distance_fields, highlights, include_uncommitted
+/// These are documented to be ignored by the upstream delete_documents_by_query method.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct DeleteByQueryParams {
-    /// Lexical query whose matching documents will be deleted
+struct DeleteBySearchRequestParams {
+    /// Query string whose matching documents will be deleted. Alias "query_string" is also supported for consistency with library API.
+    #[serde(alias = "query_string")]
     query: String,
-    /// Default query operator serialized as a SeekStorm QueryType; defaults to Intersection
-    #[serde(default)]
-    query_type: Option<Value>,
-    /// Maximum number of matching documents to delete
+    /// Maximum number of matching documents to delete (default 100)
     #[serde(default)]
     length: Option<usize>,
-    /// Number of matches to skip
+    /// Number of matches to skip (default 0)
     #[serde(default)]
     offset: Option<usize>,
+    /// Default query operator serialized as a SeekStorm QueryType; defaults to Union
+    #[serde(default)]
+    query_type: Option<Value>,
     /// Search only these indexed fields
     #[serde(default)]
     field_filter: Vec<String>,
@@ -403,6 +415,18 @@ struct DeleteByQueryParams {
     /// SeekStorm-serialized sort definitions
     #[serde(default)]
     result_sort: Option<Value>,
+    /// Enable empty-query deletion (default false)
+    #[serde(default)]
+    enable_empty_query: Option<bool>,
+    /// SeekStorm SearchMode enum for vector or hybrid deletion. Lexical (default), Vector, or Hybrid.
+    #[serde(default)]
+    #[schemars(with = "Option<SearchModeSchema>")]
+    search_mode: Option<SearchMode>,
+    /// Optional query vector as SeekStorm Embedding enum: {"F32": [...]} or {"I8": [...]}
+    /// Required for vector or hybrid deletion modes.
+    #[serde(default)]
+    #[schemars(with = "Option<EmbeddingSchema>")]
+    query_vector: Option<Embedding>,
 }
 
 /// Embedded SeekStorm MCP server: owns a local index and exposes indexing/search tools.
@@ -472,15 +496,15 @@ impl SeekStormMcpServer {
     }
 
     #[tool(
-        description = "Search the local index using lexical, vector, or hybrid retrieval with filters, facets, sorting, highlighting, and pagination."
+        description = "Search the local index using lexical, vector, or hybrid retrieval with filters, facets, sorting, highlighting, and pagination. Uses SeekStorm's SearchRequest struct with optional chainable setters."
     )]
     async fn search(
         &self,
-        Parameters(params): Parameters<SearchParams>,
+        Parameters(params): Parameters<SearchRequestParams>,
     ) -> Result<CallToolResult, McpError> {
         let index_arc = self.active_index().await;
-        let offset = params.offset.unwrap_or(0) as usize;
-        let length = params.length.unwrap_or(10) as usize;
+        let offset = params.offset.unwrap_or(0);
+        let length = params.length.unwrap_or(10);
         if length == 0 {
             return Ok(CallToolResult::error(vec![ContentBlock::text(
                 "length must be greater than zero",
@@ -490,7 +514,7 @@ impl SeekStormMcpServer {
         let parsed = (|| -> Result<_, String> {
             let query_type: QueryType = match params.query_type.clone() {
                 Some(value) => serde_json::from_value(value).map_err(|err| err.to_string())?,
-                None => QueryType::Intersection,
+                None => QueryType::Union,
             };
             let result_type: ResultType = parse_json_or_default(params.result_type.clone())?;
             let query_rewriting: QueryRewriting =
@@ -498,7 +522,6 @@ impl SeekStormMcpServer {
             let query_facets = parse_json_or_default(params.query_facets.clone())?;
             let facet_filter = parse_json_or_default(params.facet_filter.clone())?;
             let result_sort = parse_json_or_default(params.result_sort.clone())?;
-            let highlights: Vec<Highlight> = parse_json_or_default(params.highlights.clone())?;
             let search_mode = params.search_mode.unwrap_or_default();
             let query_vector = params.query_vector;
             Ok((
@@ -508,7 +531,6 @@ impl SeekStormMcpServer {
                 query_facets,
                 facet_filter,
                 result_sort,
-                highlights,
                 search_mode,
                 query_vector,
             ))
@@ -520,7 +542,6 @@ impl SeekStormMcpServer {
             query_facets,
             facet_filter,
             result_sort,
-            highlights,
             search_mode,
             query_vector,
         ) = match parsed {
@@ -536,7 +557,7 @@ impl SeekStormMcpServer {
         {
             let index = index_arc.read().await;
             if matches!(
-                &index.meta.inference,
+                &index.index_config.inference,
                 Inference::None | Inference::External { .. }
             ) {
                 return Ok(CallToolResult::error(vec![ContentBlock::text(
@@ -563,49 +584,37 @@ impl SeekStormMcpServer {
         }
 
         let result_object = index_arc
-            .search(
-                params.query,
-                query_vector,
-                query_type,
+            .search(SearchRequest {
+                query_string: &params.query,
+                query_vector: query_vector.map(Into::into),
                 search_mode,
-                params.enable_empty_query.unwrap_or(false),
+                enable_empty_query: params.enable_empty_query.unwrap_or(false),
                 offset,
                 length,
                 result_type,
-                params.realtime.unwrap_or(false),
-                params.field_filter,
+                include_uncommitted: params.include_uncommitted.unwrap_or(false),
+                field_filter: params.field_filter,
                 query_facets,
                 facet_filter,
                 result_sort,
                 query_rewriting,
-            )
+                query_type_default: query_type,
+                return_documents: params.return_documents,
+            })
             .await;
 
-        let highlighter_option = if highlights.is_empty() || result_object.query_terms.is_empty() {
-            None
-        } else {
-            Some(highlighter(&index_arc, highlights, result_object.query_terms.clone()).await)
-        };
-        let return_fields = HashSet::from_iter(params.fields);
-        let index = index_arc.read().await;
         let mut results = Vec::new();
-        for result in result_object.results.iter() {
-            let doc = index
-                .get_document(
-                    result.doc_id,
-                    params.realtime.unwrap_or(false),
-                    &highlighter_option,
-                    &return_fields,
-                    &Vec::new(),
-                )
-                .await
-                .unwrap_or_default();
-            let mut doc_value = serde_json::to_value(doc).unwrap_or_else(|_| json!({}));
-            if let Some(doc_object) = doc_value.as_object_mut() {
-                doc_object.insert("_id".to_string(), json!(result.doc_id));
-                doc_object.insert("_score".to_string(), json!(result.score));
+        if result_object.documents.is_empty() {
+            for result in result_object.results.iter() {
+                results.push(json!({
+                    "_id": result.doc_id,
+                    "_score": result.score,
+                }));
             }
-            results.push(doc_value);
+        } else {
+            for doc in result_object.documents.iter() {
+                results.push(serde_json::to_value(doc).unwrap_or_else(|_| json!({})));
+            }
         }
 
         let response = json!({
@@ -613,8 +622,8 @@ impl SeekStormMcpServer {
             "original_query": result_object.original_query,
             "query_terms": result_object.query_terms,
             "results": results,
-            "result_count": result_object.result_count,
-            "result_count_total": result_object.result_count_total,
+            "result_count": result_object.count,
+            "result_count_total": result_object.count_total,
             "facets": result_object.facets,
             "suggestions": result_object.suggestions,
         });
@@ -667,8 +676,8 @@ impl SeekStormMcpServer {
         let index_path = self.index_path.read().await.clone();
         let index = index_arc.read().await;
         let response = json!({
-            "id": index.meta.id,
-            "name": index.meta.name,
+            "id": index.index_config.id,
+            "name": index.index_config.name,
             "path": index_path.display().to_string(),
             "schema": index.schema_map,
             "indexed_doc_count": index.indexed_doc_count().await,
@@ -700,9 +709,11 @@ impl SeekStormMcpServer {
                 "index_path already contains an index; choose another directory or open the existing index",
             )]));
         }
-        let (meta, schema, synonyms) = index_meta(request);
+        let (index_config, schema, synonyms) = create_index_request(request);
         let new_index =
-            match create_index_library(&index_path, meta, &schema, &synonyms, true, None).await {
+            match create_index_library(&index_path, index_config, &schema, &synonyms, true, None)
+                .await
+            {
                 Ok(index) => index,
                 Err(err) => return Ok(CallToolResult::error(vec![ContentBlock::text(err)])),
             };
@@ -918,20 +929,28 @@ impl SeekStormMcpServer {
     }
 
     #[tool(
-        description = "Delete documents matching a lexical query. The length bounds the number deleted; search first to verify the intended matches."
+        description = "Delete documents matching a query, with optional vector or hybrid deletion. The length bounds the number deleted; search first to verify the intended matches. Uses SeekStorm's SearchRequest struct with optional chainable setters. Note: result_type, query_rewriting, query_facets, fields, distance_fields, highlights, and include_uncommitted are ignored."
     )]
     async fn delete_documents_by_query(
         &self,
-        Parameters(params): Parameters<DeleteByQueryParams>,
+        Parameters(params): Parameters<DeleteBySearchRequestParams>,
     ) -> Result<CallToolResult, McpError> {
         let parsed = (|| -> Result<_, String> {
             let query_type: QueryType = parse_json_or_default(params.query_type.clone())?;
             let facet_filter: Vec<FacetFilter> =
                 parse_json_or_default(params.facet_filter.clone())?;
             let result_sort = parse_json_or_default(params.result_sort.clone())?;
-            Ok((query_type, facet_filter, result_sort))
+            let search_mode = params.search_mode.unwrap_or_default();
+            let query_vector = params.query_vector;
+            Ok((
+                query_type,
+                facet_filter,
+                result_sort,
+                search_mode,
+                query_vector,
+            ))
         })();
-        let (query_type, facet_filter, result_sort) = match parsed {
+        let (query_type, facet_filter, result_sort, search_mode, query_vector) = match parsed {
             Ok(parsed) => parsed,
             Err(err) => return Ok(CallToolResult::error(vec![ContentBlock::text(err)])),
         };
@@ -941,18 +960,58 @@ impl SeekStormMcpServer {
                 "length must be greater than zero",
             )]));
         }
-        self.active_index()
-            .await
-            .delete_documents_by_query(
-                params.query,
-                query_type,
-                params.offset.unwrap_or(0),
+
+        let index_arc = self.active_index().await;
+        if query_vector.is_none()
+            && matches!(
+                &search_mode,
+                SearchMode::Vector { .. } | SearchMode::Hybrid { .. }
+            )
+        {
+            let index = index_arc.read().await;
+            if matches!(
+                &index.index_config.inference,
+                Inference::None | Inference::External { .. }
+            ) {
+                return Ok(CallToolResult::error(vec![ContentBlock::text(
+                    "vector and hybrid deletion need query_vector unless the index has an internal inference model configured",
+                )]));
+            }
+        }
+        if let Some(query_vector) = &query_vector
+            && matches!(
+                &search_mode,
+                SearchMode::Vector { .. } | SearchMode::Hybrid { .. }
+            )
+        {
+            let index = index_arc.read().await;
+            let expected_dimensions = index.vector_dimensions;
+            let actual_dimensions = match query_vector {
+                Embedding::F32(values) => values.len(),
+                Embedding::I8(values) => values.len(),
+            };
+            if actual_dimensions != expected_dimensions {
+                return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                    "query vector has {actual_dimensions} dimensions; active index expects {expected_dimensions}"
+                ))]));
+            }
+        }
+
+        index_arc
+            .delete_documents_by_query(SearchRequest {
+                query_string: &params.query,
+                query_vector: query_vector.map(Into::into),
+                search_mode,
+                enable_empty_query: params.enable_empty_query.unwrap_or(false),
+                offset: params.offset.unwrap_or(0),
                 length,
-                true,
-                params.field_filter,
+                include_uncommitted: false,
+                field_filter: params.field_filter,
                 facet_filter,
                 result_sort,
-            )
+                query_type_default: query_type,
+                ..Default::default()
+            })
             .await;
         Ok(CallToolResult::success(vec![ContentBlock::text(format!(
             "Deleted up to {length} matching document(s)"
@@ -1048,20 +1107,22 @@ mod tests {
     #[test]
     fn create_index_request_keeps_custom_schema_and_settings() {
         let request: CreateIndexRequest = serde_json::from_value(json!({
-            "index_name": "custom",
+            "index_config": {
+                "name": "custom",
+                "lexical_similarity": "Bm25f",
+                "tokenizer": "UnicodeAlphanumericFolded"
+            },
             "schema": [
                 {"field": "headline", "store": true, "index_lexical": true, "field_type": "Text"},
                 {"field": "body", "store": true, "index_lexical": true, "field_type": "Text", "longest": true},
                 {"field": "published", "store": true, "index_lexical": false, "field_type": "Timestamp", "facet": true}
             ],
-            "similarity": "Bm25f",
-            "tokenizer": "UnicodeAlphanumericFolded"
         }))
         .unwrap();
 
-        let (meta, schema, _) = index_meta(request);
-        assert_eq!(meta.name, "custom");
-        assert_eq!(meta.lexical_similarity, LexicalSimilarity::Bm25f);
+        let (index_config, schema, _) = create_index_request(request);
+        assert_eq!(index_config.name, "custom");
+        assert_eq!(index_config.lexical_similarity, LexicalSimilarity::Bm25f);
         assert_eq!(schema.len(), 3);
         assert_eq!(schema[2].field, "published");
         assert!(schema[2].facet);

@@ -55,7 +55,7 @@ impl Shard {
 
         let doc_id_local = doc_id & 0b11111111_11111111;
 
-        let mut doc = if self.meta.access_type == AccessType::Ram || is_uncommitted {
+        let mut doc = if self.index_config.access_type == AccessType::Ram || is_uncommitted {
             let docstore_pointer_docs = if is_uncommitted {
                 &self.compressed_docstore_segment_block_buffer
             } else {
@@ -77,7 +77,7 @@ impl Shard {
 
             let compressed_doc = &docstore_pointer_docs[previous_pointer..pointer];
 
-            match self.meta.document_compression {
+            match self.index_config.document_compression {
                 DocumentCompression::None => {
                     let doc: Document = serde_json::from_slice(compressed_doc).unwrap();
                     doc
@@ -123,7 +123,7 @@ impl Shard {
 
             let compressed_doc = &self.docstore_file_mmap[start..end];
 
-            match self.meta.document_compression {
+            match self.index_config.document_compression {
                 DocumentCompression::None => {
                     let doc: Document = serde_json::from_slice(compressed_doc).unwrap();
                     doc
@@ -243,7 +243,7 @@ impl Shard {
             return;
         }
 
-        let mut compressed = match self.meta.document_compression {
+        let mut compressed = match self.index_config.document_compression {
             DocumentCompression::None => serde_json::to_vec(&document).unwrap(),
             DocumentCompression::Snappy => {
                 let serialized = serde_json::to_vec(&document).unwrap();
@@ -319,7 +319,7 @@ impl Shard {
                 .docstore_file
                 .write(&self.compressed_docstore_segment_block_buffer[4 * ROARING_BLOCK_SIZE..]);
 
-            if self.meta.access_type == AccessType::Ram {
+            if self.index_config.access_type == AccessType::Ram {
                 self.level_index[level]
                     .docstore_pointer_docs
                     .extend_from_slice(
@@ -344,7 +344,7 @@ impl Shard {
                 .docstore_file
                 .write(&self.compressed_docstore_segment_block_buffer);
 
-            if self.meta.access_type == AccessType::Ram {
+            if self.index_config.access_type == AccessType::Ram {
                 self.level_index[level]
                     .docstore_pointer_docs
                     .append(&mut std::mem::take(
@@ -357,7 +357,7 @@ impl Shard {
 
         self.compressed_docstore_segment_block_buffer = vec![0; ROARING_BLOCK_SIZE * 4];
 
-        if self.meta.access_type == AccessType::Mmap {
+        if self.index_config.access_type == AccessType::Mmap {
             self.docstore_file_mmap =
                 unsafe { Mmap::map(&self.docstore_file).expect("Unable to create Mmap") };
         }

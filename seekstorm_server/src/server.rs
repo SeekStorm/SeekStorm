@@ -9,14 +9,13 @@ use num_format::{Locale, ToFormattedString};
 
 use seekstorm::{
     index::{
-        ApikeyObject, ApikeyQuotaObject, Close, Clustering, DocumentCompression, FrequentwordType,
-        IS_AVX2, IS_NEON, Info, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
-        TokenizerType,
+        ApikeyObject, ApikeyQuotaObject, Close, Clustering, IS_AVX2, IS_NEON, IndexConfig, Info,
+        LexicalSimilarity, NgramSet, TokenizerType,
     },
     ingest::{
         IngestCsv, IngestJson, IngestPdf, display_index_info, ingest_sift, read_fvecs, read_ivecs,
     },
-    search::{QueryRewriting, QueryType, ResultType, Search, SearchMode},
+    search::{QueryType, ResultType, Search, SearchMode, SearchRequest},
     utils::dir_size,
     vector::{Embedding, Inference, Model, Quantization},
     vector_similarity::{AnnMode, VectorSimilarity},
@@ -460,9 +459,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                             if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) {
                                 let index_id=0;
                                 if let Some(index_arc) = apikey_object.index_list.get_mut(&index_id) {
-
-                                    let query="";
-
                                     let topk=10;
                                     let similarity_threshold=None;
                                     let field_filter=Vec::new();
@@ -504,27 +500,23 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                             let result_object_vector = index_arc
                                             .search(
-                                                query.to_string(),
-                                                Some(query_embedding.clone()),
-                                                QueryType::Intersection,
-                                                search_mode.clone(),
-                                                false,
-                                                0,
-                                                topk,
-                                                ResultType::Topk,
-                                                false,
-                                                field_filter.clone(),
-                                                Vec::new(),
-                                                Vec::new(),
-                                                Vec::new(),
-                                                QueryRewriting::SearchOnly,
+                                                SearchRequest {
+                                                    query_string: "",
+                                                    query_vector: Some(Into::into(query_embedding.clone())),
+                                                    search_mode:search_mode.clone(),
+                                                    length:topk,
+                                                    query_type_default: QueryType::Intersection,
+                                                    result_type: ResultType::Topk,
+                                                    field_filter: field_filter.clone(),
+                                                    ..Default::default()
+                                                }
                                             )
                                             .await;
 
                                             let search_time = start_time.elapsed().as_nanos() as i64;
                                             search_time_sum+=search_time;
                                             results_sum+=result_object_vector.results.len();
-                                            result_count_total_sum+=result_object_vector.result_count_total;
+                                            result_count_total_sum+=result_object_vector.count_total;
                                             observed_cluster_count_sum+=result_object_vector.observed_cluster_count;
                                             observed_vector_count_sum+=result_object_vector.observed_vector_count;
 
@@ -545,7 +537,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                         let indexed_cluster_count=index_arc.read().await.indexed_cluster_count().await;
 
                                         println!("Inference {:?} Similarity {:?} QueryMode: {:?} Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {:.2}%",
-                                        index_arc.read().await.meta.inference,
+                                        index_arc.read().await.index_config.inference,
                                         index_arc.read().await.vector_similarity,
                                         search_mode,
                                          (search_time_sum as usize/1000/queries_len).to_formatted_string(&Locale::en), results_sum.to_formatted_string(&Locale::en), result_count_total_sum.to_formatted_string(&Locale::en),
@@ -589,20 +581,16 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                     let result_object_vector = index_arc
                                     .search(
-                                        query.to_string(),
-                                        None,
-                                        QueryType::Intersection,
-                                        SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Similaritythreshold(0.0) },
-                                        false,
-                                        0,
-                                        len,
-                                        ResultType::Topk,
-                                        false,
-                                        field_filter.clone(),
-                                        Vec::new(),
-                                        Vec::new(),
-                                        Vec::new(),
-                                        QueryRewriting::SearchOnly,
+                                        SearchRequest {
+                                            query_string: query,
+                                            query_vector: None,
+                                            search_mode:SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Similaritythreshold(0.0) },
+                                            length:len,
+                                            query_type_default: QueryType::Intersection,
+                                            result_type: ResultType::Topk,
+                                            field_filter: field_filter.clone(),
+                                            ..Default::default()
+                                        }
                                     )
                                     .await;
 
@@ -632,7 +620,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let indexed_vector_count=index_arc.read().await.indexed_vector_count().await;
                                     let indexed_cluster_count=index_arc.read().await.indexed_cluster_count().await;
 
-                                    println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {})", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.result_count_total,
+                                    println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {})", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.count_total,
                                     (result_object_vector.observed_cluster_count as f64) / (indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , indexed_cluster_count.to_formatted_string(&Locale::en),
                                     (result_object_vector.observed_vector_count as f64) / (indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , indexed_vector_count.to_formatted_string(&Locale::en));
                                     println!("Minimum cluster score in results: {}", min_cluster_score);
@@ -643,20 +631,15 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                     let result_object_vector = index_arc
                                     .search(
-                                        query.to_string(),
-                                        None,
-                                        QueryType::Intersection,
-                                        SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Similaritythreshold(min_cluster_score)},
-                                        false,
-                                        0,
-                                        len,
-                                        ResultType::Topk,
-                                        false,
-                                        field_filter.clone(),
-                                        Vec::new(),
-                                        Vec::new(),
-                                        Vec::new(),
-                                        QueryRewriting::SearchOnly,
+                                        SearchRequest {
+                                            query_string: query,
+                                            search_mode:SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Similaritythreshold(min_cluster_score)},
+                                            length:len,
+                                            query_type_default: QueryType::Intersection,
+                                            result_type: ResultType::Topk,
+                                            field_filter: field_filter.clone(),
+                                            ..Default::default()
+                                        }
                                     )
                                     .await;
 
@@ -671,7 +654,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                         println!("Top {}: doc_id: {}, similarity: {},  document: {} ", i+1, result.doc_id, result.score, title);
                                         if recall_set.contains(&result.doc_id) { recall_count+=1; }
                                     }
-                                    println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {}%", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.result_count_total,
+                                    println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {}%", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.count_total,
                                     (result_object_vector.observed_cluster_count as f64) / (index_arc.read().await.indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_cluster_count.to_formatted_string(&Locale::en),
                                     (result_object_vector.observed_vector_count as f64) / (index_arc.read().await.indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_vector_count.to_formatted_string(&Locale::en),
                                     (recall_count as f64) / (recall_set.len() as f64) * 100.0);
@@ -682,20 +665,15 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let start_time = Instant::now();
                                     let result_object_vector = index_arc
                                     .search(
-                                        query.to_string(),
-                                        None,
-                                        QueryType::Intersection,
-                                        SearchMode::Vector { similarity_threshold  , ann_mode: AnnMode::Nprobe(55) },
-                                        false,
-                                        0,
-                                        len,
-                                        ResultType::Topk,
-                                        false,
-                                        field_filter.clone(),
-                                        Vec::new(),
-                                        Vec::new(),
-                                        Vec::new(),
-                                        QueryRewriting::SearchOnly,
+                                        SearchRequest {
+                                            query_string: query,
+                                            search_mode:SearchMode::Vector { similarity_threshold  , ann_mode: AnnMode::Nprobe(55) },
+                                            length:len,
+                                            query_type_default: QueryType::Intersection,
+                                            result_type: ResultType::Topk,
+                                            field_filter: field_filter.clone(),
+                                            ..Default::default()
+                                        }
                                     )
                                     .await;
 
@@ -712,7 +690,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                         if recall_set.contains(&result.doc_id) { recall_count+=1; }
                                     }
-                                    println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {}%", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.result_count_total,
+                                    println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {}%", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.count_total,
                                     (result_object_vector.observed_cluster_count as f64) / (index_arc.read().await.indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_cluster_count.to_formatted_string(&Locale::en),
                                     (result_object_vector.observed_vector_count as f64) / (index_arc.read().await.indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_vector_count.to_formatted_string(&Locale::en),
                                     (recall_count as f64) / (recall_set.len() as f64) * 100.0);
@@ -774,28 +752,24 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
 
                                     LexicalSimilarity::Bm25f,TokenizerType::UnicodeAlphanumeric)};
 
-                                let _ =create_index_api(
+                                let index_config = IndexConfig {
+                                    name: indexname_schemajson.0.into(),
+                                    lexical_similarity: indexname_schemajson.2,
+                                    tokenizer: indexname_schemajson.3,
+                                    ngram_indexing: NgramSet::SingleTerm as u8,
+                                    clustering: Clustering::Auto,
+                                    inference: Inference::External { dimensions: 128 , precision: Precision::F32, quantization: Quantization::ScalarQuantizationI8,similarity:VectorSimilarity::Euclidean } ,
+                                    ..Default::default()
+                                };
+                                create_index_api(
                                     &index_path,
-                                    indexname_schemajson.0.into(),
                                     serde_json::from_str(indexname_schemajson.1).unwrap(),
-                                    indexname_schemajson.2,
-                                    indexname_schemajson.3,
-                                    StemmerType::None,
-                                    StopwordType::None,
-                                    FrequentwordType::English,
-                                    NgramSet::SingleTerm as u8 ,
-                                    DocumentCompression::Snappy,
                                     Vec::new(),
+                                    index_config,
                                     force_shard_number,
                                     apikey_object,
-
-                                    None,
-                                    None,
-                                    false,
-                                    Clustering::Auto,
-                                    Inference::External { dimensions: 128 , precision: Precision::F32, quantization: Quantization::ScalarQuantizationI8,similarity:VectorSimilarity::Euclidean } ,
+                                    true,
                                 ).await;
-
                                 let index_id=0;
                                 if let Some(index_arc) = apikey_object.index_list.get_mut(&index_id) {
 
@@ -910,26 +884,26 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                 {"field":"url","field_type":"Text","store":true,"index_lexical":false},
                                                 {"field":"date","field_type":"Timestamp","store":true,"index_lexical":false,"facet":true}]"#,LexicalSimilarity::Bm25fProximity,TokenizerType::UnicodeAlphanumeric )};
 
+
+                                                    let index_config = IndexConfig {
+                                                        name: indexname_schemajson.0.into(),
+                                                        lexical_similarity: indexname_schemajson.2,
+                                                        tokenizer: indexname_schemajson.3,
+                                                        ngram_indexing: NgramSet::NgramFF as u8 ,
+                                                        clustering: Clustering::Auto,
+                                                        inference: Inference::Model2Vec { model: Model::PotionBase2M, chunk_size: 1000, quantization: Quantization::TurboQuantI8 },
+                                                        ..Default::default()
+                                                    };
                                                     create_index_api(
                                                         &index_path,
-                                                        indexname_schemajson.0.into(),
                                                         serde_json::from_str(indexname_schemajson.1).unwrap(),
-                                                        indexname_schemajson.2,
-                                                        indexname_schemajson.3,
-                                                        StemmerType::None,
-                                                        StopwordType::None,
-                                                        FrequentwordType::English,
-                                                        NgramSet::NgramFF as u8 ,
-                                                        DocumentCompression::Snappy,
                                                         Vec::new(),
+                                                        index_config,
                                                         force_shard_number,
                                                         apikey_object,
-                                                        None,
-                                                        None,
-                                                        false,
-                                                        Clustering::Auto,
-                                                        Inference::Model2Vec { model: Model::PotionBase2M, chunk_size: 1000, quantization: Quantization::TurboQuantI8 },
+                                                        true,
                                                     ).await
+
                                                 } else {
                                                     0
                                                 };

@@ -5,13 +5,13 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, DeleteDocument, DocumentCompression, FileType, FrequentwordType,
-    IndexArc, IndexDocument, IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet,
-    StemmerType, StopwordType, TokenizerType, create_index, open_index,
+    IndexArc, IndexConfig, IndexDocument, IndexDocuments, LexicalSimilarity, NgramSet, StemmerType,
+    StopwordType, TokenizerType, create_index, open_index,
 };
 use seekstorm::iterator::GetIterator;
 use seekstorm::search::{
-    FacetFilter, FacetValue, QueryFacet, QueryRewriting, QueryType, ResultSort, ResultType, Search,
-    SearchMode, SortOrder,
+    FacetFilter, FacetValue, QueryFacet, QueryRewriting, QueryType, QueryVector, ResultSort,
+    ResultType, Search, SearchMode, SearchRequest, SortOrder,
 };
 use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
 use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
@@ -30,30 +30,21 @@ async fn test_01_create_index() {
     {"field":"url","field_type":"Text","store":false,"index_lexical":false}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "test_index".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::English,
         ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     };
 
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, None)
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, None)
         .await
         .unwrap();
     let index = index_arc.read().await;
 
-    let result = index.meta.id;
+    let result = index.index_config.id;
     assert_eq!(result, 0);
     index_arc.close().await;
 }
@@ -142,62 +133,44 @@ async fn test_04_query_index() {
 
     let query = "+body2 +test".into();
     let result_object = index_arc
-        .search(
-            query,
-            None,
-            QueryType::Intersection,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query,
+            query_type_default: QueryType::Intersection,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.len();
     assert_eq!(result, 1);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 1);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 1);
 
     //
 
     let query = "test".into();
     let result_object = index_arc
-        .search(
-            query,
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::Count,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query,
+            query_type_default: QueryType::Union,
+            length: 10,
+            result_type: ResultType::Count,
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.len();
     assert_eq!(result, 0);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 0);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 2);
 
     index_arc.close().await;
@@ -216,22 +189,14 @@ async fn test_05_empty_query() {
     // default (descending)
 
     let result_object = index_arc
-        .search(
-            "".into(),
-            None,
-            QueryType::Intersection,
-            SearchMode::Lexical,
-            true,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: "".into(),
+            query_type_default: QueryType::Intersection,
+            enable_empty_query: true,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.first().unwrap().doc_id;
@@ -240,10 +205,10 @@ async fn test_05_empty_query() {
     let result = result_object.results.len();
     assert_eq!(result, 4);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 4);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 4);
 
     // descending
@@ -255,22 +220,15 @@ async fn test_05_empty_query() {
     }];
 
     let result_object = index_arc
-        .search(
-            "".into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            true,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        .search(SearchRequest {
+            query_string: "".into(),
+            query_type_default: QueryType::Union,
+            enable_empty_query: true,
+            length: 10,
+            result_type: ResultType::TopkCount,
             result_sort,
-            QueryRewriting::SearchOnly,
-        )
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.first().unwrap().doc_id;
@@ -279,10 +237,10 @@ async fn test_05_empty_query() {
     let result = result_object.results.len();
     assert_eq!(result, 4);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 4);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 4);
 
     // ascending
@@ -294,22 +252,15 @@ async fn test_05_empty_query() {
     }];
 
     let result_object = index_arc
-        .search(
-            "".into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            true,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        .search(SearchRequest {
+            query_string: "".into(),
+            query_type_default: QueryType::Union,
+            enable_empty_query: true,
+            length: 10,
+            result_type: ResultType::TopkCount,
             result_sort,
-            QueryRewriting::SearchOnly,
-        )
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.first().unwrap().doc_id;
@@ -318,10 +269,10 @@ async fn test_05_empty_query() {
     let result = result_object.results.len();
     assert_eq!(result, 4);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 4);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 4);
 
     index_arc.close().await;
@@ -358,25 +309,16 @@ async fn test_06_clear_index() {
     // query index
     let query = "body1".into();
     let result_object = index_arc
-        .search(
-            query,
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query,
+            query_type_default: QueryType::Union,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            ..Default::default()
+        })
         .await;
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 1);
 
     index_arc.close().await;
@@ -428,25 +370,16 @@ async fn test_08_delete_document() {
     // query index before delete
     let query = "body1".into();
     let result_object = index_arc
-        .search(
-            query,
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query,
+            query_type_default: QueryType::Union,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            ..Default::default()
+        })
         .await;
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 1);
 
     // delete document
@@ -457,25 +390,16 @@ async fn test_08_delete_document() {
     // query index after delete
     let query = "body1".into();
     let result_object = index_arc
-        .search(
-            query,
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query,
+            query_type_default: QueryType::Union,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            ..Default::default()
+        })
         .await;
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 0);
 
     let result = index_arc.read().await.current_doc_count().await;
@@ -496,34 +420,27 @@ async fn test_09_create_index_vector_internal() {
     {"field":"url","field_type":"Text","store":false,"index_lexical":false,"index_vector":false}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "test_index".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::English,
         ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
         clustering: Clustering::None,
         inference: Inference::Model2Vec {
             model: Model::PotionBase2M,
             chunk_size: 1000,
             quantization: Quantization::ScalarQuantizationI8,
         },
-        segment_number_bits: 11,
+        ..Default::default()
     };
 
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, None)
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, None)
         .await
         .unwrap();
     let index = index_arc.read().await;
 
-    let result = index.meta.id;
+    let result = index.index_config.id;
     assert_eq!(result, 0);
     index_arc.close().await;
 }
@@ -564,34 +481,26 @@ async fn test_11_query_index_vector_internal() {
 
     let query = "rosy panther".into();
     let result_object = index_arc
-        .search(
-            query,
-            None,
-            QueryType::Union,
-            SearchMode::Vector {
+        .search(SearchRequest {
+            query_string: query,
+            query_type_default: QueryType::Union,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            search_mode: SearchMode::Vector {
                 similarity_threshold: Some(0.7),
                 ann_mode: AnnMode::All,
             },
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.len();
     assert_eq!(result, 1);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 1);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 1);
 }
 
@@ -608,19 +517,8 @@ async fn test_12_create_index_vector_external() {
     {"field":"index","field_type":"Text","store":true,"index_lexical":false,"index_vector":false}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "test_index".into(),
-        lexical_similarity: LexicalSimilarity::Bm25f,
-        tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
-        frequent_words: FrequentwordType::English,
-        ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
         clustering: Clustering::None,
         inference: Inference::External {
             dimensions: 128,
@@ -628,15 +526,15 @@ async fn test_12_create_index_vector_external() {
             quantization: Quantization::None,
             similarity: VectorSimilarity::Euclidean,
         },
-        segment_number_bits: 11,
+        ..Default::default()
     };
 
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(2))
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(2))
         .await
         .unwrap();
     let index = index_arc.read().await;
 
-    let result = index.meta.id;
+    let result = index.index_config.id;
     assert_eq!(result, 0);
     index_arc.close().await;
 }
@@ -675,7 +573,7 @@ async fn test_14_query_index_vector_external() {
     let result = index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 3);
 
-    let query = String::new();
+    let query = "";
     let query_vector = vec![
         0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010, 0.011, 0.012, 0.013,
         0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.020, 0.021, 0.022, 0.023, 0.024, 0.025, 0.026,
@@ -688,36 +586,29 @@ async fn test_14_query_index_vector_external() {
         0.105, 0.106, 0.107, 0.108, 0.109, 0.110, 0.111, 0.112, 0.113, 0.114, 0.115, 0.116, 0.117,
         0.118, 0.119, 0.120, 0.121, 0.122, 0.123, 0.124, 0.125, 0.126, 0.127, 0.128,
     ];
-    let query_embedding = Embedding::F32(query_vector);
+    //let query_embedding = Embedding::F32(query_vector);
     let result_object = index_arc
-        .search(
-            query,
-            Some(query_embedding),
-            QueryType::Union,
-            SearchMode::Vector {
+        .search(SearchRequest {
+            query_string: query,
+            query_vector: Some(QueryVector::VecF32(query_vector)),
+            query_type_default: QueryType::Union,
+            length: 10,
+            result_type: ResultType::TopkCount,
+            search_mode: SearchMode::Vector {
                 similarity_threshold: None,
                 ann_mode: AnnMode::All,
             },
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+            ..Default::default()
+        })
         .await;
 
     let result = result_object.results.len();
     assert_eq!(result, 3);
 
-    let result = result_object.result_count;
+    let result = result_object.count;
     assert_eq!(result, 3);
 
-    let result = result_object.result_count_total;
+    let result = result_object.count_total;
     assert_eq!(result, 3);
 }
 
@@ -733,26 +624,18 @@ async fn test_15_facet_scope() {
     {"field":"kind","field_type":"String16","store":true,"index_lexical":false,"facet":true}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
+    let index_config = IndexConfig {
         id: 1,
         name: "test_facet_index".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::None,
         ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     };
 
     // 3 shards: the 3 documents are distributed round-robin, one document per shard
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(3))
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(3))
         .await
         .unwrap();
 
@@ -775,26 +658,20 @@ async fn test_15_facet_scope() {
         facet_filter: Vec<FacetFilter>,
     ) -> (usize, Vec<(String, usize)>) {
         let result_object = index_arc
-            .search(
-                query.into(),
-                None,
-                QueryType::Intersection,
-                SearchMode::Lexical,
+            .search(SearchRequest {
+                query_string: query.into(),
+                query_type_default: QueryType::Intersection,
+                length: 10,
                 enable_empty_query,
-                0,
-                10,
-                ResultType::TopkCount,
-                false,
-                Vec::new(),
-                vec![QueryFacet::String16 {
+                result_type: ResultType::TopkCount,
+                query_facets: vec![QueryFacet::String16 {
                     field: "kind".into(),
                     prefix: "".into(),
                     length: 10,
                 }],
                 facet_filter,
-                Vec::new(),
-                QueryRewriting::SearchOnly,
-            )
+                ..Default::default()
+            })
             .await;
 
         let mut facets = result_object
@@ -803,7 +680,7 @@ async fn test_15_facet_scope() {
             .cloned()
             .unwrap_or_default();
         facets.sort();
-        (result_object.result_count_total, facets)
+        (result_object.count_total, facets)
     }
 
     // query matching 2 documents in 2 shards, both documents with the same facet value

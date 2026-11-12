@@ -14,7 +14,7 @@ use crate::{
         Shard, TermObject, hash32, hash64,
     },
     min_heap,
-    search::{FilterSparse, QueryType, ResultType, SearchResult, decode_posting_list_counts},
+    search::{FilterSparse, QueryType, ResultType, SearchResultObject, decode_posting_list_counts},
     utils::{read_u16, read_u16_ref, read_u32, read_u32_ref},
 };
 
@@ -54,7 +54,7 @@ pub(crate) fn add_result_singleterm_uncommitted(
     shard: &Shard,
     docid: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -152,7 +152,7 @@ pub(crate) fn add_result_multiterm_uncommitted(
     shard: &Shard,
     docid: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -927,7 +927,7 @@ impl Shard {
         field_filter_set: &AHashSet<u16>,
         facet_filter: &[FilterSparse],
 
-        search_result: &mut SearchResult,
+        search_result: &mut SearchResultObject,
         result_count_arc: &Arc<AtomicUsize>,
         top_k: usize,
     ) {
@@ -967,27 +967,29 @@ impl Shard {
                     let mut idf_ngram2 = 0.0;
                     let mut idf_ngram3 = 0.0;
                     if result_type != &ResultType::Count {
-                        let posting_counts_option = if self.meta.access_type == AccessType::Mmap {
-                            decode_posting_list_counts(
-                                &self.segments_index[key0 as usize],
-                                self,
-                                key_hash,
-                            )
-                        } else {
-                            let posting_list_object_index_option =
-                                self.segments_index[key0 as usize].segment.get(&key_hash);
-                            posting_list_object_index_option.map(|plo| {
-                                (
-                                    plo.posting_count,
-                                    plo.posting_count_ngram_1,
-                                    plo.posting_count_ngram_2,
-                                    plo.posting_count_ngram_3,
+                        let posting_counts_option =
+                            if self.index_config.access_type == AccessType::Mmap {
+                                decode_posting_list_counts(
+                                    &self.segments_index[key0 as usize],
+                                    self,
+                                    key_hash,
                                 )
-                            })
-                        };
+                            } else {
+                                let posting_list_object_index_option =
+                                    self.segments_index[key0 as usize].segment.get(&key_hash);
+                                posting_list_object_index_option.map(|plo| {
+                                    (
+                                        plo.posting_count,
+                                        plo.posting_count_ngram_1,
+                                        plo.posting_count_ngram_2,
+                                        plo.posting_count_ngram_3,
+                                    )
+                                })
+                            };
 
                         if non_unique_term.ngram_type == NgramType::SingleTerm
-                            || self.meta.lexical_similarity == LexicalSimilarity::Bm25fProximity
+                            || self.index_config.lexical_similarity
+                                == LexicalSimilarity::Bm25fProximity
                         {
                             let posting_count = if let Some(posting_count) = posting_counts_option {
                                 posting_count.0 as usize + value1.posting_count
@@ -1237,7 +1239,7 @@ impl Shard {
         field_filter_set: &AHashSet<u16>,
         facet_filter: &[FilterSparse],
 
-        search_result: &mut SearchResult,
+        search_result: &mut SearchResultObject,
         result_count_arc: &Arc<AtomicUsize>,
         top_k: usize,
     ) {
@@ -1831,7 +1833,7 @@ impl Shard {
         not_query_list: &mut [PostingListObjectQuery<'_>],
         block_id: usize,
         result_count_arc: &Arc<AtomicUsize>,
-        search_result: &mut SearchResult,
+        search_result: &mut SearchResultObject,
         top_k: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
@@ -1922,7 +1924,7 @@ impl Shard {
         not_query_list: &mut [PostingListObjectQuery],
         block_id: usize,
         result_count_arc: &Arc<AtomicUsize>,
-        search_result: &mut SearchResult,
+        search_result: &mut SearchResultObject,
         top_k: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,
@@ -2007,7 +2009,7 @@ impl Shard {
         &self,
         result_count: &mut i32,
         block_id: usize,
-        search_result: &mut SearchResult,
+        search_result: &mut SearchResultObject,
         top_k: usize,
         result_type: &ResultType,
         field_filter_set: &AHashSet<u16>,

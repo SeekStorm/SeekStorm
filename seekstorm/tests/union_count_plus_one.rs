@@ -2,31 +2,22 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexArc, IndexDocuments,
-    IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexArc, IndexConfig,
+    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
     create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
-        id: 0,
+fn index_config() -> IndexConfig {
+    IndexConfig {
         name: "union_count_plus_one".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::None,
         ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     }
 }
 
@@ -45,24 +36,14 @@ async fn search(
     index: &IndexArc,
     query: &str,
     result_type: ResultType,
-) -> seekstorm::search::ResultObject {
+) -> seekstorm::search::SearchResult {
     index
-        .search(
-            query.into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            100,
-            result_type,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            length: 100,
+            result_type: result_type,
+            ..Default::default()
+        })
         .await
 }
 
@@ -71,7 +52,7 @@ async fn union_count_overlap_same_block() {
     let dir = "tests/index_union_plus_one/";
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    let index = create_index(path, meta(), &schema(), &Vec::new(), true, Some(1))
+    let index = create_index(path, index_config(), &schema(), &[], true, Some(1))
         .await
         .unwrap();
 
@@ -92,10 +73,10 @@ async fn union_count_overlap_same_block() {
     let topk_count = search(&index, "alpha beta", ResultType::TopkCount).await;
 
     let expected = 6;
-    println!("Count result: {}", count.result_count_total);
-    println!("TopkCount result: {}", topk_count.result_count_total);
-    assert_eq!(count.result_count_total, expected);
-    assert_eq!(topk_count.result_count_total, expected);
+    println!("Count result: {}", count.count_total);
+    println!("TopkCount result: {}", topk_count.count_total);
+    assert_eq!(count.count_total, expected);
+    assert_eq!(topk_count.count_total, expected);
 
     index.close().await;
 }

@@ -7,7 +7,7 @@ use crate::{
         SORT_FLAG, SPEEDUP_FLAG, Shard,
     },
     intersection_simd::intersection_vector16,
-    search::{FilterSparse, ResultType, SearchResult},
+    search::{FilterSparse, ResultType, SearchResultObject},
     utils::{read_u16, read_u64},
 };
 use ahash::AHashSet;
@@ -34,7 +34,7 @@ pub(crate) fn intersection_bitmap_2(
     result_count: &mut i32,
     block_id: usize,
     shard: &Shard,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -116,7 +116,7 @@ pub(crate) async fn intersection_docid(
     not_query_list: &mut [PostingListObjectQuery<'_>],
     block_id: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -2027,7 +2027,7 @@ pub(crate) async fn intersection_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -2113,7 +2113,7 @@ pub(crate) async fn intersection_blockid<'a>(
                         || search_result.topk_candidates.current_heap_size < top_k
                         || block_score > search_result.topk_candidates._elements[0].score
                     {
-                        if shard.meta.access_type == AccessType::Mmap {
+                        if shard.index_config.access_type == AccessType::Mmap {
                             for query_list_item_mut in query_list.iter_mut() {
                                 let segment =
                                     &shard.segments_index[query_list_item_mut.key0 as usize];
@@ -2237,7 +2237,7 @@ pub(crate) async fn intersection_blockid<'a>(
                 item.p_block = block.p_block_vec[item.term_index_unique];
             }
 
-            if shard.meta.access_type == AccessType::Mmap {
+            if shard.index_config.access_type == AccessType::Mmap {
                 for query_list_item_mut in query_list.iter_mut() {
                     let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
                     query_list_item_mut.byte_array =

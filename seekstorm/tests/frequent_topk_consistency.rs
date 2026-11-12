@@ -4,10 +4,10 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, Document, DocumentCompression, FileType, FrequentwordType,
-    IndexDocument, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+    IndexConfig, IndexDocument, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
     TokenizerType, create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
 
@@ -17,24 +17,15 @@ async fn search(
     qt: QueryType,
     rt: ResultType,
     len: usize,
-) -> seekstorm::search::ResultObject {
+) -> seekstorm::search::SearchResult {
     index_arc
-        .search(
-            q.into(),
-            None,
-            qt,
-            SearchMode::Lexical,
-            false,
-            0,
-            len,
-            rt,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: q.into(),
+            query_type_default: qt,
+            length: len,
+            result_type: rt,
+            ..Default::default()
+        })
         .await
 }
 
@@ -45,25 +36,14 @@ async fn frequent_terms_topk_returns_results() {
     let schema_json = r#"
     [{"field":"title","field_type":"Text","store":false,"index_lexical":true,"longest":true}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "repro".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
-        frequent_words: FrequentwordType::None,
-        ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     };
     // NOTE: keep on the single-shard fast path; multi-shard covered by suite.
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(1))
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(1))
         .await
         .unwrap();
 
@@ -109,7 +89,7 @@ async fn frequent_terms_topk_returns_results() {
         "BUG: intersection TopkCount results empty"
     );
     assert_eq!(
-        rtc.result_count_total, 1500,
+        rtc.count_total, 1500,
         "intersection total must count all matches"
     );
 
@@ -122,7 +102,7 @@ async fn frequent_terms_topk_returns_results() {
         10,
     )
     .await;
-    assert_eq!(c.result_count_total, 1500);
+    assert_eq!(c.count_total, 1500);
 
     index_arc.close().await;
     let _ = fs::remove_dir_all(index_path);

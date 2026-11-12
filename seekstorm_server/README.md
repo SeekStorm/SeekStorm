@@ -49,14 +49,14 @@ ingest [file_path]
 ingest [file_path] -t [type] -k [api_key] -i [index_id] -d [delimiter] -h [header] -q [quoting] -s [skip] -n [num]
 ```
 
--t [type]:      file type, default=derived from file extension  
--k [api_key]:   default=Demo API Key  
--i [index_id]:  default=0  
--h [header]:    CSV header, treat first line of file as header, default=false  
--d [delimiter]: CSV delimiter, default=derived from file type or file extension  
--q [quoting]:   CSV quoting, default=true  
--s [skip]:      number of records to skip from start, default=None=0  
--n [num]:       number of records to read, default=None=usize::MAX   
+-t \[type\]:      file type, default=derived from file extension  
+-k \[api_key\]:   default=Demo API Key  
+-i \[index_id\]:  default=0  
+-h \[header\]:    CSV header, treat first line of file as header, default=false  
+-d \[delimiter\]: CSV delimiter, default=derived from file type or file extension  
+-q \[quoting\]:   CSV quoting, default=true  
+-s \[skip\]:      number of records to skip from start, default=None=0  
+-n \[num\]:       number of records to read, default=None=usize::MAX   
 
 The path to the PDF, CSV or JSON files is specified by the `[data_filename]` parameter, the API key is specified by the `[api_key]` parameter, the index ID by specified in the `[index_id]` parameter.  
 If no absolute path is specified then the path specified with the command line parameter `ingest_path` or the path of the current running seekstorm_server.exe is used.
@@ -76,19 +76,23 @@ If no `[api_key]` and `[index_id]` parameter are specified then the default demo
 If API key or index specified by `[api_key]` and `[index_id]` parameter do not yet exist they have to be created prior to ingest via REST API endpoints:
 
 create api key: Use master API key displayed in the server console at startup.
-```
-curl --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
+```bash
+curl -X POST http://127.0.0.1/api/v1/apikey \
+  -H 'apikey: <MASTER_API_KEY>' -H 'content-type: application/json' \
+  -d '{"indices_max":10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit":100000}'
 ```
 
 create index: Use individual API key (use create api key above to generate)
-```
-curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","store": true,"field": "title","index_lexical": true,"boost":10.0},{"field_type": "Text","store": true,"field": "body","index_lexical": true},{"field_type": "String","store": true,"field": "url","index_lexical": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
+```bash
+curl -X POST http://127.0.0.1/api/v1/index \
+  -H 'apikey: <API_KEY>' -H 'content-type: application/json' \
+  -d '{"index_config":{"name":"test_index","lexical_similarity":"Bm25fProximity","tokenizer":"UnicodeAlphanumeric"},"schema":[{"field":"title","field_type":"Text","store":true,"index_lexical":true,"boost":10.0},{"field":"body","field_type":"Text","store":true,"index_lexical":true,"longest":true},{"field":"url","field_type":"String32","store":true,"index_lexical":false}],"synonyms":[]}'
 ```
 
 &#x26A0; **CAUTION**: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
 
 
-After ingest you can search the index via [REST API endpoints](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints) or via [browser in the embedded web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser).  
+After ingest you can search the index via [REST API endpoints](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#rest-api-endpoints) or via [browser in the embedded web UI](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#open-embedded-web-ui-in-browser).  
 The field names to display in the web UI can be automatically detected or pre-defined. 
 
 <br><br>
@@ -126,187 +130,68 @@ Per default the web UI is set to the [Wikipedia demo](https://github.com/SeekSto
 To overwrite the default **API key** and **index_id** use url parameters: [http://127.0.0.1/?api_key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&index_id=0](http://127.0.0.1/?api_key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&index_id=0).  
 This allows to open an web UI to multiple indices in different web browser tabs simultaneously.
 
-If the default names defined in [master.js](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/web/js/master.js) for `TITLE_FIELD`, `TEXT_FIELD` and `URL_FIELD` do not exist in the schema of the selected index, then the first three fields (stored=true) from the index schema are automatically used for display in the web UI instead.
+If the default names defined in [master.js](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/web/js/master.js) for `TITLE_FIELD`, `TEXT_FIELD` and `URL_FIELD` do not exist in the schema of the selected index, then the first three fields (stored=true) from the index schema are automatically used for display in the web UI instead.
 
-To permanently change the default **API key** or **index_id** of the embedded Web UI modify `API_KEY` and `INDEX_ID` in [/src/seekstorm_server/web/js/master.js](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/web/js/master.js) **before** building the seekstorm_server (html/css/js are embedded ressources).  
-To permanently change the default **field names** from the index schema that are used in the web UI modify `TITLE_FIELD`, `TEXT_FIELD` and `URL_FIELD` [/src/seekstorm_server/web/js/master.js](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/web/js/master.js) **before** building the seekstorm_server.
+To permanently change the default **API key** or **index_id** of the embedded Web UI modify `API_KEY` and `INDEX_ID` in [/src/seekstorm_server/web/js/master.js](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/web/js/master.js) **before** building the seekstorm_server (html/css/js are embedded ressources).  
+To permanently change the default **field names** from the index schema that are used in the web UI modify `TITLE_FIELD`, `TEXT_FIELD` and `URL_FIELD` [/src/seekstorm_server/web/js/master.js](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/web/js/master.js) **before** building the seekstorm_server.
 
 The embedded Web UI is intended for demonstration, test and debugging rather than for end customer use.
 
-## REST API endpoints
+## REST API
 
-See full [documentation of the REST API](https://seekstorm.com/documentation/).
+The server exposes a REST API for API keys, indices, documents and search (lexical, vector and hybrid).
 
-You can use a REST client like [Bruno](https://www.usebruno.com/) or the VSC extension [Rest client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) to execute API calls, inspect responses and generate code snippets in your language:  
-[**interactive API endpoint examples**](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)
+- 📖 **[Full API reference](https://seekstorm.com/documentation/)** (OpenAPI, generated from the server code)
+- ▶️ **[Interactive examples](https://github.com/SeekStorm/SeekStorm/blob/master/src/seekstorm_server/test_api.rest)**: open `test_api.rest` in VS Code with the [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension, or import the OpenAPI spec into [Bruno](https://www.usebruno.com/) / Postman
+- 🧰 **[Client SDKs](https://github.com/SeekStorm/SeekStorm/tree/main/seekstorm_client)** for Rust, Python, TypeScript, C# and Java, if you prefer idiomatic code over raw HTTP
 
-&#x26A0; **CAUTION**: If sending CURL commands from MS Windows Powershell use 'curl.exe' instead of 'curl' AND escape (\") all double quotes within the JSON request object!
+&#x26A0; **WARNING**: Set the `MASTER_KEY_SECRET` environment variable to a secret before generating API keys, otherwise your generated API keys will be compromised.
 
+### Quick start with curl
 
-### create api key
-Use the **master API key** displayed in the server console at startup.
-WARNING: make sure to set the MASTER_KEY_SECRET environment variable to a secret, otherwise your generated API keys will be compromised.
-```
-curl --request POST --url http://127.0.0.1:80/api/v1/apikey --header 'apikey: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' --header 'content-type: application/json' --data '{"indices_max": 10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit": 100000}'
-```
-### delete api key
-```
-curl --request DELETE --url http://127.0.0.1/api/v1/apikey --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --header 'user-agent: vscode-restclient'
-```
+The examples assume the server runs on `http://127.0.0.1` (port 80). If you use the Docker command above, use `http://127.0.0.1:8000`.
 
----
+**1. Create an API key** with the master API key displayed in the server console at startup:
 
-### create index
-```
-curl --request POST --url http://127.0.0.1:80/api/v1/index --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"schema":[{"field_type": "Text","store": true,"field": "title","index_lexical": true,"boost":10.0},{"field_type": "Text","store": true,"field": "body","index_lexical": true},{"field_type": "String","store": true,"field": "url","index_lexical": false}],"index_name": "test_index","similarity": "Bm25fProximity","tokenizer": "UnicodeAlphanumeric"}'
-```
-### get index
-```
-curl --request GET --url http://127.0.0.1/api/v1/index/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
+```bash
+curl -X POST http://127.0.0.1/api/v1/apikey \
+  -H 'apikey: <MASTER_API_KEY>' -H 'content-type: application/json' \
+  -d '{"indices_max":10,"indices_size_max":100000,"documents_max":10000000,"operations_max":10000000,"rate_limit":100000}'
 ```
 
-### delete index
-```
-curl --request DELETE --url http://127.0.0.1/api/v1/index/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
+The response is your API key. Use it as the `apikey` header in all following calls.
+
+**2. Create an index** (returns the `index_id`, here `0`):
+
+```bash
+curl -X POST http://127.0.0.1/api/v1/index \
+  -H 'apikey: <API_KEY>' -H 'content-type: application/json' \
+  -d '{"index_config":{"name":"test_index","lexical_similarity":"Bm25fProximity","tokenizer":"UnicodeAlphanumeric"},"schema":[{"field":"title","field_type":"Text","store":true,"index_lexical":true,"boost":10.0},{"field":"body","field_type":"Text","store":true,"index_lexical":true,"longest":true},{"field":"url","field_type":"String32","store":true,"index_lexical":false}],"synonyms":[]}'
 ```
 
-### commit index
-```
-curl --request PATCH --url http://127.0.0.1/api/v1/index/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
-```
----
+**3. Index documents** (a single document or an array):
 
-### index document(s)
-
-single document
-```
-curl --request POST --url http://127.0.0.1:80/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"title":"title1 test","body":"body1","url":"url1"}'
+```bash
+curl -X POST http://127.0.0.1/api/v1/index/0/doc \
+  -H 'apikey: <API_KEY>' -H 'content-type: application/json' \
+  -d '[{"title":"title2","body":"body2 test","url":"url2"},{"title":"title3 test","body":"body3 test","url":"url3"}]'
 ```
 
-multiple documents
-```
-curl --request POST --url http://127.0.0.1:80/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --header 'user-agent: vscode-restclient' --data '[{"title":"title2","body":"body2 test","url":"url2"},{"title":"title3 test","body":"body3 test","url":"url3"}]'
+**4. Search:**
+
+```bash
+curl -X POST http://127.0.0.1/api/v1/index/0/query \
+  -H 'apikey: <API_KEY>' -H 'content-type: application/json' \
+  -d '{"query_string":"test","offset":0,"length":10,"include_uncommitted":true}'
 ```
 
-### index PDF file 
+New documents become searchable immediately with `include_uncommitted: true`. Call `PATCH /api/v1/index/0` to commit them to disk.
 
-- converts pdf to text and indexes it
-- extracts title from metatag, or first line of text, or from filename
-- extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
-- copies all ingested pdf files to "files" subdirectory in index
-- the following index schema is required (and automatically created by the console `ingest` command):
-```json
- [
-   {
-     "field": "title",
-     "store": true,
-     "index_lexical": true,
-     "field_type": "Text",
-     "boost": 10
-   },
-   {
-     "field": "body",
-     "store": true,
-     "index_lexical": true,
-     "field_type": "Text"
-   },
-   {
-     "field": "url",
-     "store": true,
-     "index_lexical": false,
-     "field_type": "Text"
-   },
-   {
-     "field": "date",
-     "store": true,
-     "index_lexical": false,
-     "field_type": "Timestamp",
-     "facet": true
-   }
- ]
-```
+&#x26A0; **Windows PowerShell**: use `curl.exe` instead of `curl`, and escape all double quotes inside the JSON body (`\"`).
 
-create index
-```
-curl.exe --request POST --url 'http://127.0.0.1/api/v1/index' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{\"schema\":[{\"field\": \"title\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true,\"boost\":10.0},{\"field\": \"body\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": true},{\"field\": \"url\", \"field_type\": \"Text\",\"stored\": true, \"indexed\": false},{\"field\": \"date\", \"field_type\": \"Timestamp\",\"stored\": true, \"indexed\": true, \"facet\": true}],\"index_name\": \"pdf_index\",\"similarity\": \"Bm25fProximity\",\"tokenizer\": \"UnicodeAlphanumeric\"}'
-```
+### Other endpoints
 
-index PDF
-```
-curl.exe --request POST --url 'http://127.0.0.1/api/v1/index/0/file' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/pdf' --header 'file: C:\Users\johndoe\Downloads\odsceast2018.pdf' --data-binary '@C:\Users\johndoe\Downloads\odsceast2018.pdf'
-```
-
-### get PDF file 
-
-get PDF file bytes from file folder in index
-```
-curl --request GET --url http://127.0.0.1/api/v1/index/0/file/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
-```
-
-### get document 
-
-without highlight
-```
-curl --request GET --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
-```
-
-with highlight
-```
-curl --request GET --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"query_terms": ["test"],"fields": ["title", "body"],"highlights": [{ "field": "title", "fragment_number": 0, "fragment_size": 1000, "highlight_markup": true},{ "field": "body", "fragment_number": 2, "fragment_size": 160, "highlight_markup": true},{ "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}]}'
-```
-### update document(s) 
-
-update document
-```
-curl --request PATCH --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[0,{"title":"title1 test","body":"body1","url":"url1"}]'
-```
-
-update documents
-```
-curl --request PATCH --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[[1,{"title":"title1 test","body":"body1","url":"url1"}],[2,{"title":"title3 test","body":"body3 test","url":"url3"}]]'
-```
-
-### delete document(s) 
-
-delete document, by single document ID in URL parameter
-```
-curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc/0 --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
-```
-
-delete document, by single document ID in JSON request object
-```
-curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data 0
-```
-
-delete documents, by vector of document IDs in JSON request object
-```
-curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '[0,1]'
-```
-
-delete documents, by query in JSON request object
-```
-curl --request DELETE --url http://127.0.0.1/api/v1/index/0/doc --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"query":"test","offset":0,"length":10,"realtime": true,"field_filter": ["title", "body"]}'
-```
-
---- 
-
-### query index (GET)
-
-wit URL parameter
-```
-curl --request GET --url 'http://127.0.0.1/api/v1/index/0/query?query=test&offset=0&length=10' --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json'
-```
-
-with JSON parameter
-```
-curl --request GET --url http://127.0.0.1/api/v1/index/0/query --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"query":"test","offset":0,"length":10,"realtime": true,"field_filter": ["title", "body"]}'
-```
-
-### query index (POST)
-
-```
-curl --request POST --url http://127.0.0.1/api/v1/index/0/query --header 'apikey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' --header 'content-type: application/json' --data '{"query":"test","offset":0,"length":10,"realtime": true,"field_filter": ["title", "body"]}'
-```
+Document update/delete/get (with highlighting), PDF upload and download, the document iterator, vector and hybrid search, faceting, sorting, and index and API-key management are covered in the [API reference](https://seekstorm.com/documentation/) and in `test_api.rest`.
 
 ## Building
 

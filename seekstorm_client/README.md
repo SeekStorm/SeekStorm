@@ -113,7 +113,7 @@ let result = CLIENT
 # tokio_test::block_on(async {
 use seekstorm::{
     index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType, IndexConfig
     }, vector::Inference,
 };
 use seekstorm_client_rs::api_endpoints::RestClient;
@@ -129,22 +129,19 @@ let schema_json = r#"
   {"field":"url","field_type":"Text","store":false,"index_lexical":false}]"#;
 let schema = serde_json::from_str(schema_json).unwrap();
 
-let create_index_request = CreateIndexRequest {
-  index_name: "test_index".into(),
-  similarity: LexicalSimilarity::Bm25f,
-  tokenizer: TokenizerType::UnicodeAlphanumeric,
-  stemmer: StemmerType::None,
-  stop_words: StopwordType::None,
-  frequent_words: FrequentwordType::English,
-  synonyms: Vec::new(), //not supported in REST API?
-  ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
-  document_compression: DocumentCompression::Snappy,
-  spelling_correction: None,
-  query_completion: None,
-  clustering: Clustering::None,
-  inference: Inference::None,
-  schema,
+let index_config = IndexConfig {
+    name: "test_index".into(),
+    lexical_similarity: LexicalSimilarity::Bm25f,
+    tokenizer: TokenizerType::UnicodeAlphanumeric,
+    frequent_words: FrequentwordType::English,
+    ..Default::default()
 };
+let create_index_request = CreateIndexRequest {
+    index_config,
+    schema,
+    synonyms: Vec::new(),
+};
+
 let result = CLIENT
   .create_index(BASE_URL, DEMO_API_KEY, &create_index_request)
  .await;
@@ -237,8 +234,8 @@ CLIENT.delete_documents_by_docid(BASE_URL, DEMO_API_KEY, 0, docid_vec).await;
 # tokio_test::block_on(async {
 use seekstorm::{
     index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, SearchRequestObject, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    }, search::{QueryRewriting, QueryType, ResultType, SearchMode}, vector::Inference,
+        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    }, search::{QueryRewriting, QueryType, ResultType, SearchMode, SearchRequest, DocumentOption}, vector::Inference,
 };
 use seekstorm_client_rs::api_endpoints::RestClient;
 use std::sync::LazyLock;
@@ -249,7 +246,7 @@ pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
 
 let query = "test".into();
 
-let search_request_object = SearchRequestObject {
+let search_request_object = SearchRequest {
   query_string: query,
   query_vector: None,
   enable_empty_query: false,
@@ -258,15 +255,18 @@ let search_request_object = SearchRequestObject {
   result_type: ResultType::TopkCount,
   query_type_default: QueryType::Intersection,
   search_mode: SearchMode::Lexical,
-  realtime: false,
+  include_uncommitted: false,
   query_rewriting: QueryRewriting::SearchOnly,
-  highlights: Vec::new(),
-  fields: Vec::new(),
   field_filter: Vec::new(),
   facet_filter: Vec::new(),
-  distance_fields: Vec::new(),
   query_facets: Vec::new(),
   result_sort: Vec::new(),
+  return_documents: Some(DocumentOption {
+                        // Return all fields.
+                        fields: Vec::new(),
+                        distance_fields: Vec::new(),
+                        highlights: Vec::new(),
+                    }),
 };
 
 CLIENT.delete_documents_by_query(BASE_URL, DEMO_API_KEY, 0, &search_request_object).await;
@@ -318,8 +318,8 @@ let result = CLIENT.commit_index(BASE_URL, DEMO_API_KEY, 0).await;
 # tokio_test::block_on(async {
 use seekstorm::{
     index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, SearchRequestObject, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    }, search::{QueryRewriting, QueryType, ResultType, SearchMode}, vector::Inference,
+        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    }, search::{QueryRewriting, QueryType, ResultType, SearchMode, SearchRequest}, vector::Inference,
 };
 use seekstorm_client_rs::api_endpoints::RestClient;
 use std::sync::LazyLock;
@@ -328,31 +328,20 @@ pub static BASE_URL: &str = "http://127.0.0.1:80";
 pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
 
-let query = "test".into();
-
-let search_request_object = SearchRequestObject {
-  query_string: query,
-  query_vector: None,
-  enable_empty_query: false,
+let search_request_object = SearchRequest {
+  query_string: "test",
   offset: 0,
   length: 10,
   result_type: ResultType::TopkCount,
   query_type_default: QueryType::Intersection,
   search_mode: SearchMode::Lexical,
-  realtime: false,
   query_rewriting: QueryRewriting::SearchOnly,
-  highlights: Vec::new(),
-  fields: Vec::new(),
-  field_filter: Vec::new(),
-  facet_filter: Vec::new(),
-  distance_fields: Vec::new(),
-  query_facets: Vec::new(),
-  result_sort: Vec::new(),
+  ..Default::default()
 };
 let result_object = CLIENT.query_index(BASE_URL, DEMO_API_KEY, 0,search_request_object).await;
 
 // ### display results
-for result in result_object.as_ref().unwrap().results.iter() {
+for result in result_object.as_ref().unwrap().documents.iter() {
   println!("result {:?} rank {:?} body field {:?}" , result.get("_id"),result.get("_score"), result.get("body"));
 }
 println!("result counts {} {} {}",result_object.as_ref().unwrap().results.len(), result_object.as_ref().unwrap().count, result_object.as_ref().unwrap().count_total);

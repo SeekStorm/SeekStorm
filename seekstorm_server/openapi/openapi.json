@@ -1,5 +1,5 @@
 {
-  "openapi": "3.1.0",
+  "openapi": "3.2.0",
   "info": {
     "title": "SeekStorm REST API documentation",
     "description": "Vector & lexical search engine library & multi-tenancy server",
@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "4.0.1"
+    "version": "5.0.0"
   },
   "servers": [
     {
@@ -149,7 +149,7 @@
                   },
                   "demo": {
                     "type": "boolean",
-                    "description": "create fixed demo api key instead of random api key for demo purposes (default=false)"
+                    "description": "create fixed demo api key instead of random api key for demonstration, example, and documentation purposes (default=false)"
                   }
                 }
               }
@@ -240,6 +240,19 @@
               "examples": {
                 "Example: Hybrid index": {
                   "value": {
+                    "index_config": {
+                      "name": "wikipedia",
+                      "lexical_similarity": "Bm25fProximity",
+                      "tokenizer": "UnicodeAlphanumeric",
+                      "clustering": "Auto",
+                      "inference": {
+                        "Model2Vec": {
+                          "model": "PotionBase2M",
+                          "chunk_size": 1000,
+                          "quantization": "ScalarQuantizationI8"
+                        }
+                      }
+                    },
                     "schema": [
                       {
                         "field": "title",
@@ -263,21 +276,16 @@
                         "index_vector": false
                       }
                     ],
-                    "index_name": "wikipedia",
-                    "similarity": "Bm25fProximity",
-                    "tokenizer": "UnicodeAlphanumeric",
-                    "clustering": "Auto",
-                    "inference": {
-                      "Model2Vec": {
-                        "model": "PotionBase2M",
-                        "chunk_size": 1000,
-                        "quantization": "ScalarQuantizationI8"
-                      }
-                    }
+                    "synonyms": []
                   }
                 },
                 "Example: Lexical index": {
                   "value": {
+                    "index_config": {
+                      "name": "wikipedia",
+                      "lexical_similarity": "Bm25fProximity",
+                      "tokenizer": "UnicodeAlphanumeric"
+                    },
                     "schema": [
                       {
                         "field": "title",
@@ -300,13 +308,23 @@
                         "index_lexical": false
                       }
                     ],
-                    "index_name": "wikipedia",
-                    "similarity": "Bm25fProximity",
-                    "tokenizer": "UnicodeAlphanumeric"
+                    "synonyms": []
                   }
                 },
                 "Example: Vector index": {
                   "value": {
+                    "index_config": {
+                      "name": "sift1m",
+                      "clustering": "Auto",
+                      "inference": {
+                        "External": {
+                          "dimensions": 128,
+                          "precision": "F32",
+                          "quantization": "ScalarQuantizationI8",
+                          "similarity": "Euclidean"
+                        }
+                      }
+                    },
                     "schema": [
                       {
                         "field": "vector",
@@ -323,16 +341,7 @@
                         "index_vector": false
                       }
                     ],
-                    "index_name": "sift1m",
-                    "clustering": "Auto",
-                    "inference": {
-                      "External": {
-                        "dimensions": 128,
-                        "precision": "F32",
-                        "quantization": "ScalarQuantizationI8",
-                        "similarity": "Euclidean"
-                      }
-                    }
+                    "synonyms": []
                   }
                 }
               }
@@ -477,7 +486,7 @@
           "Index"
         ],
         "summary": "Commit Index",
-        "description": "Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM\nto the final compressed data structure (roaring bitmap) on Mmap or disk -\nwhich is persistent, more compact, with lower query latency and allows search with realtime=false.\nCommit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).\nThere is no way to prevent this automatic commit by not manually invoking it.\nBut commit can also be invoked manually at any time at any number of newly indexed documents.\ncommit is a **hard commit** for persistence on disk. A **soft commit** for searchability\nis invoked implicitly with every index_doc,\ni.e. the document can immediately searched and included in the search results\nif it matches the query AND the query parameter realtime=true is enabled.\n**Use commit with caution, as it is an expensive operation**.\n**Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.\nBefore terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.\nThere are only 2 reasons that justify a manual commit:\n1. if you want to search newly indexed documents without using realtime=true for search performance reasons or\n2. if after indexing new documents there won't be more documents indexed (for some time),\n   so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,\n   but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.",
+        "description": "Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM\nto the final compressed data structure (roaring bitmap) on Mmap or disk -\nwhich is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.\nCommit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).\nThere is no way to prevent this automatic commit by not manually invoking it.\nBut commit can also be invoked manually at any time at any number of newly indexed documents.\ncommit is a **hard commit** for persistence on disk. A **soft commit** for searchability\nis invoked implicitly with every index_doc,\ni.e. the document can immediately searched and included in the search results\nif it matches the query AND the query parameter include_uncommitted=true is enabled.\n**Use commit with caution, as it is an expensive operation**.\n**Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.\nBefore terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.\nThere are only 2 reasons that justify a manual commit:\n1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or\n2. if after indexing new documents there won't be more documents indexed (for some time),\n   so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,\n   but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.",
         "operationId": "commit_index",
         "parameters": [
           {
@@ -726,7 +735,7 @@
           "Document"
         ],
         "summary": "Index Document(s)",
-        "description": "Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nIndex documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.",
+        "description": "Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nIndex documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.",
         "operationId": "index_document",
         "parameters": [
           {
@@ -1246,17 +1255,17 @@
           }
         ],
         "requestBody": {
-          "description": "Specifies the document(s) to delete by different request objects\n- 'clear' : delete all documents in index (clear index)\n- u64 : delete single doc ID\n- [u64] : delete array of doc ID \n- SearchRequestObject : delete documents by query",
+          "description": "Specifies the document(s) to delete by different request objects\n- 'clear' : delete all documents in index (clear index)\n- u64 : delete single doc ID\n- [u64] : delete array of doc ID \n- SearchRequest : delete documents by query",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SearchRequestObject"
+                "$ref": "#/components/schemas/SearchRequest"
               },
               "example": {
                 "query": "test",
                 "offset": 0,
                 "length": 10,
-                "realtime": false,
+                "include_uncommitted": false,
                 "field_filter": [
                   "title",
                   "body"
@@ -1294,7 +1303,7 @@
           "Document"
         ],
         "summary": "Update Document(s)",
-        "description": "Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nUpdate document is a combination of delete_document and index_document.\nAll current limitations of delete_document apply.\nUpdate documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.",
+        "description": "Update a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.\nUpdate document is a combination of delete_document and index_document.\nAll current limitations of delete_document apply.\nUpdate documents enables true real-time search (as opposed to near realtime.search):\nWhen in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.\nTherefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.",
         "operationId": "update_document",
         "parameters": [
           {
@@ -1740,7 +1749,7 @@
             "example": 0
           },
           {
-            "name": "query",
+            "name": "query_string",
             "in": "query",
             "description": "query string",
             "required": true,
@@ -1774,7 +1783,7 @@
             "example": 10
           },
           {
-            "name": "realtime",
+            "name": "include_uncommitted",
             "in": "query",
             "description": "include uncommitted documents",
             "required": true,
@@ -1800,7 +1809,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchResultObject"
+                  "$ref": "#/components/schemas/SearchResult"
                 }
               }
             }
@@ -1850,33 +1859,34 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SearchRequestObject"
+                "$ref": "#/components/schemas/SearchRequest"
               },
               "examples": {
                 "Example: Hybrid search": {
                   "value": {
-                    "query": "detroit",
+                    "query_string": "detroit",
                     "query_vector": null,
                     "enable_empty_query": false,
                     "offset": 0,
                     "length": 10,
                     "result_type": "TopkCount",
-                    "realtime": true,
-                    "highlights": [
-                      {
-                        "field": "",
-                        "name": "",
-                        "fragment_number": 0,
-                        "fragment_size": 0,
-                        "highlight_markup": true,
-                        "pre_tags": "",
-                        "post_tags": ""
-                      }
-                    ],
+                    "include_uncommitted": true,
+                    "return_documents": {
+                      "highlights": [
+                        {
+                          "field": "",
+                          "name": "",
+                          "fragment_number": 0,
+                          "fragment_size": 0,
+                          "highlight_markup": true,
+                          "pre_tags": "",
+                          "post_tags": ""
+                        }
+                      ]
+                    },
                     "field_filter": [
                       "title"
                     ],
-                    "fields": [],
                     "query_type_default": "Intersection",
                     "query_rewriting": "SearchOnly",
                     "search_mode": {
@@ -1891,28 +1901,29 @@
                 },
                 "Example: Lexical search": {
                   "value": {
-                    "query": "detroit",
+                    "query_string": "detroit",
                     "query_vector": null,
                     "enable_empty_query": false,
                     "offset": 0,
                     "length": 10,
                     "result_type": "TopkCount",
-                    "realtime": true,
-                    "highlights": [
-                      {
-                        "field": "",
-                        "name": "",
-                        "fragment_number": 0,
-                        "fragment_size": 0,
-                        "highlight_markup": true,
-                        "pre_tags": "",
-                        "post_tags": ""
-                      }
-                    ],
+                    "include_uncommitted": true,
+                    "return_documents": {
+                      "highlights": [
+                        {
+                          "field": "",
+                          "name": "",
+                          "fragment_number": 0,
+                          "fragment_size": 0,
+                          "highlight_markup": true,
+                          "pre_tags": "",
+                          "post_tags": ""
+                        }
+                      ]
+                    },
                     "field_filter": [
                       "title"
                     ],
-                    "fields": [],
                     "query_type_default": "Intersection",
                     "query_rewriting": "SearchOnly",
                     "search_mode": "Lexical"
@@ -1920,7 +1931,7 @@
                 },
                 "Example: Vector search": {
                   "value": {
-                    "query": "",
+                    "query_string": "",
                     "query_vector": [
                       0.001,
                       0.002,
@@ -2054,7 +2065,7 @@
                     "offset": 0,
                     "length": 10,
                     "result_type": "Topk",
-                    "realtime": false,
+                    "include_uncommitted": false,
                     "search_mode": {
                       "Vector": {
                         "similarity_threshold": 0.7,
@@ -2076,7 +2087,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchResultObject"
+                  "$ref": "#/components/schemas/SearchResult"
                 }
               }
             }
@@ -2096,6 +2107,14 @@
   },
   "components": {
     "schemas": {
+      "AccessType": {
+        "type": "string",
+        "description": "Defines where the index resides during search:\n- Ram (the complete index is preloaded to Ram when opening the index)\n- Mmap (the index is accessed via memory-mapped files). See architecture.md for details.\n- At commit the data is serialized to disk for persistence both in Ram and Mmap mode.\n- The serialization format is identical for Ram and Mmap mode, allowing to change it retrospectively.",
+        "enum": [
+          "Ram",
+          "Mmap"
+        ]
+      },
       "AnnMode": {
         "oneOf": [
           {
@@ -2191,14 +2210,13 @@
         "type": "object",
         "description": "Create index request object",
         "required": [
-          "index_name",
+          "index_config",
           "schema"
         ],
         "properties": {
-          "index_name": {
-            "type": "string",
-            "description": "Index name, used for informational purposes only.",
-            "example": "demo_index"
+          "index_config": {
+            "$ref": "#/components/schemas/IndexConfig",
+            "description": "Index configuration for the new index."
           },
           "schema": {
             "type": "array",
@@ -2236,36 +2254,6 @@
               }
             ]
           },
-          "similarity": {
-            "$ref": "#/components/schemas/LexicalSimilarity",
-            "description": "Specify similarity measure for the index: (default=Bm25fProximity). The similarity function is used to calculate the relevance score of search results for a given search query. The choice of similarity function can affect search performance and relevance, depending on the characteristics of the text being indexed and the search queries being executed."
-          },
-          "tokenizer": {
-            "$ref": "#/components/schemas/TokenizerType",
-            "description": "Specify tokenizer type for the index: (default=UnicodeAlphanumeric). The tokenizer is used to split text into tokens for indexing and searching. The choice of tokenizer can affect search performance and relevance, depending on the language and characteristics of the text being indexed."
-          },
-          "stemmer": {
-            "$ref": "#/components/schemas/StemmerType",
-            "description": "Specify stemmer"
-          },
-          "stop_words": {
-            "$ref": "#/components/schemas/StopwordType",
-            "description": "Specify stop words for the index. Stop words are not indexed and not searched for. This can be used to reduce index size and improve search performance by excluding high-frequency, low-information terms from the index."
-          },
-          "frequent_words": {
-            "$ref": "#/components/schemas/FrequentwordType",
-            "description": "Specify frequent words for the index. Frequent words are used to optimize search performance for high-frequency terms."
-          },
-          "ngram_indexing": {
-            "type": "integer",
-            "format": "int32",
-            "description": "Specify n-gram indexing for the index. N-gram indexing can improve search performance for certain types of queries.\nThe n-gram set is defined as a bitwise combination of the following values:\n- NgramSet::SingleTerm = 0b00000000,,\n- NgramSet::NgramFF = 0b00000001, (Ngram frequent frequent)\n- NgramSet::NgramFR = 0b00000010, (Ngram frequent rare)\n- NgramSet::NgramRF = 0b00000011, (Ngram rare frequent)\n- NgramSet::NgramFFF = 0b00000100, (Ngram frequent frequent frequent)\n- NgramSet::NgramRFF = 0b00000101, (Ngram rare frequent frequent)\n- NgramSet::NgramFFR = 0b00000110, (Ngram frequent frequent rare)\n- NgramSet::NgramFRF = 0b00000111, (Ngram frequent rare frequent)\n\nFor example, to enable both NgramFF and NgramFFF, set ngram_indexing to 5 (1 | 4).\nNote: enabling n-gram indexing (ngram_indexing>0) will increase index size and indexing time, but improves search performance of phrase queries with frequent terms.",
-            "minimum": 0
-          },
-          "document_compression": {
-            "$ref": "#/components/schemas/DocumentCompression",
-            "description": "Enable document compression for the index. This can reduce the index size on disk and in memory, but may increase indexing and search latency. Default: Snappy compression."
-          },
           "synonyms": {
             "type": "array",
             "items": {
@@ -2283,36 +2271,6 @@
                 "multiway": false
               }
             ]
-          },
-          "spelling_correction": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/SpellingCorrection",
-                "description": "Enable spelling correction for search queries using the SymSpell algorithm.\nWhen enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.\nIn addition you need to set the parameter `query_rewriting` in the search method to enable it per query.\nThe creation of an individual dictionary derived from the indexed documents improves the correction quality compared to a generic dictionary.\nAn dictionary per index improves the privacy compared to a global dictionary derived from all indices.\nThe dictionary is deleted when delete_index or clear_index is called.\nNote: enabling spelling correction increases the index size, indexing time and query latency.\nDefault: None. Enable by setting a value for max_dictionary_edit_distance (1..2 recommended).\nThe higher the value, the higher the number of errors that can be corrected - but also the memory consumption, lookup latency, and the number of false positives."
-              }
-            ]
-          },
-          "query_completion": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/QueryCompletion",
-                "description": "Enable query completion for search queries using a prefix dictionary. When enabled, a prefix dictionary is incrementally created during indexing of documents and stored in the index. The prefix dictionary is used to generate suggestions for query completion based on the indexed documents. In addition you need to set the parameter `query_rewriting` in the search method to enable it per query. Note: enabling query completion increases the index size, indexing time and query latency."
-              }
-            ]
-          },
-          "clustering": {
-            "$ref": "#/components/schemas/Clustering",
-            "description": "Enable clustering for vector search."
-          },
-          "inference": {
-            "$ref": "#/components/schemas/Inference",
-            "description": "Enable inference for search and indexing. This can be used to create vector representations of documents and queries for semantic search, e.g. by using a model like PotionBase2M."
           }
         }
       },
@@ -2361,6 +2319,33 @@
           "Snappy",
           "Zstd"
         ]
+      },
+      "DocumentOption": {
+        "type": "object",
+        "description": "Options for document retrieval",
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specify names of fields to return in the search results, where SchemaField.store is set at index time. If empty then all stored fields are returned."
+          },
+          "distance_fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DistanceField"
+            },
+            "description": "Specify distance fields to derive at query time and return in the search results."
+          },
+          "highlights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "description": "Specify field names where to create keyword-in-context fragments and highlight query terms."
+          }
+        }
       },
       "FacetFilter": {
         "oneOf": [
@@ -3277,6 +3262,80 @@
           }
         }
       },
+      "IndexConfig": {
+        "type": "object",
+        "description": "Specifies LexicalSimilarity, TokenizerType and AccessType when creating an new index",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Index name, used for informational purposes only."
+          },
+          "lexical_similarity": {
+            "$ref": "#/components/schemas/LexicalSimilarity",
+            "description": "LexicalSimilarity defines the lexical similarity measure for the index and affects the scoring and ranking of the search results: Bm25f or Bm25fProximity (default=Bm25f).\nThe similarity function is used to calculate the relevance score of search results for a given search query.\nThe choice of similarity function can affect search performance and relevance, depending on the characteristics of the text being indexed and the search queries being executed."
+          },
+          "tokenizer": {
+            "$ref": "#/components/schemas/TokenizerType",
+            "description": "TokenizerType defines the tokenizer behavior: AsciiAlphabetic, UnicodeAlphanumeric, UnicodeAlphanumericFolded, UnicodeAlphanumericZH"
+          },
+          "stemmer": {
+            "$ref": "#/components/schemas/StemmerType",
+            "description": "StemmerType defines the stemming behavior: None, Arabic, Armenian, Danish, Dutch, English, French, German, Greek, Hungarian, Italian, Norwegian, Portuguese, Romanian, Russian, Spanish, Swedish, Tamil, Turkish"
+          },
+          "stop_words": {
+            "$ref": "#/components/schemas/StopwordType",
+            "description": "StopwordType defines the stopword behavior: None, English, German, French, Spanish, Custom.\nStopwords are removed, both from index and query: for compact index size and faster queries, by excluding high-frequency, low-information terms from the index.\nStopword removal has drawbacks: “The Who”, “Take That”, “Let it be”, “To be or not to be”, \"The The\", \"End of days\", \"What might have been\" are all valid queries for bands, songs, movies, literature,\nbut become impossible when stopwords are removed.\nThe lists of stop_words and frequent_words should not overlap."
+          },
+          "frequent_words": {
+            "$ref": "#/components/schemas/FrequentwordType",
+            "description": "FrequentwordType defines the frequentword behavior: None, English, German, French, Spanish, Custom.\nSpecify frequent words for the index. Frequent words are used to optimize search performance for high-frequency terms.\nAdjacent frequent terms are combined to bi-grams, both in index and query: for shorter posting lists and faster phrase queries (only for bi-grams of frequent terms), at the cost of higher index size.\nThe lists of stop_words and frequent_words should not overlap."
+          },
+          "ngram_indexing": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Specify n-gram indexing for the index. N-grams are indexed in addition to single terms, for fast phrase search, at the cost of higher index size\nPreference valid both for index time and query time. Any change requires reindexing.\nThe n-gram set is defined as a bitwise OR combination of the following flags:\nNgramSet::SingleTerm = 0b00000000, always enabled in addition to the other optional NgramSet below\nNgramSet::NgramFF    = 0b00000001, frequent frequent\nNgramSet::NgramFR    = 0b00000010, frequent rare\nNgramSet::NgramRF    = 0b00000100, rare frequent\nNgramSet::NgramFFF   = 0b00001000, frequent frequent frequent\nNgramSet::NgramRFF   = 0b00010000, rare frequent frequent\nNgramSet::NgramFFR   = 0b00100000, frequent frequent rare\nNgramFRF   = 0b01000000, frequent rare frequent\nFor example, to enable both NgramFF and NgramFFF, set ngram_indexing to 9 (1 | 8).\nNote: enabling n-gram indexing (ngram_indexing>0) will increase index size and indexing time, but improves search performance of phrase queries with frequent terms.\nWhen **minimum index size** is more important than phrase query latency, we recommend **Single Terms**:\n`NgramSet::SingleTerm as u8`\nFor a **good balance of latency and index size** cost, we recommend **Single Terms + Frequent Bigrams + Frequent Trigrams** (default):\n`NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8`\nWhen **minimal phrase query latency** is more important than low index size, we recommend **Single Terms + Mixed Bigrams + Frequent Trigrams**:\n`NgramSet::SingleTerm as u8 | NgramSet::NgramFF as u8 | NgramSet::NgramFR as u8 | NgramSet::NgramRF as u8 | NgramSet::NgramFFF as u8`",
+            "minimum": 0
+          },
+          "document_compression": {
+            "$ref": "#/components/schemas/DocumentCompression",
+            "description": "Compression algorithm for document store: None, Snappy, Lz4, Zstd\nEnable document compression for the index. This can reduce the index size on disk and in memory, but may increase indexing and search latency. Default: Snappy compression."
+          },
+          "access_type": {
+            "$ref": "#/components/schemas/AccessType",
+            "description": "AccessType defines where the index resides during search: Ram or Mmap"
+          },
+          "spelling_correction": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SpellingCorrection",
+                "description": "Enable spelling correction for search queries using the SymSpell algorithm.\nSymSpell enables finding those spelling suggestions in a dictionary very fast with minimum Damerau-Levenshtein edit distance and maximum word occurrence frequency.\nWhen enabled, a SymSpell dictionary is incrementally created during indexing of documents and stored in the index.\nThe spelling correction is not based on a generic dictionary, but on a domain specific one derived from your indexed documents (only indexed fields).\nThis makes it language independent and prevents any discrepancy between corrected word and indexed content.\nThe creation of an individual dictionary derived from the indexed documents improves the correction quality compared to a generic dictionary.\nAn dictionary per index improves the privacy compared to a global dictionary derived from all indices.\nThe dictionary is deleted when delete_index or clear_index is called.\nNote: enabling spelling correction increases the index size, indexing time and query latency.\nDefault: None. Enable by setting CreateDictionary with values for max_dictionary_edit_distance (1..2 recommended) and optionally a term length thresholds for each edit distance.\nThe higher the value, the higher the number of errors that can be corrected - but also the memory consumption, lookup latency, and the number of false positives.\nSpelling corrections are generated only from fields with `index_lexical=true` and `dictionary_source=true` set in the schema.\nif disabled, then a manually generated dictionary can be used: {index_path}/dictionary.csv\n⚠️ In addition to setting the [`IndexConfig`] parameter `spelling_correction` in create_index() you also need to set the [`SearchRequest`] parameter `query_rewriting` in search() to enable it per query.\n⚠️ Deriving spelling corrections from indexed documents and enabling `query_rewriting` increases the index size, indexing time and query latency."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "query_completion": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QueryCompletion",
+                "description": "Enable query completion for search queries using a prefix dictionary (auto-completion list).\nWhen enabled, a prefix dictionary is incrementally created during indexing of documents and stored in the index.\nThe prefix dictionary is used to generate suggestions for query completion based on the indexed documents.\nBecause the completions are not based on a generic dictionary, but on a domain specific one derived from your indexed documents, this increases the relevance of completions.\nCompletions are generated only from fields with `index_lexical=true` and  `completion_source=true` set in the schema.\nif disabled, then a manually generated completion list can be used: {index_path}/completions.csv\n⚠️ In addition to setting the [`IndexConfig`] parameter `query_completion` in create_index() you also need to set the [`SearchRequest`] parameter `query_rewriting` in search() to enable it per query.\n⚠️ Deriving completions from indexed documents and enabling `query_rewriting` increases the index size, indexing time and query latency."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clustering": {
+            "$ref": "#/components/schemas/Clustering",
+            "description": "Enable clustering for vector search: clustering defines the clustering behavior for approximate nearest neighbor (ANN) search: None, Auto, Fixed(usize)."
+          },
+          "inference": {
+            "$ref": "#/components/schemas/Inference",
+            "description": "vector source: External vectors field (Json array field or Base64 encoded text field) or internal vector generation from text field via model2vec"
+          }
+        }
+      },
       "IndexResponseObject": {
         "type": "object",
         "description": "Index response object",
@@ -3302,6 +3361,10 @@
             "type": "string",
             "description": "Index name",
             "example": "demo_index"
+          },
+          "index_config": {
+            "$ref": "#/components/schemas/IndexConfig",
+            "description": "Index configuration"
           },
           "schema": {
             "type": "object",
@@ -4370,7 +4433,7 @@
                       "type": "integer",
                       "minimum": 0
                     },
-                    "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                    "description": "Term length thresholds for each edit distance.\n  None    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\])    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
                   "complete": {
                     "type": [
@@ -4428,7 +4491,7 @@
                       "type": "integer",
                       "minimum": 0
                     },
-                    "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                    "description": "Term length thresholds for each edit distance.\n  None    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\])    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
                   "complete": {
                     "type": [
@@ -4486,7 +4549,7 @@
                       "type": "integer",
                       "minimum": 0
                     },
-                    "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                    "description": "Term length thresholds for each edit distance.\n  None    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\])    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
                   "complete": {
                     "type": [
@@ -4520,6 +4583,23 @@
           "Phrase",
           "Not"
         ]
+      },
+      "QueryVector": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Base64-encoded raw vector bytes."
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Vector as array of numbers."
+          }
+        ],
+        "description": "Query vector for semantic search.\nJSON string = base64-encoded vector, JSON array = numeric values.\nThe element type (f32 or i8) is taken from the index's vector field definition at search time."
       },
       "RangeF32": {
         "type": "object",
@@ -4738,13 +4818,78 @@
           }
         }
       },
+      "Result": {
+        "type": "object",
+        "required": [
+          "doc_id",
+          "score",
+          "field_id",
+          "chunk_id",
+          "level_id",
+          "shard_id",
+          "cluster_id",
+          "cluster_score",
+          "vector_score",
+          "lexical_score",
+          "source"
+        ],
+        "properties": {
+          "doc_id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "score": {
+            "type": "number",
+            "format": "float"
+          },
+          "field_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "chunk_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "level_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "shard_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "cluster_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "cluster_score": {
+            "type": "number",
+            "format": "float"
+          },
+          "vector_score": {
+            "type": "number",
+            "format": "float"
+          },
+          "lexical_score": {
+            "type": "number",
+            "format": "float"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ResultSource"
+          }
+        }
+      },
       "ResultSort": {
         "type": "object",
         "description": "Specifies the sort order for the search results.",
         "required": [
           "field",
-          "order",
-          "base"
+          "order"
         ],
         "properties": {
           "field": {
@@ -4761,6 +4906,15 @@
           }
         }
       },
+      "ResultSource": {
+        "type": "string",
+        "description": "Defines the source of search results, which can be lexical, vector-based, or a hybrid of both.",
+        "enum": [
+          "Lexical",
+          "Vector",
+          "Hybrid"
+        ]
+      },
       "ResultType": {
         "type": "string",
         "description": "The following result types are supported:\n- **Count** (count all results that match the query, but returning top-k results is not required)\n- **Topk** (returns the top-k results per query, but counting all results that match the query is not required)\n- **TopkCount** (returns the top-k results per query + count all results that match the query)",
@@ -4774,10 +4928,7 @@
         "type": "object",
         "description": "Defines a field in index schema: field, stored, indexed , field_type, facet, boost.",
         "required": [
-          "field",
-          "store",
-          "index_lexical",
-          "field_type"
+          "field"
         ],
         "properties": {
           "field": {
@@ -4790,11 +4941,11 @@
           },
           "index_lexical": {
             "type": "boolean",
-            "description": "only indexed fields can be searched"
+            "description": "only indexed fields can be searched\nEven if index_lexical is true in the schema, the field in the actual document is optional. You can index documents without that field, but you cannot search for that field in those documents."
           },
           "index_vector": {
             "type": "boolean",
-            "description": "only indexed fields can be searched"
+            "description": "only indexed fields can be searched\nEven if index_vector is true in the schema, the field in the actual document is optional. You can index documents without that field, but you cannot search for that field in those documents."
           },
           "field_type": {
             "$ref": "#/components/schemas/FieldType",
@@ -4802,7 +4953,7 @@
           },
           "facet": {
             "type": "boolean",
-            "description": "optional faceting for a field\nFaceting can be enabled both for string field type and numerical field types.\nboth numerical and string fields can be indexed (indexed=true) and stored (stored=true) in the json document,\nbut with field_facet=true they are additionally stored in a binary format, for fast faceting and sorting without docstore access (decompression, deserialization)"
+            "description": "optional faceting for a field\nFaceting can be enabled both for string field type and numerical field types.\nboth numerical and string fields can be indexed (index_lexical=true) and stored (stored=true) in the json document,\nbut with field_facet=true they are additionally stored in a binary format, for fast faceting and sorting without docstore access (decompression, deserialization)"
           },
           "longest": {
             "type": "boolean",
@@ -4815,11 +4966,11 @@
           },
           "dictionary_source": {
             "type": "boolean",
-            "description": "if both indexed=true and dictionary_source=true then the terms from this field are added to dictionary to the spelling correction dictionary.\nif disabled, then a manually generated dictionary can be used: {index_path}/dictionary.csv"
+            "description": "if both `index_lexical=true` and `dictionary_source=true` then the terms from this field are added to dictionary to the spelling correction dictionary.\nif disabled, then a manually generated dictionary can be used: {index_path}/dictionary.csv"
           },
           "completion_source": {
             "type": "boolean",
-            "description": "if both indexed=true and completion_source=true then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.\nif disabled, then a manually generated completion list can be used: {index_path}/completions.csv\nit is recommended to enable completion_source only for fields that contain short text with high-quality terms for auto-completion, e.g. title, author, category, product name, tags,\nin order to keep the extraction time and RAM requirement for completions low and the completions relevance high."
+            "description": "if both `index_lexical=true` and `completion_source=true` then the n-grams (unigrams, bigrams, trigrams) from this field are added to the auto-completion list.\nif disabled, then a manually generated completion list can be used: {index_path}/completions.csv\nit is recommended to enable completion_source only for fields that contain short text with high-quality terms for auto-completion, e.g. title, author, category, product name, tags,\nin order to keep the extraction time and RAM requirement for completions low and the completions relevance high."
           }
         }
       },
@@ -4895,19 +5046,26 @@
         ],
         "description": "Specifies the default QueryMode: The following query modes are supported:"
       },
-      "SearchRequestObject": {
+      "SearchRequest": {
         "type": "object",
         "description": "Search request object",
-        "required": [
-          "query"
-        ],
         "properties": {
-          "query": {
+          "query_string": {
             "type": "string",
-            "description": "Query string, search operators + - \"\" are recognized."
+            "description": "Query string, search operators `+` `-` `\"\"` are recognized.",
+            "default": ""
           },
           "query_vector": {
-            "description": "Optional query vector: If None, then the query vector is derived from the query string using the specified model. If Some, then the query vector is used for semantic search and the query string is only used for lexical search and highlighting."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QueryVector",
+                "description": "Optional query vector: If None, then the query vector is derived from the query string using the specified model.\nIf Some, then the query vector is used for semantic search and the query string is only used for lexical search and highlighting."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "enable_empty_query": {
             "type": "boolean",
@@ -4924,114 +5082,112 @@
           },
           "length": {
             "type": "integer",
-            "description": "Number of search results to return.",
+            "description": "Number of search results to return.\nWith length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.",
             "default": 10,
             "example": 10,
             "minimum": 1
           },
           "result_type": {
             "$ref": "#/components/schemas/ResultType",
-            "description": "Specify the type of search result."
+            "description": "Specify the type of search results to return: Count, Topk, TopkCount.\nFacets are only returned for Count and TopkCount, because Topk only returns the top-k results and does no exhaustive counting.",
+            "default": "TopkCount"
           },
-          "realtime": {
+          "include_uncommitted": {
             "type": "boolean",
-            "description": "True realtime search: include indexed, but uncommitted documents into search results."
-          },
-          "highlights": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Highlight"
-            },
-            "description": "Specify field names where to create keyword-in-context fragments and highlight query terms."
+            "description": "True real-time search: include indexed, but uncommitted documents into search results.",
+            "default": false
           },
           "field_filter": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If empty then all indexed fields are searched.",
+            "description": "Specify field names where to search at query time, whereas SchemaField.indexed is set at index time. If empty then all indexed fields are searched.\nField filters are active *during* vector and lexical search.",
             "example": [
               "title"
-            ]
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Specify names of fields to return in the search results, where SchemaField.store is set at indextime. If empty then all stored fields are returned."
-          },
-          "distance_fields": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DistanceField"
-            },
-            "description": "Specify distance fields to derive at query time and return in the search results."
+            ],
+            "default": []
           },
           "query_facets": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/QueryFacet"
             },
-            "description": "Facets to return with search results: if empty then no facets are returned. Facets are only enabled on facet fields that are defined in schema at create_index!"
+            "description": "Facets to return with search results: Must be set if facets should be returned in [`SearchResult`]. If empty then no facets are returned.\nFacets are only enabled on facet fields that are defined in schema at create_index!\nQuery facets are active *during* vector and lexical search.\nFacet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.\nThe prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.\nThe length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.\nIf the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.\nThe facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.\nExamples:\n```rust ,no_run\nuse seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};\nlet query_facets = vec![QueryFacet::String16 {field: \"language\".into(),prefix: \"ger\".into(),length: 5},QueryFacet::String16 {field: \"brand\".into(),prefix: \"a\".into(),length: 5}];\nlet query_facets = vec![QueryFacet::U8 {field: \"age\".into(), range_type: RangeType::CountWithinRange, ranges: vec![(\"0-20\".into(), 0),(\"20-40\".into(), 20), (\"40-60\".into(), 40),(\"60-80\".into(), 60), (\"80-100\".into(), 80)]}];\nlet query_facets = vec![QueryFacet::Point {field: \"location\".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ (\"0-200\".into(), 0.0),(\"200-400\".into(), 200.0), (\"400-600\".into(), 400.0), (\"600-800\".into(), 600.0), (\"800-1000\".into(), 800.0)]}];\n```",
+            "default": []
           },
           "facet_filter": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FacetFilter"
             },
-            "description": "Facet filters to filter search results by facet values: if empty then no facet filters are applied. Facet filters are only enabled on facet fields that are defined in schema at create_index!"
+            "description": "Facet filters to filter search results by facet values: if empty then no facet filters are applied. Facet filters are only enabled on facet fields that are defined in schema at create_index!\nSearch results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.\nFacet filters are active *during* vector and lexical search.\nThe filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.\nIf the query is changed and/or the facet filter is changed then both search results and facet counts are changed:\nthe query facets are counted over all documents matching the query and the facet filter.\n  Examples:\n```rust ,no_run\nuse seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue, FacetFilter};\nlet facet_filter=vec![FacetFilter::String16{field:\"language\".into(),filter:vec![\"german\".into()]},FacetFilter::String16{field:\"brand\".into(),filter:vec![\"apple\".into(),\"google\".into()]}];\nlet facet_filter=vec![FacetFilter::U8{field:\"age\".into(),filter: 21..65}];\nlet facet_filter = vec![FacetFilter::Point {field: \"location\".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];\n```",
+            "default": []
           },
           "result_sort": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ResultSort"
             },
-            "description": "Sort field and order:\nSearch results are sorted by the specified facet field, either in ascending or descending order.\nIf no sort field is specified, then the search results are sorted by rank in descending order per default.\nMultiple sort fields are combined by a \"sort by, then sort by\"-method (\"tie-breaking\"-algorithm).\nThe results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,\nuntil the n-th field value is either not equal or the last field is reached.\nA special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.\nSort is only enabled on facet fields that are defined in schema at create_index!\nExamples:\n- result_sort = vec![ResultSort {field: \"price\".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: \"language\".into(), order: SortOrder::Ascending, base: FacetValue::None}];\n- result_sort = vec![ResultSort {field: \"location\".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];",
+            "description": "Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.\nIf no sort field is specified, then the search results are sorted by rank in descending order per default.\nMultiple sort fields are combined by a \"sort by, then sort by\"-method (\"tie-breaking\"-algorithm).\nThe results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,\nuntil the n-th field value is either not equal or the last field is reached.\nA special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.\nSort is only enabled on facet fields that are defined in schema at create_index!\nExamples:\n```rust ,no_run\nuse seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};\nlet result_sort = vec![ResultSort {field: \"price\".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: \"language\".into(), order: SortOrder::Ascending, base: FacetValue::None}];\nlet result_sort = vec![ResultSort {field: \"location\".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];\n```",
             "example": [
               {
                 "field": "date",
                 "order": "Ascending",
                 "base": "None"
               }
-            ]
+            ],
+            "default": []
           },
           "query_type_default": {
             "$ref": "#/components/schemas/QueryType",
-            "description": "Specify default query type: (default=Intersection). This can be overwritten by search operator within the query string (+-\"\")."
+            "description": "Specify default query type: (default=Union).\nThis can be overwritten by search operators within the query string (`+` `-` `\"\"`).\nThe interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.\n| `query_type_default` | query string      | meaning              |\n|----------------------|-------------------|----------------------|\n| `Union`              | `red apple`       | OR                   |\n| `Intersection`       | `red apple`       | AND                  |\n| `Union`              | `+red +apple`     | AND via operators    |\n| `Phrase`             | `red apple`       | phrase               |\n| `Union`              | `\\\"red apple\\\"`   | phrase via operators |\n| `Union`              | `apple -red`      | NOT                  |\n| `Union`              | `+\\\"the who\\\" +uk`| phrase + intersection|",
+            "default": "Union"
           },
           "query_rewriting": {
             "$ref": "#/components/schemas/QueryRewriting",
-            "description": "Specify query rewriting method for search query correction and completion: (default=SearchOnly)."
+            "description": "Specify query rewriting method for search query correction and completion: (default=SearchOnly).\nEnables query rewriting features such as spelling correction and query auto-completion (QAC).\nThe spelling correction of multi-term query strings handles three cases:\n1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`\n2. mistakenly omitted space between two correct terms led to one incorrect combined term: `modernart` -> `modern art`\n3. multiple independent input terms with/without spelling errors: `cinese indastrialication` -> `chinese industrialization`\n\nQuery correction/completion supports phrases \"\", but is disabled, if +- operators are used,  or if a opening quote is used after the first term, or if a closing quote is used before the last term.\nSee QueryRewriting enum for details.\n⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `index_config.spelling_correction`.\n\nFacets:\nIf query_string is empty and enable_empty_query is false, then no query is executed and index facets (collected at index time) are returned.\nOtherwise query facets (collected at query time) are returned, counted over the documents matching the query and the facet filter.\n\nFacets are defined in 3 different places:\n- the facet fields are defined in schema at create_index,\n- the facet field values are set in index_document at index time,\n- the query_facets/facet_filter search parameters are specified at query time.\n\nFacets are then returned in [`SearchResult`].",
+            "default": "SearchOnly"
           },
           "search_mode": {
             "$ref": "#/components/schemas/SearchMode",
-            "description": "Specify search mode: (default=Lexical)."
+            "description": "Specify search mode: (default=Lexical).",
+            "default": "Lexical"
+          },
+          "return_documents": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DocumentOption",
+                "description": "Specify options for returning documents in the search results.\nIf None, no documents are returned.\nIf Some, the specified options are used to control which fields, distance fields, and highlights are returned.\nIf you just want to return the full documents with all stored fields, without highlighting or distance fields, you can set this to `return_documents: Some(Default::default()),`"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         }
       },
-      "SearchResultObject": {
+      "SearchResult": {
         "type": "object",
-        "description": "Search result object",
+        "description": "Contains the results returned when searching the index.",
         "required": [
-          "time",
           "original_query",
           "query",
+          "query_terms",
           "offset",
           "length",
           "count",
           "count_total",
-          "query_terms",
+          "observed_vector_count",
+          "observed_cluster_count",
           "results",
+          "documents",
           "facets",
-          "suggestions"
+          "suggestions",
+          "time"
         ],
         "properties": {
-          "time": {
-            "type": "integer",
-            "description": "Time taken to execute the search query in nanoseconds",
-            "minimum": 0
-          },
           "original_query": {
             "type": "string",
             "description": "Search query string"
@@ -5039,6 +5195,13 @@
           "query": {
             "type": "string",
             "description": "Search query string after any automatic query correction or completion"
+          },
+          "query_terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Vector of search query terms. Can be used e.g. for custom highlighting."
           },
           "offset": {
             "type": "integer",
@@ -5052,22 +5215,32 @@
           },
           "count": {
             "type": "integer",
-            "description": "Number of returned search results matching the query",
+            "description": "Number of returned search results. Identical to results.len()",
             "minimum": 0
           },
           "count_total": {
             "type": "integer",
-            "description": "Total number of search results matching the query",
+            "description": "Total number of search results that match the query\ncount_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk",
             "minimum": 0
           },
-          "query_terms": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Vector of search query terms. Can be used e.g. for custom highlighting."
+          "observed_vector_count": {
+            "type": "integer",
+            "description": "number of vectors observed during search",
+            "minimum": 0
+          },
+          "observed_cluster_count": {
+            "type": "integer",
+            "description": "number of clusters observed during search",
+            "minimum": 0
           },
           "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Result"
+            },
+            "description": "List of search results: doc ID and BM25 score"
+          },
+          "documents": {
             "type": "array",
             "items": {
               "type": "object",
@@ -5080,7 +5253,7 @@
           },
           "facets": {
             "type": "object",
-            "description": "Facets with their values and corresponding document counts",
+            "description": "List of facet fields: field name and vector of unique values and their counts.\nUnique values and their counts are only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk",
             "additionalProperties": {
               "type": "array",
               "items": {
@@ -5106,7 +5279,12 @@
             "items": {
               "type": "string"
             },
-            "description": "Suggestions for query correction or completion"
+            "description": "Suggestions for auto complete and spelling correction."
+          },
+          "time": {
+            "type": "integer",
+            "description": "Time taken to execute the search query in nanoseconds",
+            "minimum": 0
           }
         }
       },
@@ -5120,7 +5298,7 @@
       },
       "SpellingCorrection": {
         "type": "object",
-        "description": "Defines spelling correction (fuzzy search) and dictionary generation settings for an index.",
+        "description": "Defines spelling correction (fuzzy search) and dictionary generation settings for an index.\n⚠️ Either set index_lexical=true and dictionary_source=true in the schema for a field, then a spelling correction dictionary is automatically derived from the terms in this field during indexing.\nOr place a manually generated frequency dictionary at the following location: {index_path}/dictionary.csv",
         "required": [
           "max_dictionary_edit_distance",
           "count_threshold",
@@ -5287,7 +5465,7 @@
       },
       "TokenizerType": {
         "type": "string",
-        "description": "Defines tokenizer behavior:\nAsciiAlphabetic\n- Mainly for for benchmark compatibility\n- Only ASCII alphabetic chars are recognized as token.\n\nUnicodeAlphanumeric\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.\n\nUnicodeAlphanumericFolded\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.\n- Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.\n- Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. \"s\" in \"someone's\").\n- Tokenizing might be slower due to folding and apostroph processing.\n\nUnicodeAlphanumericZH\n- Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.\n- Supports mixed Latin and Chinese texts\n- Supports Chinese sentence boundary chars for KWIC snippets ahd highlighting.\n- Requires feature #[cfg(feature = \"zh\")]",
+        "description": "Defines tokenizer behavior:\nAsciiAlphabetic\n- Mainly for for benchmark compatibility\n- Only ASCII alphabetic chars are recognized as token.\n\nUnicodeAlphanumeric\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.\n\nUnicodeAlphanumericFolded\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.\n- Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.\n- Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. \"s\" in \"someone's\").\n- Tokenizing might be slower due to folding and apostroph processing.\n\nUnicodeAlphanumericZH\n- Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.\n- Supports mixed Latin and Chinese texts\n- Supports Chinese sentence boundary chars for KWIC snippets and highlighting.\n- Requires feature #[cfg(feature = \"zh\")]",
         "enum": [
           "AsciiAlphabetic",
           "UnicodeAlphanumeric",

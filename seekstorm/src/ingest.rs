@@ -28,8 +28,8 @@ use walkdir::WalkDir;
 use crate::{
     commit::Commit,
     index::{
-        Document, FileType, INDEX_FORMAT_VERSION_MAJOR, INDEX_FORMAT_VERSION_MINOR, Index,
-        IndexArc, IndexDocument, Info, META_FILENAME,
+        Document, FileType, INDEX_CONFIG_FILENAME, INDEX_FORMAT_VERSION_MAJOR,
+        INDEX_FORMAT_VERSION_MINOR, Index, IndexArc, IndexDocument, Info,
     },
     utils::{dir_size, encode_bytes_to_base64_string, truncate},
     vector::{Embedding, Quantization, embedding_to_bytes_be},
@@ -658,7 +658,7 @@ pub async fn display_index_info(
 
     let index_path = index_ref.index_path_string.clone();
     let level_count = index_ref.level_count().await;
-    let file_date = metadata(Path::new(&index_path).join(META_FILENAME))
+    let file_date = metadata(Path::new(&index_path).join(INDEX_CONFIG_FILENAME))
         .unwrap()
         .created()
         .unwrap();
@@ -710,7 +710,7 @@ pub async fn display_index_info(
         },
         Info {
             entry: "index id, name",
-            value: index_ref.meta.id.to_string() + " " + &index_ref.meta.name,
+            value: index_ref.index_config.id.to_string() + " " + &index_ref.index_config.name,
         },
         Info {
             entry: "index format version",
@@ -752,7 +752,7 @@ pub async fn display_index_info(
         },
         Info {
             entry: "document compression",
-            value: index_ref.meta.document_compression.to_string(),
+            value: index_ref.index_config.document_compression.to_string(),
         },
         Info {
             entry: "index size",
@@ -776,7 +776,7 @@ pub async fn display_index_info(
         },
         Info {
             entry: "n-grams",
-            value: format!("{:08b}", index_ref.meta.ngram_indexing),
+            value: format!("{:08b}", index_ref.index_config.ngram_indexing),
         },
         Info {
             entry: "facets",
@@ -784,11 +784,11 @@ pub async fn display_index_info(
         },
         Info {
             entry: "tokenizer",
-            value: index_ref.meta.tokenizer.to_string(),
+            value: index_ref.index_config.tokenizer.to_string(),
         },
         Info {
             entry: "stemmer",
-            value: index_ref.meta.stemmer.to_string(),
+            value: index_ref.index_config.stemmer.to_string(),
         },
         Info {
             entry: "stop words",
@@ -814,7 +814,7 @@ pub async fn display_index_info(
         },
         Info {
             entry: "similarity",
-            value: index_ref.meta.lexical_similarity.to_string(),
+            value: index_ref.index_config.lexical_similarity.to_string(),
         },
         Info {
             entry: "Vector",
@@ -858,11 +858,11 @@ pub async fn display_index_info(
         },
         Info {
             entry: "inference",
-            value: index_ref.meta.inference.to_string(),
+            value: index_ref.index_config.inference.to_string(),
         },
         Info {
             entry: "clustering",
-            value: index_ref.meta.clustering.to_string(),
+            value: index_ref.index_config.clustering.to_string(),
         },
         Info {
             entry: "similarity",
@@ -1000,6 +1000,7 @@ pub async fn display_index_info(
 #[allow(async_fn_in_trait)]
 /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
 /// The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+///
 /// Parameters:
 /// - `has_header`: if true, the first line of the csv file is treated as header. Field names are always taken from schema in order.
 /// - `flexible`: if true, allows variable number of fields per record, otherwise all records must have the same number of fields.
@@ -1013,6 +1014,7 @@ pub async fn display_index_info(
 pub trait IngestCsv {
     /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
     /// The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+    ///
     /// Parameters:
     /// - `has_header`: if true, the first line of the csv file is treated as header. Field names are always taken from schema in order.
     /// - `flexible`: if true, allows variable number of fields per record, otherwise all records must have the same number of fields.
@@ -1039,6 +1041,7 @@ pub trait IngestCsv {
 impl IngestCsv for IndexArc {
     /// Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values).  
     /// The document ingestion is streamed without loading the whole document vector into memory to allow for unlimited file size while keeping RAM consumption low.
+    ///
     /// Parameters:
     /// - `has_header`: if true, the first line of the csv file is treated as header. Field names are always taken from schema in order.
     /// - `flexible`: if true, allows variable number of fields per record, otherwise all records must have the same number of fields.

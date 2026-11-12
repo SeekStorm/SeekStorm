@@ -8,7 +8,7 @@ use crate::{
         PostingListObjectQuery, QueueObject, ROARING_BLOCK_SIZE, Shard,
     },
     intersection::intersection_blockid,
-    search::{FilterSparse, Ranges, ResultType, SearchResult},
+    search::{FilterSparse, Ranges, ResultType, SearchResultObject},
     single::{single_blockid, single_docid},
     utils::{
         read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32, read_u64,
@@ -36,7 +36,7 @@ pub(crate) async fn union_docid<'a>(
     not_query_list: &mut [PostingListObjectQuery<'a>],
     block_id: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -268,7 +268,7 @@ pub(crate) async fn union_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -298,7 +298,7 @@ pub(crate) async fn union_blockid<'a>(
         }
 
         if !enable_inter_query_threading_multi {
-            if shard.meta.access_type == AccessType::Mmap {
+            if shard.index_config.access_type == AccessType::Mmap {
                 for query_list_item_mut in query_list.iter_mut() {
                     let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
                     query_list_item_mut.byte_array =
@@ -407,7 +407,7 @@ pub(crate) async fn union_scan_8<'a>(
     not_query_list: &mut [PostingListObjectQuery<'a>],
     block_id: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -602,7 +602,7 @@ pub(crate) async fn union_scan_32<'a>(
     not_query_list: &mut [PostingListObjectQuery<'a>],
     block_id: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -809,7 +809,7 @@ pub(crate) async fn union_scan_32<'a>(
 pub(crate) async fn union_count<'a>(
     shard: &'a Shard,
     result_count: &mut i32,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
 
     query_list: &mut [PostingListObjectQuery<'a>],
     not_query_list: &mut [PostingListObjectQuery<'a>],
@@ -864,6 +864,7 @@ pub(crate) async fn union_count<'a>(
                     result_count_local += runlength as u32 + 1;
                     for j in 0..=runlength {
                         let docid = startdocid + j;
+
                         bitmap_0[docid >> 3] |= 1 << (docid & 7);
                     }
                 }
@@ -1153,7 +1154,7 @@ pub(crate) async fn union_docid_2<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -1286,7 +1287,7 @@ pub(crate) async fn union_docid_3<'a>(
     not_query_list: &mut Vec<PostingListObjectQuery<'a>>,
 
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -1328,6 +1329,7 @@ pub(crate) async fn union_docid_3<'a>(
             }
         } else if query_list.len() >= 3 {
             let (heap_size_before, heap_min_before) = search_result.topk_candidates.heap_progress();
+
             intersection_blockid(
                 shard,
                 non_unique_query_list,

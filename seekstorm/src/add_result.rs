@@ -10,7 +10,7 @@ use crate::{
         SPEEDUP_FLAG, STOP_BIT, Shard, get_document_length_compressed_mmap,
     },
     min_heap,
-    search::{FilterSparse, Ranges, ResultType, SearchResult},
+    search::{FilterSparse, Ranges, ResultType, SearchResultObject},
     utils::{
         read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u8, read_u16, read_u32,
         read_u64,
@@ -96,7 +96,7 @@ pub(crate) fn add_result_singleterm_multifield(
     shard: &Shard,
     docid: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
 
     top_k: usize,
     result_type: &ResultType,
@@ -484,7 +484,7 @@ pub(crate) fn is_facet_filter(index: &Shard, facet_filter: &[FilterSparse], doci
 }
 
 #[inline]
-pub(crate) fn facet_count(shard: &Shard, search_result: &mut SearchResult, docid: usize) {
+pub(crate) fn facet_count(shard: &Shard, search_result: &mut SearchResultObject, docid: usize) {
     if !search_result.query_facets.is_empty() && !search_result.skip_facet_count {
         for (i, facet) in shard.facets.iter().enumerate() {
             if search_result.query_facets[i].length == 0 {
@@ -648,7 +648,7 @@ pub(crate) fn add_result_singleterm_singlefield(
     shard: &Shard,
     docid: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -879,7 +879,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
 
     if shard.indexed_field_vec.len() == 1 {
         let bm25_component =
-            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+            shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
             } else {
                 shard.level_index[block_id].document_length_compressed_array[0]
@@ -915,13 +915,13 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             }
         }
     } else if plo_single.ngram_type == NgramType::SingleTerm
-        || shard.meta.lexical_similarity == LexicalSimilarity::Bm25fProximity
+        || shard.index_config.lexical_similarity == LexicalSimilarity::Bm25fProximity
     {
         for field in field_vec.iter() {
             let field_id = field.0 as usize;
 
             let bm25_component =
-                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         shard,
                         field_id,
@@ -947,7 +947,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         shard,
                         field_id,
@@ -972,7 +972,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         shard,
                         field_id,
@@ -997,7 +997,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         shard,
                         field_id,
@@ -1022,7 +1022,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         shard,
                         field_id,
@@ -1047,7 +1047,7 @@ pub(crate) fn get_bm25f_singleterm_multifield(
             let field_id = field.0 as usize;
 
             let bm25_component =
-                shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+                shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                     get_document_length_compressed_mmap(
                         shard,
                         field_id,
@@ -1087,7 +1087,7 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
 
     if shard.indexed_field_vec.len() == 1 {
         let bm25_component =
-            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+            shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
             } else {
                 shard.level_index[block_id].document_length_compressed_array[0]
@@ -1124,7 +1124,7 @@ pub(crate) fn get_bm25f_singleterm_singlefield(
         let field_id = 0;
 
         let bm25_component =
-            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+            shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(
                     shard,
                     field_id,
@@ -1178,7 +1178,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
 
     if shard.indexed_field_vec.len() == 1 {
         let bm25_component =
-            shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+            shard.bm25_component_cache[if shard.index_config.access_type == AccessType::Mmap {
                 get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
             } else {
                 shard.level_index[block_id].document_length_compressed_array[0]
@@ -1236,7 +1236,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                shard.bm25_component_cache[if shard.meta.access_type
+                                shard.bm25_component_cache[if shard.index_config.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
@@ -1266,7 +1266,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                shard.bm25_component_cache[if shard.meta.access_type
+                                shard.bm25_component_cache[if shard.index_config.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
@@ -1297,7 +1297,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                shard.bm25_component_cache[if shard.meta.access_type
+                                shard.bm25_component_cache[if shard.index_config.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
@@ -1329,7 +1329,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                shard.bm25_component_cache[if shard.meta.access_type
+                                shard.bm25_component_cache[if shard.index_config.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
@@ -1360,7 +1360,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                shard.bm25_component_cache[if shard.meta.access_type
+                                shard.bm25_component_cache[if shard.index_config.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
@@ -1391,7 +1391,7 @@ pub(crate) fn get_bm25f_multiterm_multifield(
                         let field_id = field.0 as usize;
                         if bm25_component_vec[field_id] == 0.0 {
                             bm25_component_vec[field_id] =
-                                shard.bm25_component_cache[if shard.meta.access_type
+                                shard.bm25_component_cache[if shard.index_config.access_type
                                     == AccessType::Mmap
                                 {
                                     get_document_length_compressed_mmap(
@@ -1434,7 +1434,9 @@ pub(crate) fn get_bm25f_multiterm_singlefield(
     let mut bm25f = 0.0;
     let block_id = docid >> 16;
 
-    let bm25_component = shard.bm25_component_cache[if shard.meta.access_type == AccessType::Mmap {
+    let bm25_component = shard.bm25_component_cache[if shard.index_config.access_type
+        == AccessType::Mmap
+    {
         get_document_length_compressed_mmap(shard, 0, block_id, docid & 0b11111111_11111111)
     } else {
         shard.level_index[block_id].document_length_compressed_array[0][docid & 0b11111111_11111111]
@@ -2965,7 +2967,7 @@ pub(crate) fn add_result_multiterm_multifield(
     shard: &Shard,
     docid: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -3419,7 +3421,7 @@ pub(crate) fn add_result_multiterm_singlefield(
     shard: &Shard,
     docid: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,

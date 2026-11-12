@@ -7,7 +7,6 @@ use std::{
 };
 
 use itertools::Itertools;
-use serde_json::Value;
 use std::collections::HashSet;
 use utoipa::{OpenApi, openapi::OpenApiVersion};
 
@@ -15,19 +14,15 @@ use seekstorm::{
     commit::Commit,
     highlighter::highlighter,
     index::{
-        AccessType, ApikeyObject, ApikeyQuotaObject, Close, Clustering, CreateIndexRequest,
-        DeleteDocument, DeleteDocuments, DeleteDocumentsByQuery, Document, DocumentCompression,
-        FileType, FrequentwordType, GetDocumentRequest, GetIteratorRequest, IS_AVX2, IS_NEON,
-        IS_SYSTEM_LE, IndexArc, IndexDocument, IndexDocuments, IndexMetaObject,
-        IndexResponseObject, LexicalSimilarity, QueryCompletion, SchemaField, SearchRequestObject,
-        SearchResultObject, SpellingCorrection, StemmerType, StopwordType, Synonym, TokenizerType,
-        UpdateDocument, UpdateDocuments, create_index, open_index,
+        AccessType, ApikeyObject, ApikeyQuotaObject, Close, CreateIndexRequest, DeleteDocument,
+        DeleteDocuments, DeleteDocumentsByQuery, Document, FileType, GetDocumentRequest,
+        GetIteratorRequest, IS_AVX2, IS_NEON, IndexArc, IndexConfig, IndexDocument, IndexDocuments,
+        IndexResponseObject, SchemaField, Synonym, UpdateDocument, UpdateDocuments, create_index,
+        open_index,
     },
     ingest::IndexPdfBytes,
     iterator::{GetIterator, IteratorResult},
-    search::{Search, SearchMode},
-    utils::decode_bytes_from_base64_string,
-    vector::Inference,
+    search::{QueryRewriting, ResultType, Search, SearchRequest, SearchResult},
 };
 
 use crate::{VERSION, http_server::calculate_hash};
@@ -193,7 +188,7 @@ pub(crate) async fn open_all_indices(
                 }
             };
 
-            let index_id = index_arc.read().await.meta.id;
+            let index_id = index_arc.read().await.index_config.id;
 
             index_list.insert(index_id, index_arc);
         }
@@ -256,6 +251,11 @@ pub(crate) async fn open_all_apikeys(
         content = CreateIndexRequest,
         examples(
             ("Example: Lexical index" = (value = json!({
+                "index_config": {
+                    "name": "wikipedia",
+                    "lexical_similarity": "Bm25fProximity",
+                    "tokenizer": "UnicodeAlphanumeric",
+                },
 				"schema":[{
 					"field": "title", 
 					"field_type": "Text", 
@@ -276,11 +276,16 @@ pub(crate) async fn open_all_apikeys(
 					"store": true, 
 					"index_lexical": false
 				}],
-				"index_name": "wikipedia",
-				"similarity": "Bm25fProximity",
-				"tokenizer": "UnicodeAlphanumeric"
+				"synonyms": []
 			}))),
 			("Example: Hybrid index" = (value = json!({
+                "index_config": {
+                    "name": "wikipedia",
+                    "lexical_similarity": "Bm25fProximity",
+                    "tokenizer": "UnicodeAlphanumeric",
+                    "clustering": "Auto",
+                    "inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
+                },
 				"schema":[{
 					"field": "title", 
 					"field_type": "Text", 
@@ -302,13 +307,16 @@ pub(crate) async fn open_all_apikeys(
 					"index_lexical": false,
 					"index_vector": false
 				}],
-				"index_name": "wikipedia",
-				"similarity": "Bm25fProximity",
-				"tokenizer": "UnicodeAlphanumeric",
-				"clustering": "Auto",
-				"inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
+				"synonyms": []
 			}))),
             ("Example: Vector index" = (value = json!({
+                "index_config": {
+                    "name": "sift1m",
+                    "clustering": "Auto",
+                    "inference": {
+                        "External": { "dimensions": 128, "precision": "F32", "quantization": "ScalarQuantizationI8", "similarity": "Euclidean" }
+                    }
+                },
 				"schema":[
 				{
 					"field":"vector",
@@ -324,11 +332,7 @@ pub(crate) async fn open_all_apikeys(
 					"index_lexical":false,
 					"index_vector":false
 				}],
-				"index_name": "sift1m",
-				"clustering": "Auto",
-				"inference": {
-					"External": { "dimensions": 128, "precision": "F32", "quantization": "ScalarQuantizationI8", "similarity": "Euclidean" }
-				}
+				"synonyms": []
 			})))
         )
     ),
@@ -345,23 +349,12 @@ pub(crate) async fn open_all_apikeys(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_index_api<'a>(
     index_path: &'a PathBuf,
-    index_name: String,
     schema: Vec<SchemaField>,
-    lexical_similarity: LexicalSimilarity,
-    tokenizer: TokenizerType,
-    stemmer: StemmerType,
-    stop_words: StopwordType,
-    frequent_words: FrequentwordType,
-    ngram_indexing: u8,
-    document_compression: DocumentCompression,
     synonyms: Vec<Synonym>,
+    index_config: IndexConfig,
     force_shard_number: Option<usize>,
     apikey_object: &'a mut ApikeyObject,
-    spelling_correction: Option<SpellingCorrection>,
-    query_completion: Option<QueryCompletion>,
     mute: bool,
-    clustering: Clustering,
-    inference: Inference,
 ) -> u64 {
     let mut index_id: u64 = 0;
     for id in apikey_object.index_list.keys().sorted() {
@@ -377,27 +370,14 @@ pub(crate) async fn create_index_api<'a>(
         .join(index_id.to_string());
     fs::create_dir_all(&index_id_path).unwrap();
 
-    let meta = IndexMetaObject {
-        id: index_id,
-        name: index_name,
-        lexical_similarity,
-        tokenizer,
-        stemmer,
-        stop_words,
-        frequent_words,
-        ngram_indexing,
-        document_compression,
-        access_type: AccessType::Mmap,
-        spelling_correction,
-        query_completion,
-        clustering,
-        inference,
-        segment_number_bits: 11,
-    };
+    let index_config = index_config
+        .access_type(AccessType::Mmap)
+        .segment_number_bits(11)
+        .id(index_id);
 
     let index_arc = create_index(
         &index_id_path,
-        meta,
+        index_config,
         &schema,
         &synonyms,
         mute,
@@ -452,19 +432,19 @@ pub(crate) async fn delete_index_api(
 ///
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
-/// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+/// which is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.
 /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
 /// There is no way to prevent this automatic commit by not manually invoking it.
 /// But commit can also be invoked manually at any time at any number of newly indexed documents.
 /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
 /// is invoked implicitly with every index_doc,
 /// i.e. the document can immediately searched and included in the search results
-/// if it matches the query AND the query parameter realtime=true is enabled.
+/// if it matches the query AND the query parameter include_uncommitted=true is enabled.
 /// **Use commit with caution, as it is an expensive operation**.
 /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
 /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
 /// There are only 2 reasons that justify a manual commit:
-/// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+/// 1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
 ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
 ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
@@ -559,8 +539,9 @@ pub(crate) async fn get_index_info_api(
         Ok(IndexResponseObject {
             version: VERSION.to_string(),
             schema: index_ref.schema_map.clone(),
-            id: index_ref.meta.id,
-            name: index_ref.meta.name.clone(),
+            id: index_ref.index_config.id,
+            name: index_ref.index_config.name.clone(),
+            index_config: index_ref.index_config.clone(),
             indexed_doc_count: index_ref.indexed_doc_count().await,
             committed_doc_count: index_ref.committed_doc_count().await,
             operations_count: 0,
@@ -603,8 +584,9 @@ pub(crate) async fn get_apikey_indices_info_api(
         index_response_object_vec.push(IndexResponseObject {
             version: VERSION.to_string(),
             schema: index_ref.schema_map.clone(),
-            id: index_ref.meta.id,
-            name: index_ref.meta.name.clone(),
+            id: index_ref.index_config.id,
+            name: index_ref.index_config.name.clone(),
+            index_config: index_ref.index_config.clone(),
             indexed_doc_count: index_ref.indexed_doc_count().await,
             committed_doc_count: index_ref.committed_doc_count().await,
             operations_count: 0,
@@ -620,7 +602,7 @@ pub(crate) async fn get_apikey_indices_info_api(
 ///
 /// Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
 /// Index documents enables true real-time search (as opposed to near realtime.search):
-/// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+/// When in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
 /// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.
 #[utoipa::path(
     post,
@@ -841,7 +823,7 @@ pub(crate) async fn get_document_api(
 /// Update document is a combination of delete_document and index_document.
 /// All current limitations of delete_document apply.
 /// Update documents enables true real-time search (as opposed to near realtime.search):
-/// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+/// When in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
 /// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed **per shard** or on close_index for persistence.
 #[utoipa::path(
     patch,
@@ -936,11 +918,11 @@ pub(crate) async fn delete_document_by_parameter_api(
         ("apikey" = String, Header, description = "YOUR_SECRET_API_KEY",example="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
         ("index_id" = u64, Path, description = "index id"),
     ),
-    request_body(content = SearchRequestObject, description = "Specifies the document(s) to delete by different request objects\n- 'clear' : delete all documents in index (clear index)\n- u64 : delete single doc ID\n- [u64] : delete array of doc ID \n- SearchRequestObject : delete documents by query", content_type = "application/json", example=json!({
+    request_body(content = SearchRequest, description = "Specifies the document(s) to delete by different request objects\n- 'clear' : delete all documents in index (clear index)\n- u64 : delete single doc ID\n- [u64] : delete array of doc ID \n- SearchRequest : delete documents by query", content_type = "application/json", example=json!({
         "query":"test",
         "offset":0,
         "length":10,
-        "realtime": false,
+        "include_uncommitted": false,
         "field_filter": ["title", "body"]
     })),
 
@@ -975,18 +957,16 @@ pub(crate) async fn delete_documents_by_object_api(
 
 pub(crate) async fn delete_documents_by_query_api(
     index_arc: &IndexArc,
-    search_request: SearchRequestObject,
+    search_request: SearchRequest<'_>,
 ) -> Result<u64, String> {
     index_arc
         .delete_documents_by_query(
-            search_request.query_string.to_owned(),
-            search_request.query_type_default,
-            search_request.offset,
-            search_request.length,
-            search_request.realtime,
-            search_request.field_filter,
-            search_request.facet_filter,
-            search_request.result_sort,
+            search_request
+                .result_type(ResultType::Topk)
+                .query_rewriting(QueryRewriting::SearchOnly)
+                .query_facets(Vec::new())
+                .return_documents(None)
+                .include_uncommitted(true),
         )
         .await;
 
@@ -1177,54 +1157,56 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
 
 
     request_body(
-        content = SearchRequestObject,
+        content = SearchRequest,
         examples(
             ("Example: Lexical search" = (value = json!(  {
-        "query": "detroit",
+        "query_string": "detroit",
         "query_vector": null,
         "enable_empty_query": false,
         "offset": 0,
         "length": 10,
         "result_type": "TopkCount",
-        "realtime": true,
-        "highlights": [
-            {
-                "field": "",
-                "name": "",
-                "fragment_number": 0,
-                "fragment_size": 0,
-                "highlight_markup": true,
-                "pre_tags": "",
-                "post_tags": ""
-            }
-        ],
+        "include_uncommitted": true,
+        "return_documents": {
+            "highlights": [
+                {
+                    "field": "",
+                    "name": "",
+                    "fragment_number": 0,
+                    "fragment_size": 0,
+                    "highlight_markup": true,
+                    "pre_tags": "",
+                    "post_tags": ""
+                }
+            ]
+        },
         "field_filter": ["title"],
-        "fields": [],
         "query_type_default": "Intersection",
         "query_rewriting": "SearchOnly",
         "search_mode": "Lexical"
     }   ))),
 	("Example: Hybrid search" = (value = json!(  {
-        "query": "detroit",
+        "query_string": "detroit",
         "query_vector": null,
         "enable_empty_query": false,
         "offset": 0,
         "length": 10,
         "result_type": "TopkCount",
-        "realtime": true,
-        "highlights": [
-            {
-                "field": "",
-                "name": "",
-                "fragment_number": 0,
-                "fragment_size": 0,
-                "highlight_markup": true,
-                "pre_tags": "",
-                "post_tags": ""
-            }
-        ],
+        "include_uncommitted": true,
+        "return_documents": {
+            "highlights": [
+                {
+                    "field": "",
+                    "name": "",
+                    "fragment_number": 0,
+                    "fragment_size": 0,
+                    "highlight_markup": true,
+                    "pre_tags": "",
+                    "post_tags": ""
+                }
+            ]
+        },
         "field_filter": ["title"],
-        "fields": [],
         "query_type_default": "Intersection",
         "query_rewriting": "SearchOnly",
         "search_mode": {
@@ -1237,7 +1219,7 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
         }
     }  ))),
 ("Example: Vector search" = (value = json!(  {
-    "query":"",
+    "query_string":"",
     "query_vector": [
         0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010, 0.011, 0.012, 0.013,
         0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.020, 0.021, 0.022, 0.023, 0.024, 0.025, 0.026,
@@ -1253,7 +1235,7 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
     "offset":0,
     "length":10,
     "result_type": "Topk",
-    "realtime": false,
+    "include_uncommitted": false,
     "search_mode": {
         "Vector":{
             "similarity_threshold": 0.7, 
@@ -1265,7 +1247,7 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
         )
     ),
     responses(
-        (status = 200, description = "Results found, returns the SearchResultObject", body = SearchResultObject),
+        (status = 200, description = "Results found, returns the SearchResultObject", body = SearchResult),
         (status = BAD_REQUEST, description = "Request object incorrect"),
         (status = NOT_FOUND, description = "Index id does not exist"),
         (status = NOT_FOUND, description = "API key does not exist"),
@@ -1276,8 +1258,8 @@ pub(crate) async fn clear_index_api(index_arc: &IndexArc) -> Result<u64, String>
 )]
 pub(crate) async fn query_index_api_post(
     index_arc: &IndexArc,
-    search_request: SearchRequestObject,
-) -> SearchResultObject {
+    search_request: SearchRequest<'_>,
+) -> SearchResult {
     query_index_api(index_arc, search_request).await
 }
 
@@ -1294,14 +1276,14 @@ pub(crate) async fn query_index_api_post(
     params(
         ("apikey" = String, Header, description = "YOUR_SECRET_API_KEY",example="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
         ("index_id" = u64, Path, description = "index id", example=0),
-        ("query" = String, Query,  description = "query string", example="hello"),
+        ("query_string" = String, Query,  description = "query string", example="hello"),
         ("offset" = u64, Query,  description = "result offset", minimum = 0, example=0),
         ("length" = u64, Query,  description = "result length", minimum = 1, example=10),
-        ("realtime" = bool, Query,  description = "include uncommitted documents", example=false),
+        ("include_uncommitted" = bool, Query,  description = "include uncommitted documents", example=false),
         ("enable_empty_query" = bool, Query,  description = "allow empty query", example=false)
     ),
     responses(
-        (status = 200, description = "Results found, returns the SearchResultObject", body = SearchResultObject),
+        (status = 200, description = "Results found, returns the SearchResultObject", body = SearchResult),
         (status = BAD_REQUEST, description = "No query specified"),
         (status = NOT_FOUND, description = "Index id does not exist"),
         (status = NOT_FOUND, description = "API key does not exist"),
@@ -1312,125 +1294,25 @@ pub(crate) async fn query_index_api_post(
 )]
 pub(crate) async fn query_index_api_get(
     index_arc: &IndexArc,
-    search_request: SearchRequestObject,
-) -> SearchResultObject {
+    search_request: SearchRequest<'_>,
+) -> SearchResult {
     query_index_api(index_arc, search_request).await
 }
 
-use seekstorm::vector::{embedding_from_bytes_be, embedding_from_json};
-
 pub(crate) async fn query_index_api(
     index_arc: &IndexArc,
-    search_request: SearchRequestObject,
-) -> SearchResultObject {
+    search_request: SearchRequest<'_>,
+) -> SearchResult {
     let start_time = Instant::now();
 
-    let query_vector = if let Some(value) = search_request.query_vector
-        && search_request.search_mode != SearchMode::Lexical
-    {
-        match &value {
-            Value::String(string_base64) => {
-                if let Ok(bytes) = decode_bytes_from_base64_string(string_base64)
-                    && let Some(embedding) = embedding_from_bytes_be(
-                        &bytes,
-                        index_arc.read().await.vector_precision,
-                        index_arc.read().await.vector_dimensions_original,
-                        *IS_SYSTEM_LE,
-                    )
-                {
-                    Some(embedding)
-                } else {
-                    None
-                }
-            }
-            Value::Array(_) => embedding_from_json(
-                &value,
-                index_arc.read().await.vector_precision,
-                index_arc.read().await.vector_dimensions_original,
-            ),
-            _ => None,
-        }
-    } else {
-        None
-    };
-
-    let result_object = index_arc
-        .search(
-            search_request.query_string.to_owned(),
-            query_vector,
-            search_request.query_type_default,
-            search_request.search_mode,
-            search_request.enable_empty_query,
-            search_request.offset,
-            search_request.length,
-            search_request.result_type,
-            search_request.realtime,
-            search_request.field_filter,
-            search_request.query_facets,
-            search_request.facet_filter,
-            search_request.result_sort,
-            search_request.query_rewriting,
-        )
-        .await;
+    let result_object = index_arc.search(search_request).await;
 
     let elapsed_time = start_time.elapsed().as_nanos();
 
-    let mut results: Vec<Document> = Vec::new();
+    let mut result_object = result_object;
+    result_object.time = elapsed_time;
 
-    if !index_arc.read().await.stored_field_names.is_empty() {
-        let return_fields_filter = HashSet::from_iter(search_request.fields);
-
-        let highlighter_option = if search_request.highlights.is_empty() {
-            None
-        } else {
-            Some(
-                highlighter(
-                    index_arc,
-                    search_request.highlights,
-                    result_object.query_terms.clone(),
-                )
-                .await,
-            )
-        };
-
-        for result in result_object.results.iter() {
-            match index_arc
-                .read()
-                .await
-                .get_document(
-                    result.doc_id,
-                    search_request.realtime,
-                    &highlighter_option,
-                    &return_fields_filter,
-                    &search_request.distance_fields,
-                )
-                .await
-            {
-                Ok(doc) => {
-                    let mut doc = doc;
-                    doc.insert("_id".to_string(), result.doc_id.into());
-                    doc.insert("_score".to_string(), result.score.into());
-
-                    results.push(doc);
-                }
-                Err(_e) => {}
-            }
-        }
-    }
-
-    SearchResultObject {
-        original_query: result_object.original_query.to_owned(),
-        query: result_object.query.to_owned(),
-        time: elapsed_time,
-        offset: search_request.offset,
-        length: search_request.length,
-        count: result_object.results.len(),
-        count_total: result_object.result_count_total,
-        query_terms: result_object.query_terms,
-        results,
-        facets: result_object.facets,
-        suggestions: result_object.suggestions,
-    }
+    result_object
 }
 
 #[derive(OpenApi, Default)]

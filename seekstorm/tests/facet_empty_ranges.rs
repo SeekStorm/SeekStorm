@@ -5,11 +5,11 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, Document, DocumentCompression, FileType, FrequentwordType,
-    IndexDocument, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+    IndexConfig, IndexDocument, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
     TokenizerType, create_index,
 };
 use seekstorm::search::{
-    QueryFacet, QueryRewriting, QueryType, RangeType, ResultType, Search, SearchMode,
+    QueryFacet, QueryRewriting, QueryType, RangeType, ResultType, Search, SearchMode, SearchRequest,
 };
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
@@ -23,24 +23,13 @@ async fn repro_range_facet_empty_ranges_no_panic() {
     [{"field":"title","field_type":"Text","store":true,"index_lexical":true,"longest":true},
     {"field":"age","field_type":"U8","store":true,"index_lexical":false,"facet":true}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "repro_facet".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
-        frequent_words: FrequentwordType::None,
-        ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     };
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, None)
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, None)
         .await
         .unwrap();
 
@@ -56,24 +45,17 @@ async fn repro_range_facet_empty_ranges_no_panic() {
 
     // Sanity without facets: both docs match.
     let rlo = index_arc
-        .search(
-            "hello".into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::Count,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: "hello".into(),
+            query_type_default: QueryType::Union,
+            search_mode: SearchMode::Lexical,
+            length: 100,
+            result_type: ResultType::Count,
+            include_uncommitted: false,
+            ..Default::default()
+        })
         .await;
-    assert_eq!(rlo.result_count_total, 2, "setup: Count without facets");
+    assert_eq!(rlo.count_total, 2, "setup: Count without facets");
 
     // Same query + numeric range facet with EMPTY ranges: must not panic.
     // Pre-fix: `idx as u16 - 1` on Err(0) underflows in facet_count/union_count.
@@ -83,25 +65,16 @@ async fn repro_range_facet_empty_ranges_no_panic() {
         ranges: Vec::new(),
     }];
     let rlo = index_arc
-        .search(
-            "hello".into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            10,
-            ResultType::Count,
-            false,
-            Vec::new(),
+        .search(SearchRequest {
+            query_string: "hello".into(),
+            length: 10,
+            result_type: ResultType::Count,
             query_facets,
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+            ..Default::default()
+        })
         .await;
     assert_eq!(
-        rlo.result_count_total, 2,
+        rlo.count_total, 2,
         "Count with empty-ranges facet must still count matches"
     );
 

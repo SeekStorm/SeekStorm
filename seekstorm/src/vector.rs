@@ -1,7 +1,7 @@
 use crate::add_result::{facet_count, is_facet_filter};
 use crate::min_heap::MinHeap;
 use crate::search::{
-    FacetFilter, QueryFacet, ResultSortIndex, ResultType, SearchResult, get_query_facets,
+    FacetFilter, QueryFacet, ResultSortIndex, ResultType, SearchResultObject, get_query_facets,
     set_facet_filter_sparse, set_query_facets,
 };
 use crate::vector_similarity::VectorSimilarity;
@@ -9,7 +9,7 @@ use crate::{
     clustering::{ClusterHeader, Medoid, ParentMedoid},
     index::{Clustering, Document, FieldType, IS_SYSTEM_LE, Shard, ShardArc},
     min_heap,
-    search::ResultObject,
+    search::SearchResult,
     utils::decode_bytes_from_base64_string,
     vector_similarity::{
         AnnMode, QuantizedVector, QuerySimd, normalize_f32, normalize_f32_simd, quantize_f32_to_i8,
@@ -589,7 +589,7 @@ impl Shard {
                             self.vector_dimensions_original,
                         ) {
                             if self.vector_similarity == VectorSimilarity::Cosine
-                                && matches!(self.meta.inference, Inference::External { .. })
+                                && matches!(self.index_config.inference, Inference::External { .. })
                                 && let Embedding::F32(ref mut fvecs) = embedding
                             {
                                 if self.is_simd {
@@ -782,7 +782,7 @@ impl Shard {
                             )
                         {
                             if self.vector_similarity == VectorSimilarity::Cosine
-                                && matches!(self.meta.inference, Inference::External { .. })
+                                && matches!(self.index_config.inference, Inference::External { .. })
                                 && let Embedding::F32(ref mut fvecs) = embedding
                             {
                                 if self.is_simd {
@@ -1051,9 +1051,9 @@ impl Shard {
             self.embed_vector_shard().await;
         }
 
-        let enable_clustering = if let Clustering::Fixed(size) = self.meta.clustering {
+        let enable_clustering = if let Clustering::Fixed(size) = self.index_config.clustering {
             size > 1 && self.block_vector_buffer.len() >= 100
-        } else if let Clustering::None = self.meta.clustering {
+        } else if let Clustering::None = self.index_config.clustering {
             false
         } else {
             self.block_vector_buffer.len() >= 100
@@ -1121,11 +1121,11 @@ pub(crate) trait SearchVectorShard {
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
-    ) -> ResultObject;
+    ) -> SearchResult;
 }
 
 /// Defines the source of search results, which can be lexical, vector-based, or a hybrid of both.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, ToSchema)]
 pub enum ResultSource {
     /// Results obtained from traditional lexical search methods, such as BM25.
     #[default]
@@ -1202,7 +1202,7 @@ impl Shard {
                     level_id as u32,
                     0.0,
                     similarity,
-                    self.meta.id,
+                    self.index_config.id,
                 );
             }
         }
@@ -1221,8 +1221,8 @@ impl SearchVectorShard for ShardArc {
         field_filter: Vec<String>,
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
-    ) -> ResultObject {
-        let mut result_object: ResultObject = Default::default();
+    ) -> SearchResult {
+        let mut result_object: SearchResult = Default::default();
 
         if include_uncommitted && !self.read().await.chunks_string.is_empty() {
             self.write().await.embed_vector_shard().await;
@@ -1238,7 +1238,7 @@ impl SearchVectorShard for ShardArc {
             u32::MAX
         };
         let result_sort_index: Vec<ResultSortIndex> = Vec::new();
-        let mut search_result = SearchResult {
+        let mut search_result = SearchResultObject {
             topk_candidates: MinHeap::new(
                 0,
                 &shard_ref,
@@ -1400,7 +1400,7 @@ impl SearchVectorShard for ShardArc {
                         level_id as u32,
                         similarity,
                         similarity,
-                        shard_ref.meta.id,
+                        shard_ref.index_config.id,
                     );
                 }
 
@@ -1504,7 +1504,7 @@ impl SearchVectorShard for ShardArc {
                                     level_id as u32,
                                     *cluster_score,
                                     similarity,
-                                    shard_ref.meta.id,
+                                    shard_ref.index_config.id,
                                 );
                             }
                         }
@@ -1528,7 +1528,7 @@ impl SearchVectorShard for ShardArc {
                 #[cfg(feature = "vb")]
                 level_id: item.level_id,
                 #[cfg(feature = "vb")]
-                shard_id: shard_ref.meta.id as u32,
+                shard_id: shard_ref.index_config.id as u32,
                 #[cfg(feature = "vb")]
                 cluster_id: item.cluster_id,
                 #[cfg(feature = "vb")]
@@ -1551,8 +1551,8 @@ impl SearchVectorShard for ShardArc {
             result_object.results.push(result);
         }
 
-        result_object.result_count = top_k.len;
-        result_object.result_count_total = top_k.result_count_total;
+        result_object.count = top_k.len;
+        result_object.count_total = top_k.result_count_total;
         result_object.observed_vector_count = top_k.observed_vector_count;
         result_object.observed_cluster_count = observed_cluster_count;
 

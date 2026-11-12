@@ -19,13 +19,13 @@
 use num_format::Locale;
 use num_format::ToFormattedString;
 use seekstorm::index::{
-    AccessType, Clustering, DocumentCompression, FrequentwordType, IndexMetaObject,
-    LexicalSimilarity, NgramSet, SchemaField, StemmerType, StopwordType, TokenizerType,
-    create_index, open_index,
+    AccessType, Clustering, DocumentCompression, FrequentwordType, IndexConfig, LexicalSimilarity,
+    NgramSet, SchemaField, StemmerType, StopwordType, TokenizerType, create_index, open_index,
 };
 use seekstorm::ingest::IngestJson;
 use seekstorm::search::{
     FacetFilter, QueryFacet, QueryRewriting, QueryType, ResultSort, ResultType, Search, SearchMode,
+    SearchRequest,
 };
 use seekstorm::vector::Inference;
 use std::error::Error;
@@ -201,31 +201,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
             let schema: Vec<SchemaField> = serde_json::from_str(wikipedia_schema_json).unwrap();
 
-            let meta = IndexMetaObject {
-                id: 0,
+            let index_config = IndexConfig {
                 name: "wikipedia".to_string(),
                 lexical_similarity: LexicalSimilarity::Bm25f,
                 tokenizer: TokenizerType::AsciiAlphabetic,
-                stemmer: StemmerType::None,
-                stop_words: StopwordType::None,
-                frequent_words: FrequentwordType::English,
-                //ngram_indexing: NgramSet::SingleTerm as u8,
-                //ngram_indexing: NgramSet::NgramFF as u8,
                 ngram_indexing: NgramSet::SingleTerm as u8
                     | NgramSet::NgramFF as u8
                     | NgramSet::NgramFR as u8
                     | NgramSet::NgramRF as u8
                     | NgramSet::NgramFFF as u8,
-                document_compression: DocumentCompression::Snappy,
-                access_type: AccessType::Mmap,
-                spelling_correction: None,
-                query_completion: None,
-                clustering: Clustering::None,
-                inference: Inference::None,
-                segment_number_bits: 11,
+                ..Default::default()
             };
 
-            let mut index_arc = create_index(&index_path, meta, &schema, &Vec::new(), false, None)
+            let mut index_arc = create_index(&index_path, index_config, &schema, &[], false, None)
                 .await
                 .unwrap();
 
@@ -238,6 +226,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             index_arc
         }
     };
+
+    println!(
+        "Indexed documents: {}, Segment number bits: {}",
+        index_arc
+            .read()
+            .await
+            .indexed_doc_count()
+            .await
+            .to_formatted_string(&Locale::en),
+        index_arc.read().await.index_config.segment_number_bits
+    );
 
     // benchmark parameters
 
@@ -312,7 +311,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 let result_type_clone2 = result_type.clone();
                 let search_mode_clone = search_mode.clone();
                 let result_length_clone = result_length;
-                let include_uncommitted = false;
                 let _query_facets_clone = query_facets.clone();
                 let _facet_filter_clone = facet_filter.clone();
                 let _result_sort_clone = result_sort.clone();
@@ -321,22 +319,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     let start_time = Instant::now();
 
                     let result_object = index_arc_clone
-                        .search(
-                            query_clone.0,
-                            None,
-                            query_clone.1,
-                            search_mode_clone,
-                            false,
-                            0,
-                            result_length_clone,
-                            result_type_clone,
-                            include_uncommitted,
-                            Vec::new(),
-                            Vec::new(),
-                            Vec::new(),
-                            Vec::new(),
-                            QueryRewriting::SearchOnly,
-                        )
+                        .search(SearchRequest {
+                            query_string: &query_clone.0,
+                            query_type_default: query_clone.1,
+                            search_mode: search_mode_clone,
+                            length: result_length_clone,
+                            result_type: result_type_clone,
+                            ..Default::default()
+                        })
                         .await;
 
                     let search_time = start_time.elapsed().as_nanos() as i64;
@@ -348,7 +338,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             query_index: query_index_clone,
                             search_time: [search_time; SAMPLE_COUNT],
                             result_type: result_type_clone2,
-                            result_count: result_object.result_count_total,
+                            result_count: result_object.count_total,
                         });
                     } else {
                         result_list_mut[query_index * 3 + result_type_index].search_time

@@ -2,6 +2,7 @@ use tokio::sync::RwLockReadGuard;
 
 use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 #[cfg(feature = "vb")]
 use crate::vector::ResultSource;
@@ -14,7 +15,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug, Copy, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Copy, Default, Deserialize, Serialize, ToSchema)]
 pub struct Result {
     pub doc_id: usize,
     pub score: f32,

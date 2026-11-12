@@ -15,30 +15,20 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, DeleteDocuments, DocumentCompression, FrequentwordType,
-    IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+    IndexConfig, IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
     TokenizerType, create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path, time::Duration};
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
-        id: 0,
+fn index_config() -> IndexConfig {
+    IndexConfig {
         name: "realtime_delete_consistency".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::None,
-        ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     }
 }
 
@@ -59,31 +49,23 @@ async fn search(
     query_type: QueryType,
     result_type: ResultType,
     uncommitted: bool,
-) -> seekstorm::search::ResultObject {
+) -> seekstorm::search::SearchResult {
     index
-        .search(
-            query.into(),
-            None,
-            query_type,
-            SearchMode::Lexical,
-            false,
-            0,
-            100,
-            result_type,
-            uncommitted,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            query_type_default: query_type,
+            length: 100,
+            result_type: result_type,
+            include_uncommitted: uncommitted,
+            ..Default::default()
+        })
         .await
 }
 
 async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, meta(), &schema(), &Vec::new(), true, None)
+    create_index(path, index_config(), &schema(), &[], true, None)
         .await
         .unwrap()
 }
@@ -107,7 +89,7 @@ async fn settle_search(
             true,
         )
         .await;
-        if r.result_count_total == expected && r.results.len() == expected.min(100) {
+        if r.count_total == expected && r.results.len() == expected.min(100) {
             return;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -136,8 +118,8 @@ async fn realtime_single_count_excludes_deleted() {
     )
     .await;
     let count = search(&index, "base", QueryType::Union, ResultType::Count, true).await;
-    assert_eq!(topk.result_count_total, 8);
-    assert_eq!(count.result_count_total, 8);
+    assert_eq!(topk.count_total, 8);
+    assert_eq!(count.count_total, 8);
     index.close().await;
 }
 
@@ -172,8 +154,8 @@ async fn realtime_union_count_excludes_deleted() {
         true,
     )
     .await;
-    assert_eq!(topk.result_count_total, 17);
+    assert_eq!(topk.count_total, 17);
     assert_eq!(topk.results.len(), 17);
-    assert_eq!(count.result_count_total, 17);
+    assert_eq!(count.count_total, 17);
     index.close().await;
 }

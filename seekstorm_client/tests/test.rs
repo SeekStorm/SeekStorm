@@ -3,11 +3,11 @@
 //! Use: cargo test -p seekstorm_client_rs
 //! Note: The tests will automatically build the server binary if it doesn't exist, and launch it for testing. It will also clean up the index_test folder before running the tests.
 //! If a test fails, the server process needs to be killed manually, e.g. by restarting VSC
+use seekstorm::index::IndexConfig;
+use seekstorm::search::DocumentOption;
 use seekstorm_client_rs::{
-    ApikeyQuotaObject, Clustering, CreateIndexRequest, Document, DocumentCompression,
-    FrequentwordType, GetDocumentRequest, Highlight, Inference, LexicalSimilarity, NgramSet,
-    QueryRewriting, QueryType, RestClient, ResultType, SearchMode, SearchRequestObject,
-    StemmerType, StopwordType, TokenizerType,
+    ApikeyQuotaObject, CreateIndexRequest, Document, FrequentwordType, GetDocumentRequest,
+    Highlight, LexicalSimilarity, QueryType, RestClient, ResultType, SearchRequest, TokenizerType,
 };
 use std::{env, fs, path::PathBuf, sync::LazyLock, time::Duration};
 use tokio::process::Command;
@@ -177,22 +177,19 @@ async fn test_22_create_index() {
     {"field":"url","field_type":"Text","store":false,"index_lexical":false}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
 
-    let create_index_request = CreateIndexRequest {
-        index_name: "test_index".into(),
-        similarity: LexicalSimilarity::Bm25f,
+    let index_config = IndexConfig {
+        name: "test_index".into(),
+        lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::English,
-        synonyms: Vec::new(), //not supported in REST API?
-        ngram_indexing: NgramSet::NgramFF as u8 | NgramSet::NgramFFF as u8,
-        document_compression: DocumentCompression::Snappy,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        schema,
+        ..Default::default()
     };
+    let create_index_request = CreateIndexRequest {
+        index_config,
+        schema,
+        synonyms: Vec::new(),
+    };
+
     let result = CLIENT
         .create_index(BASE_URL, DEMO_API_KEY, &create_index_request)
         .await;
@@ -275,24 +272,18 @@ async fn test_24_query_index() {
     // 3. Test your library against it
     let query = "+body2 +test".into();
 
-    let search_request_object = SearchRequestObject {
+    let search_request_object = SearchRequest {
         query_string: query,
-        query_vector: None,
-        enable_empty_query: false,
         offset: 0,
         length: 10,
         result_type: ResultType::TopkCount,
         query_type_default: QueryType::Intersection,
-        search_mode: SearchMode::Lexical,
-        realtime: false,
-        query_rewriting: QueryRewriting::SearchOnly,
-        highlights: Vec::new(),
-        fields: Vec::new(),
-        field_filter: Vec::new(),
-        facet_filter: Vec::new(),
-        distance_fields: Vec::new(),
-        query_facets: Vec::new(),
-        result_sort: Vec::new(),
+        return_documents: Some(DocumentOption {
+            fields: Vec::new(),
+            distance_fields: Vec::new(),
+            highlights: Vec::new(),
+        }),
+        ..Default::default()
     };
 
     let result_object = CLIENT
@@ -307,7 +298,7 @@ async fn test_24_query_index() {
         Ok(1)
     );
 
-    for result in result_object.as_ref().unwrap().results.iter() {
+    for result in result_object.as_ref().unwrap().documents.iter() {
         println!(
             "result {:?} rank {:?} body field {:?}",
             result.get("_id"),
@@ -317,7 +308,7 @@ async fn test_24_query_index() {
     }
     println!(
         "result counts {} {} {}",
-        result_object.as_ref().unwrap().results.len(),
+        result_object.as_ref().unwrap().documents.len(),
         result_object.as_ref().unwrap().count,
         result_object.as_ref().unwrap().count_total
     );

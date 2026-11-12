@@ -8,14 +8,16 @@ use common::{McpProcess, content_text};
 
 fn test_index_config() -> Value {
     json!({
-        "index_name": "mcp_integration",
+        "index_config": {
+            "name": "mcp_integration",
+            "lexical_similarity": "Bm25f",
+            "tokenizer": "UnicodeAlphanumericFolded"
+        },
         "schema": [
             {"field": "title", "store": true, "index_lexical": true, "field_type": "Text", "boost": 5},
             {"field": "body", "store": true, "index_lexical": true, "field_type": "Text", "longest": true},
             {"field": "source", "store": true, "index_lexical": false, "field_type": "Text"}
-        ],
-        "similarity": "Bm25f",
-        "tokenizer": "UnicodeAlphanumericFolded"
+        ]
     })
 }
 
@@ -60,10 +62,17 @@ async fn stdio_server_creates_indexes_streams_documents_searches_and_persists() 
     let committed = client.call_tool("commit", json!({})).await;
     assert_eq!(committed["isError"], false);
 
+    let ids_only = client.call_tool("search", json!({"query": "nebula"})).await;
+    let ids_only_response: Value = serde_json::from_str(content_text(&ids_only)).unwrap();
+    assert_eq!(ids_only_response["result_count_total"], 1);
+    assert!(ids_only_response["results"][0]["_id"].is_u64());
+    assert!(ids_only_response["results"][0]["_score"].is_number());
+    assert!(ids_only_response["results"][0]["title"].is_null());
+
     let nebula = client
         .call_tool(
             "search",
-            json!({"query": "nebula", "search_mode": "Lexical"}),
+            json!({"query": "nebula", "search_mode": "Lexical", "return_documents": {}}),
         )
         .await;
     let nebula_response: Value = serde_json::from_str(content_text(&nebula)).unwrap();
@@ -72,6 +81,11 @@ async fn stdio_server_creates_indexes_streams_documents_searches_and_persists() 
     let document_id = nebula_response["results"][0]["_id"]
         .as_u64()
         .expect("document id in search result");
+    assert_eq!(
+        nebula_response["results"][0]["_id"],
+        ids_only_response["results"][0]["_id"]
+    );
+    assert!(nebula_response["results"][0]["_score"].is_number());
 
     let updated = client
         .call_tool(
@@ -92,7 +106,7 @@ async fn stdio_server_creates_indexes_streams_documents_searches_and_persists() 
     let updated_search = client
         .call_tool(
             "search",
-            json!({"query": "pulsar", "search_mode": "Lexical"}),
+            json!({"query": "pulsar", "search_mode": "Lexical", "return_documents": {}}),
         )
         .await;
     let updated_response: Value = serde_json::from_str(content_text(&updated_search)).unwrap();

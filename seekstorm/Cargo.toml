@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "4.0.1"
+version = "5.0.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -51,10 +51,10 @@ url = "2.5.8"
 sha2 = "0.11.0"
 itertools = "0.15.0"
 async-recursion = "1.2.0"
-zstd = "0.14.2"
+zstd = "0.14.3"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
-smallvec = "1.16.4"
+smallvec = "1.16.5"
 memmap2 = "0.9.12"
 regex-syntax = "0.8.11"
 indexmap = { version = "2.14.2", features = ["serde"]}
@@ -62,7 +62,7 @@ unicode-normalization = "0.1.26"
 finl_unicode = "1.4.0"
 colored = "3.1.1"
 walkdir = "2.5.0"
-pdfium-render = { version ="0.9.4",  features = ["thread_safe"], optional = true}
+pdfium-render = { version ="0.9.5",  features = ["thread_safe"], optional = true}
 chrono = "0.4.45"
 utoipa = { version ="6.0.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
 num_cpus = "1.17.0"

@@ -111,7 +111,7 @@ and set
 in the schema (see code below).
 
 Faceting can be enabled both for string field type and numerical field types.
-Both numerical, string and text fields can be indexed (indexed=true) and stored (stored=true) in the json document,
+Both numerical, string and text fields can be indexed (index_lexical=true) and stored (stored=true) in the json document,
 but with field_facet=true a numerical or string field is additionally stored in a binary format, for fast faceting and sorting without document store access (decompression, deserialization).
 Setting a numerical field to "facet":true is also the precondition for sorting the search result by this fields value ('score' is treated as a special field to allow sorting by relevancy).
 
@@ -120,7 +120,7 @@ Setting a numerical field to "facet":true is also the precondition for sorting t
 
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use seekstorm::index::{IndexMetaObject, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
 use seekstorm::vector::Inference;
 use seekstorm::vector_similarity::VectorSimilarity;
 
@@ -133,27 +133,14 @@ let schema_json = r#"
 {"field":"town","field_type":"String16","store":false,"index_lexical":false,"facet":true}]"#;
 let schema=serde_json::from_str(schema_json).unwrap();
 
-let meta = IndexMetaObject {
-    id: 0,
+let index_config = IndexConfig {
     name: "test_index".to_string(),
     lexical_similarity: LexicalSimilarity::Bm25f,
     tokenizer: TokenizerType::AsciiAlphabetic,
-    stemmer: StemmerType::None,
-    stop_words: StopwordType::None,
-    frequent_words: FrequentwordType::English,
-    ngram_indexing: NgramSet::NgramFF as u8,
-    document_compression: DocumentCompression::Snappy,
-    access_type: AccessType::Mmap,
-    spelling_correction: None,
-    query_completion: None,
-    clustering: Clustering::None,
-    inference: Inference::None,
-    segment_number_bits:11
+    ..Default::default()
 };
 
-let synonyms=Vec::new();
-
-let index_arc=create_index(index_path,meta,&schema,&synonyms,false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 
 # });
 ```
@@ -287,54 +274,47 @@ where the ranges can be defined dynamically with different boundaries for each q
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryFacet, QueryRewriting};
-use seekstorm::highlighter::{Highlight, highlighter};
+use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryFacet, QueryRewriting, SearchRequest, DocumentOption};
+use seekstorm::highlighter::Highlight;
 use seekstorm::index::open_index;
 use std::path::Path;
-use std::collections::HashSet;
 
 let index_path=Path::new("C:/index/");
 let index_arc=open_index(index_path).await.unwrap();
 
-let query="test".to_string();
-let query_vector=None;
-let search_mode=SearchMode::Lexical;
-let enable_empty_query=false;
-let offset=0;
-let length=10;
-let query_type=QueryType::Intersection; 
-let result_type=ResultType::TopkCount;
-let include_uncommitted=false;
-let field_filter=Vec::new();
-let query_facets = vec![QueryFacet::String16 {field: "age".into(),prefix: "".into(),length:u16::MAX}];
-let facet_filter=Vec::new();
-let result_sort=Vec::new();
+let highlights: Vec<Highlight> = vec![Highlight {
+    field: "body".to_string(),
+    name: String::new(),
+    fragment_number: 2,
+    fragment_size: 160,
+    highlight_markup: true,
+    ..Default::default()
+}];
 
-let result_object = index_arc.search(query, query_vector, query_type, search_mode, enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
-
+let result_object = index_arc
+    .search(SearchRequest {
+        query_string: "test",
+        query_type_default: QueryType::Intersection,
+        search_mode: SearchMode::Lexical,
+        offset: 0,
+        length: 10,
+        result_type: ResultType::TopkCount,
+        query_facets: vec![QueryFacet::String16 {field: "age".into(),prefix: "".into(),length:u16::MAX}],
+        query_rewriting: QueryRewriting::SearchOnly,
+        return_documents: Some(DocumentOption { highlights, ..Default::default() }),
+        ..Default::default()
+    })
+    .await;
 
 // **display results**
 
-let highlights:Vec<Highlight>= vec![
-        Highlight {
-            field: "body".to_owned(),
-            name:String::new(),
-            fragment_number: 2,
-            fragment_size: 160,
-            highlight_markup: true,
-            ..Default::default()
-        },
-    ];    
-
-let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
-let return_fields_filter= HashSet::new();
-let distance_fields=Vec::new();
-let index=index_arc.read().await;
-for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
-  println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+for doc in result_object.documents.iter() {
+    println!("document {:?}", doc);
 }
-println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+println!(
+    "result counts {} {}",
+    result_object.count, result_object.count_total
+);
 
 // **display facets**
 

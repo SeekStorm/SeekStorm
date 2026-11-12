@@ -19,31 +19,22 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexDocuments,
-    IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexConfig,
+    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
     create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
-        id: 0,
+fn index_config() -> IndexConfig {
+    IndexConfig {
         name: "union_docid3_recall".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::None,
         ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     }
 }
 
@@ -63,31 +54,21 @@ async fn search(
     query: &str,
     length: usize,
     result_type: ResultType,
-) -> seekstorm::search::ResultObject {
+) -> seekstorm::search::SearchResult {
     index
-        .search(
-            query.into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            length,
-            result_type,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            length: length,
+            result_type: result_type,
+            ..Default::default()
+        })
         .await
 }
 
 async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, meta(), &schema(), &Vec::new(), true, None)
+    create_index(path, index_config(), &schema(), &[], true, None)
         .await
         .unwrap()
 }
@@ -153,7 +134,7 @@ async fn docid3_disjoint_terms_fill_heap() {
     let mut score_table: Vec<(usize, f32)> = Vec::new();
     for w in words.iter() {
         let r = search(&index, w, 200, ResultType::Topk).await;
-        assert_eq!(r.results.len() as u32, r.result_count as u32);
+        assert_eq!(r.results.len() as u32, r.count as u32);
         for res in r.results.iter() {
             score_table.push((res.doc_id, res.score));
         }
@@ -244,8 +225,8 @@ async fn docid3_topkcount_total_consistent() {
     let query = words.join(" ");
     let count = search(&index, &query, 1, ResultType::Count).await;
     let topkcount = search(&index, &query, 200, ResultType::TopkCount).await;
-    assert_eq!(count.result_count_total, 130);
-    assert_eq!(topkcount.result_count_total, 130);
+    assert_eq!(count.count_total, 130);
+    assert_eq!(topkcount.count_total, 130);
     assert_eq!(topkcount.results.len(), 130);
 
     index.close().await;

@@ -29,11 +29,13 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use seekstorm::INDEX_RUNTIME;
 use seekstorm::index::{
     ApikeyObject, ApikeyQuotaObject, CreateIndexRequest, DeleteApikeyRequest, Document,
-    GetDocumentRequest, GetIteratorRequest, SearchRequestObject, Synonym,
+    GetDocumentRequest, GetIteratorRequest, Synonym,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{
+    DocumentOption, QueryRewriting, QueryType, QueryVector, ResultType, Search, SearchMode,
+    SearchRequest,
+};
 
-use seekstorm::vector::Embedding;
 use seekstorm::vector_similarity::AnnMode;
 use sha2::Digest;
 use sha2::Sha256;
@@ -277,25 +279,18 @@ pub(crate) async fn http_request_handler(
             let index_arc_clone = index_arc.clone();
 
             let search_result = index_arc_clone
-                .search(
-                    String::new(),
-                    Some(Embedding::F32(query_vector)),
-                    QueryType::Intersection,
-                    SearchMode::Vector {
+                .search(SearchRequest {
+                    query_string: "",
+                    query_vector: Some(QueryVector::VecF32(query_vector)),
+                    query_type_default: QueryType::Intersection,
+                    search_mode: SearchMode::Vector {
                         similarity_threshold: None,
                         ann_mode: AnnMode::Nprobe(15),
                     },
-                    false,
-                    0,
-                    10,
-                    ResultType::Topk,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    QueryRewriting::SearchOnly,
-                )
+                    length: 10,
+                    result_type: ResultType::Topk,
+                    ..Default::default()
+                })
                 .await;
 
             let mut docid_vector: Vec<u64> = Vec::new();
@@ -355,8 +350,7 @@ pub(crate) async fn http_request_handler(
             };
             let request_bytes = collected_body.to_bytes();
 
-            let search_request = match serde_json::from_slice::<SearchRequestObject>(&request_bytes)
-            {
+            let search_request = match serde_json::from_slice::<SearchRequest>(&request_bytes) {
                 Ok(search_request) => search_request,
                 Err(e) => {
                     return HttpServerError::BadRequest(e.to_string()).into();
@@ -409,8 +403,12 @@ pub(crate) async fn http_request_handler(
                 })
                 .unwrap_or_default();
 
+            let query_string;
+            let request_bytes;
             let search_request = if !params.is_empty() {
-                let query_string = if let Some(query_string) = params.get("query") {
+                query_string = if let Some(query_string) = params.get("query") {
+                    query_string.to_string()
+                } else if let Some(query_string) = params.get("query_string") {
                     query_string.to_string()
                 } else {
                     "".to_string()
@@ -440,7 +438,7 @@ pub(crate) async fn http_request_handler(
                     10
                 };
 
-                let realtime = if let Some(value) = params.get("realtime") {
+                let realtime = if let Some(value) = params.get("include_uncommitted") {
                     let Ok(realtime) = value.parse::<bool>() else {
                         return HttpServerError::BadRequest(
                             "realtime invalid or missing".to_string(),
@@ -464,31 +462,33 @@ pub(crate) async fn http_request_handler(
                     true
                 };
 
-                SearchRequestObject {
-                    query_string,
+                SearchRequest {
+                    query_string: &query_string,
                     query_vector: None,
                     enable_empty_query,
                     offset,
                     length,
                     result_type: ResultType::default(),
-                    realtime,
-                    highlights: Vec::new(),
+                    include_uncommitted: realtime,
                     field_filter: Vec::new(),
-                    fields: Vec::new(),
-                    distance_fields: Vec::new(),
                     query_facets: Vec::new(),
                     facet_filter: Vec::new(),
                     result_sort: Vec::new(),
                     query_type_default: QueryType::Intersection,
                     query_rewriting: QueryRewriting::SearchOnly,
                     search_mode: SearchMode::Lexical,
+                    return_documents: Some(DocumentOption {
+                        fields: Vec::new(),
+                        distance_fields: Vec::new(),
+                        highlights: Vec::new(),
+                    }),
                 }
             } else {
                 let Ok(collected_body) = req.into_body().collect().await else {
                     return HttpServerError::BadRequest("failed to read request body".to_string())
                         .into();
                 };
-                let request_bytes = collected_body.to_bytes();
+                request_bytes = collected_body.to_bytes();
 
                 match request_bytes.is_empty() {
                     true => {
@@ -496,8 +496,8 @@ pub(crate) async fn http_request_handler(
                             .into();
                     }
                     false => {
-                        let search_request: SearchRequestObject =
-                            match serde_json::from_slice::<SearchRequestObject>(&request_bytes) {
+                        let search_request: SearchRequest =
+                            match serde_json::from_slice::<SearchRequest>(&request_bytes) {
                                 Ok(document_object) => document_object,
                                 Err(e) => {
                                     return HttpServerError::BadRequest(e.to_string()).into();
@@ -548,23 +548,12 @@ pub(crate) async fn http_request_handler(
             };
             let index_id = create_index_api(
                 &index_path,
-                create_index_request_object.index_name,
                 create_index_request_object.schema,
-                create_index_request_object.similarity,
-                create_index_request_object.tokenizer,
-                create_index_request_object.stemmer,
-                create_index_request_object.stop_words,
-                create_index_request_object.frequent_words,
-                create_index_request_object.ngram_indexing,
-                create_index_request_object.document_compression,
                 create_index_request_object.synonyms,
+                create_index_request_object.index_config,
                 force_shard_number,
                 apikey_object,
-                create_index_request_object.spelling_correction,
-                create_index_request_object.query_completion,
                 true,
-                create_index_request_object.clustering,
-                create_index_request_object.inference,
             )
             .await;
             drop(apikey_list_mut);
@@ -1224,7 +1213,7 @@ pub(crate) async fn http_request_handler(
                             status_object_json.into(),
                         ))))
                     } else {
-                        match serde_json::from_slice::<SearchRequestObject>(&request_bytes) {
+                        match serde_json::from_slice::<SearchRequest>(&request_bytes) {
                             Ok(search_request) => {
                                 let status_object =
                                     delete_documents_by_query_api(&index_arc_clone, search_request)

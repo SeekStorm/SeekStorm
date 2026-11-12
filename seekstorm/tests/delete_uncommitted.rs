@@ -6,15 +6,15 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, DeleteDocuments, DocumentCompression, FrequentwordType,
-    IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+    IndexConfig, IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
     TokenizerType, create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
+fn index_config() -> IndexConfig {
+    IndexConfig {
         id: 0,
         name: "delete_uncommitted".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
@@ -46,30 +46,21 @@ fn doc(title: &str) -> seekstorm::index::Document {
 
 async fn count(index: &seekstorm::index::IndexArc, query: &str, uncommitted: bool) -> usize {
     index
-        .search(
-            query.into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            0,
-            100,
-            ResultType::TopkCount,
-            uncommitted,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            length: 100,
+            result_type: ResultType::TopkCount,
+            include_uncommitted: uncommitted,
+            ..Default::default()
+        })
         .await
-        .result_count_total
+        .count_total
 }
 
 async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, meta(), &schema(), &Vec::new(), true, None)
+    create_index(path, index_config(), &schema(), &[], true, None)
         .await
         .unwrap()
 }

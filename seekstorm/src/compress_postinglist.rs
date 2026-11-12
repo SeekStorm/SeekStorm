@@ -43,22 +43,23 @@ pub(crate) fn compress_postinglist(
                     let term_bytes_1 = plo.term_ngram1.as_bytes();
                     let key0_1 = hash32(term_bytes_1) & shard.segment_number_mask;
                     let key_hash_1 = hash64(term_bytes_1);
-                    let mut posting_count_ngram1 = if shard.meta.access_type == AccessType::Mmap {
-                        decode_posting_list_count(
-                            &shard.segments_index[key0_1 as usize],
-                            shard,
-                            key_hash_1,
-                            key0_1 < *key0 as u32,
-                        )
-                        .unwrap_or_default()
-                    } else if let Some(plo) = shard.segments_index[key0_1 as usize]
-                        .segment
-                        .get(&key_hash_1)
-                    {
-                        plo.posting_count
-                    } else {
-                        0
-                    };
+                    let mut posting_count_ngram1 =
+                        if shard.index_config.access_type == AccessType::Mmap {
+                            decode_posting_list_count(
+                                &shard.segments_index[key0_1 as usize],
+                                shard,
+                                key_hash_1,
+                                key0_1 < *key0 as u32,
+                            )
+                            .unwrap_or_default()
+                        } else if let Some(plo) = shard.segments_index[key0_1 as usize]
+                            .segment
+                            .get(&key_hash_1)
+                        {
+                            plo.posting_count
+                        } else {
+                            0
+                        };
 
                     if let Some(x) = shard.segments_level0[key0_1 as usize]
                         .segment
@@ -76,22 +77,23 @@ pub(crate) fn compress_postinglist(
                     let key0_2 = hash32(term_bytes_2) & shard.segment_number_mask;
                     let key_hash_2 = hash64(term_bytes_2);
 
-                    let mut posting_count_ngram2 = if shard.meta.access_type == AccessType::Mmap {
-                        decode_posting_list_count(
-                            &shard.segments_index[key0_2 as usize],
-                            shard,
-                            key_hash_2,
-                            key0_2 < *key0 as u32,
-                        )
-                        .unwrap_or_default()
-                    } else if let Some(plo) = shard.segments_index[key0_2 as usize]
-                        .segment
-                        .get(&key_hash_2)
-                    {
-                        plo.posting_count
-                    } else {
-                        0
-                    };
+                    let mut posting_count_ngram2 =
+                        if shard.index_config.access_type == AccessType::Mmap {
+                            decode_posting_list_count(
+                                &shard.segments_index[key0_2 as usize],
+                                shard,
+                                key_hash_2,
+                                key0_2 < *key0 as u32,
+                            )
+                            .unwrap_or_default()
+                        } else if let Some(plo) = shard.segments_index[key0_2 as usize]
+                            .segment
+                            .get(&key_hash_2)
+                        {
+                            plo.posting_count
+                        } else {
+                            0
+                        };
 
                     if let Some(x) = shard.segments_level0[key0_2 as usize]
                         .segment
@@ -114,22 +116,23 @@ pub(crate) fn compress_postinglist(
                     let term_bytes_1 = plo.term_ngram1.as_bytes();
                     let key0_1 = hash32(term_bytes_1) & shard.segment_number_mask;
                     let key_hash_1 = hash64(term_bytes_1);
-                    let mut posting_count_ngram1 = if shard.meta.access_type == AccessType::Mmap {
-                        decode_posting_list_count(
-                            &shard.segments_index[key0_1 as usize],
-                            shard,
-                            key_hash_1,
-                            key0_1 < *key0 as u32,
-                        )
-                        .unwrap_or_default()
-                    } else if let Some(plo) = shard.segments_index[key0_1 as usize]
-                        .segment
-                        .get(&key_hash_1)
-                    {
-                        plo.posting_count
-                    } else {
-                        0
-                    };
+                    let mut posting_count_ngram1 =
+                        if shard.index_config.access_type == AccessType::Mmap {
+                            decode_posting_list_count(
+                                &shard.segments_index[key0_1 as usize],
+                                shard,
+                                key_hash_1,
+                                key0_1 < *key0 as u32,
+                            )
+                            .unwrap_or_default()
+                        } else if let Some(plo) = shard.segments_index[key0_1 as usize]
+                            .segment
+                            .get(&key_hash_1)
+                        {
+                            plo.posting_count
+                        } else {
+                            0
+                        };
 
                     if let Some(x) = shard.segments_level0[key0_1 as usize]
                         .segment
@@ -147,22 +150,23 @@ pub(crate) fn compress_postinglist(
                     let key0_2 = hash32(term_bytes_2) & shard.segment_number_mask;
                     let key_hash_2 = hash64(term_bytes_2);
 
-                    let mut posting_count_ngram2 = if shard.meta.access_type == AccessType::Mmap {
-                        decode_posting_list_count(
-                            &shard.segments_index[key0_2 as usize],
-                            shard,
-                            key_hash_2,
-                            key0_2 < *key0 as u32,
-                        )
-                        .unwrap_or_default()
-                    } else if let Some(plo) = shard.segments_index[key0_2 as usize]
-                        .segment
-                        .get(&key_hash_2)
-                    {
-                        plo.posting_count
-                    } else {
-                        0
-                    };
+                    let mut posting_count_ngram2 =
+                        if shard.index_config.access_type == AccessType::Mmap {
+                            decode_posting_list_count(
+                                &shard.segments_index[key0_2 as usize],
+                                shard,
+                                key_hash_2,
+                                key0_2 < *key0 as u32,
+                            )
+                            .unwrap_or_default()
+                        } else if let Some(plo) = shard.segments_index[key0_2 as usize]
+                            .segment
+                            .get(&key_hash_2)
+                        {
+                            plo.posting_count
+                        } else {
+                            0
+                        };
 
                     if let Some(x) = shard.segments_level0[key0_2 as usize]
                         .segment
@@ -180,22 +184,23 @@ pub(crate) fn compress_postinglist(
                     let key0_3 = hash32(term_bytes_3) & shard.segment_number_mask;
                     let key_hash_3 = hash64(term_bytes_3);
 
-                    let mut posting_count_ngram3 = if shard.meta.access_type == AccessType::Mmap {
-                        decode_posting_list_count(
-                            &shard.segments_index[key0_3 as usize],
-                            shard,
-                            key_hash_3,
-                            key0_3 < *key0 as u32,
-                        )
-                        .unwrap_or_default()
-                    } else if let Some(plo) = shard.segments_index[key0_3 as usize]
-                        .segment
-                        .get(&key_hash_3)
-                    {
-                        plo.posting_count
-                    } else {
-                        0
-                    };
+                    let mut posting_count_ngram3 =
+                        if shard.index_config.access_type == AccessType::Mmap {
+                            decode_posting_list_count(
+                                &shard.segments_index[key0_3 as usize],
+                                shard,
+                                key_hash_3,
+                                key0_3 < *key0 as u32,
+                            )
+                            .unwrap_or_default()
+                        } else if let Some(plo) = shard.segments_index[key0_3 as usize]
+                            .segment
+                            .get(&key_hash_3)
+                        {
+                            plo.posting_count
+                        } else {
+                            0
+                        };
 
                     if let Some(x) = shard.segments_level0[key0_3 as usize]
                         .segment
@@ -527,7 +532,7 @@ pub(crate) fn docid_iterator(
     }
 
     if plo.ngram_type == NgramType::SingleTerm
-        || shard.meta.lexical_similarity == LexicalSimilarity::Bm25fProximity
+        || shard.index_config.lexical_similarity == LexicalSimilarity::Bm25fProximity
     {
         let mut posting_score = 0.0;
         for field in field_vec.iter() {

@@ -23,7 +23,7 @@ impl Shard {
         posting_count_ngram_2_compressed: u8,
         posting_count_ngram_3_compressed: u8,
     ) {
-        if let Some(spelling_correction) = self.meta.spelling_correction.as_ref()
+        if let Some(spelling_correction) = self.index_config.spelling_correction.as_ref()
             && term.key_hash & 7 == 0
             && (spelling_correction.term_length_threshold.as_ref().is_none()
                 || spelling_correction
@@ -90,7 +90,7 @@ impl Shard {
         let exists: bool = value.posting_count > 0;
 
         if self.is_last_level_incomplete && !exists && !restore {
-            if self.meta.access_type == AccessType::Mmap {
+            if self.index_config.access_type == AccessType::Mmap {
                 let pointer = self.segments_index[term.key0 as usize]
                     .byte_array_blocks_pointer
                     .last()

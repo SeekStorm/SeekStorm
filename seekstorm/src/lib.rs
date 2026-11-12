@@ -13,7 +13,7 @@
 //! cargo add serde_json
 //! ```
 //! ### use an asynchronous Rust runtime
-//! ```no_run
+//! ```rust ,no_run
 //! use std::error::Error;
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -22,11 +22,11 @@
 //! }
 //! ```
 //! ### create index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! use std::path::Path;
 //! use std::sync::{Arc, RwLock};
-//! use seekstorm::index::{IndexMetaObject, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+//! use seekstorm::index::{IndexConfig, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
 //! use seekstorm::vector::Inference;
 //! use seekstorm::vector_similarity::VectorSimilarity;
 //! let index_path=Path::new("C:/index/");
@@ -35,8 +35,7 @@
 //! {"field":"body","field_type":"Text","store":true,"index_lexical":true},
 //! {"field":"url","field_type":"Text","store":false,"index_lexical":false}]"#;
 //! let schema=serde_json::from_str(schema_json).unwrap();
-//! let meta = IndexMetaObject {
-//! id: 0,
+//! let index_config = IndexConfig {
 //! name: "test_index".to_string(),
 //! lexical_similarity: LexicalSimilarity::Bm25f,
 //! tokenizer: TokenizerType::AsciiAlphabetic,
@@ -50,14 +49,14 @@
 //! query_completion: None,
 //! clustering: Clustering::None,
 //! inference: Inference::None,
-//! segment_number_bits:11
+//! ..Default::default()
 //! };
 //! let serialize_schema=true;
-//! let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+//! let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 //! # });
 //! ```
 //! ### open index (alternatively to create index)
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! use seekstorm::index::open_index;
 //! use std::path::Path;
@@ -66,7 +65,7 @@
 //! # });
 //! ```
 //! ### index document
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
@@ -81,7 +80,7 @@
 //! # });
 //! ```
 //! ### index documents
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
@@ -97,7 +96,7 @@
 //! # });
 //! ```
 //! ### delete documents by document id
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
@@ -109,27 +108,31 @@
 //! # });
 //! ```
 //! ### delete documents by query
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::search::QueryType;
 //! use seekstorm::index::DeleteDocumentsByQuery;
-//! let query="test".to_string();
-//! let offset=0;
-//! let length=10;
-//! let query_type=QueryType::Intersection;
-//! let include_uncommitted=false;
-//! let field_filter=Vec::new();
-//! let facet_filter=Vec::new();
-//! let result_sort=Vec::new();
-//! index_arc.delete_documents_by_query(query, query_type, offset, length, include_uncommitted,field_filter,facet_filter,result_sort).await;
+//! use seekstorm::search::{QueryType,SearchRequest,SearchMode,ResultType,QueryRewriting};
+//! let delete_request=                
+//! SearchRequest {
+//!     query_string: "test",
+//!     offset: 0,
+//!     length: 10,
+//!     include_uncommitted: true,
+//!     result_type: ResultType::Topk,
+//!     query_type_default: QueryType::Intersection,
+//!     query_rewriting: QueryRewriting::SearchOnly,
+//!     search_mode: SearchMode::Lexical,
+//!     ..Default::default()
+//! };
+//! index_arc.delete_documents_by_query(delete_request).await;
 //! # });
 //! ```
 //! ### update documents
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
@@ -147,30 +150,14 @@
 //! # });
 //! ```
 //! ### search index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryRewriting};
-//! let query="test".to_string();
-//! let query_vector=None;
-//! let search_mode=SearchMode::Lexical;
-//! let enable_empty_query=false;
-//! let offset=10;
-//! let length=10;
-//! let query_type=QueryType::Intersection;
-//! let result_type=ResultType::TopkCount;
-//! let include_uncommitted=false;
-//! let field_filter=Vec::new();
-//! let query_facets=Vec::new();
-//! let facet_filter=Vec::new();
-//! let result_sort=Vec::new();
-//! let result_object = index_arc.search(query, query_vector, query_type, search_mode, enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
-//! // ### display results
-//! use seekstorm::highlighter::{Highlight, highlighter};
-//! use std::collections::HashSet;
+//! use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryRewriting, SearchRequest, DocumentOption};
+//! use seekstorm::highlighter::Highlight;
 //! let highlights:Vec<Highlight>= vec![
 //! Highlight {
 //!     field: "body".to_string(),
@@ -180,20 +167,29 @@
 //!     highlight_markup: true,
 //!     ..Default::default()
 //! },
-//! ];    
-//! let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
-//! let return_fields_filter= HashSet::new();
-//! let distance_fields=Vec::new();
-//! let index=index_arc.read().await;
-//! for result in result_object.results.iter() {
-//!   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
-//!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+//! ];
+//! let result_object = index_arc.search(
+//!   SearchRequest {
+//!     query_string: "test",
+//!     query_type_default: QueryType::Intersection,
+//!     search_mode: SearchMode::Lexical,
+//!     offset:0,
+//!     length:10,
+//!     result_type: ResultType::TopkCount,
+//!     query_rewriting: QueryRewriting::SearchOnly,
+//!     return_documents: Some(DocumentOption { highlights, ..Default::default()}),
+//!     ..Default::default()
+//!   }
+//! ).await;
+//! // ### display results
+//! for doc in result_object.documents.iter() {
+//!     println!("document {:?}", doc);
 //! }
-//! println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+//! println!( "result counts {} {}", result_object.count, result_object.count_total);
 //! # });
 //! ```
 //! ### get document
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
@@ -209,7 +205,7 @@
 //! # });
 //! ```
 //! ### index JSON file in JSON, Newline-delimited JSON and Concatenated JSON format
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
@@ -226,7 +222,7 @@
 //! - extracts creation date from metatag, or from file creation date (Unix timestamp: the number of seconds since 1 January 1970)
 //! - copies all ingested pdf files to "files" subdirectory in index
 //! - the following index schema is required (and automatically created by the console `ingest` command):
-//! ```no_run
+//! ```rust ,no_run
 //! let schema_json = r#"
 //! [
 //!   {
@@ -257,7 +253,7 @@
 //!   }
 //! ]"#;
 //! ```
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
@@ -269,7 +265,7 @@
 //! # });
 //! ```
 //! ### index PDF file
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
@@ -281,7 +277,7 @@
 //! # });
 //! ```
 //! ### index PDF file bytes
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
@@ -297,7 +293,7 @@
 //! # });
 //! ```
 //! ### get PDF file bytes
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # use std::path::Path;
@@ -308,7 +304,7 @@
 //! # });
 //! ```
 //! ### clear index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # use std::path::Path;
@@ -318,7 +314,7 @@
 //! # });
 //! ```
 //! ### delete index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # use std::path::Path;
@@ -328,7 +324,7 @@
 //! # });
 //! ```
 //! ### close index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use seekstorm::index::open_index;
 //! # use std::path::Path;
@@ -339,7 +335,7 @@
 //! # });
 //! ```
 //! ### seekstorm library version string
-//! ```no_run
+//! ```rust ,no_run
 //! use seekstorm::index::version;
 //! let version=version();
 //! println!("version {}",version);
@@ -355,10 +351,10 @@
 //! A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious.
 //! This is why we provide a quick start example here:
 //! ### create index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! use std::path::Path;
-//! use seekstorm::index::{IndexMetaObject, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+//! use seekstorm::index::{IndexConfig, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
 //! use seekstorm::vector::Inference;
 //! use seekstorm::vector_similarity::VectorSimilarity;
 //! let index_path=Path::new("C:/index/");
@@ -368,29 +364,18 @@
 //! {"field":"url","field_type":"Text","store":true,"index_lexical":false},
 //! {"field":"town","field_type":"String15","store":false,"index_lexical":false,"facet":true}]"#;
 //! let schema=serde_json::from_str(schema_json).unwrap();
-//! let meta = IndexMetaObject {
-//!     id: 0,
+//! let index_config = IndexConfig {
 //!     name: "test_index".to_string(),
 //!     lexical_similarity: LexicalSimilarity::Bm25f,
 //!     tokenizer: TokenizerType::AsciiAlphabetic,
-//!     stemmer: StemmerType::None,
-//!     stop_words: StopwordType::None,
-//!     frequent_words: FrequentwordType::English,
-//!     ngram_indexing: NgramSet::NgramFF as u8,
-//!     document_compression:  DocumentCompression::Snappy,
-//!     access_type: AccessType::Mmap,
-//!     spelling_correction: None,
-//!     query_completion: None,
-//!     clustering: Clustering::None,
-//!     inference: Inference::None,
-//!     segment_number_bits:11
+//!     ..Default::default()
 //! };
 //! let serialize_schema=true;
-//! let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+//! let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 //! # });
 //! ```
 //! ### index documents
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
@@ -410,31 +395,14 @@
 //! # });
 //! ```
 //! ### search index
-//! ```no_run
+//! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! # use std::path::Path;
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::search::{QueryType, SearchMode, ResultType, QueryFacet, FacetFilter, QueryRewriting,Search};
-//! let query="test".to_string();
-//! let query_vector=None;
-//! let search_mode=SearchMode::Lexical;
-//! let enable_empty_query=false;
-//! let offset=0;
-//! let length=10;
-//! let query_type=QueryType::Intersection;
-//! let result_type=ResultType::TopkCount;
-//! let include_uncommitted=false;
-//! let field_filter=Vec::new();
-//! let query_facets = vec![QueryFacet::String16 {field: "town".to_string(),prefix: "".to_string(),length: u16::MAX}];
-//! let facet_filter=Vec::new();
-//! //let facet_filter = vec![FacetFilter {field: "town".to_string(),   filter:Filter::String(vec!["Berlin".to_string()])}];
-//! let result_sort=Vec::new();
-//! let result_object = index_arc.search(query, query_vector, query_type, search_mode, enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
-//! // ### display results
-//! use std::collections::HashSet;
-//! use seekstorm::highlighter::{highlighter, Highlight};
+//! use seekstorm::search::{QueryType, SearchMode, ResultType, QueryFacet, FacetFilter, QueryRewriting, Search, SearchRequest, DocumentOption};
+//! use seekstorm::highlighter::Highlight;
 //! let highlights:Vec<Highlight>= vec![
 //!         Highlight {
 //!             field: "body".to_owned(),
@@ -444,16 +412,27 @@
 //!             highlight_markup: true,
 //!            ..Default::default()
 //!         },
-//!     ];    
-//! let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
-//! let return_fields_filter= HashSet::new();
-//! let distance_fields=Vec::new();
-//! let index=index_arc.write().await;
-//! for result in result_object.results.iter() {
-//!   let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
-//!   println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+//!     ];   
+//! let result_object = index_arc.search(
+//!   SearchRequest {
+//!     query_string: "test",
+//!     query_type_default: QueryType::Intersection,
+//!     search_mode: SearchMode::Lexical,
+//!     offset:0,
+//!     length:10,
+//!     result_type: ResultType::TopkCount,
+//!     query_facets: vec![QueryFacet::String16 {field: "town".to_string(),prefix: "".to_string(),length: u16::MAX}],
+//!     facet_filter: vec![FacetFilter::String16 {field: "town".to_string(), filter: vec!["Berlin".to_string()]}],
+//!     query_rewriting: QueryRewriting::SearchOnly,
+//!     return_documents: Some(DocumentOption { highlights, ..Default::default()}),
+//!     ..Default::default()
+//!   }
+//! ).await;
+//! // ### display results
+//! for doc in result_object.documents.iter() {
+//!     println!("document {:?}", doc);
 //! }
-//! println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+//! println!( "result counts {} {}", result_object.count, result_object.count_total);
 //! // ### display facets
 //! println!("{}", serde_json::to_string_pretty(&result_object.facets).unwrap());
 //! # });

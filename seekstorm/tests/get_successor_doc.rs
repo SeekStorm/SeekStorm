@@ -4,7 +4,7 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, Document, DocumentCompression, FileType, FrequentwordType,
-    IndexDocument, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+    IndexConfig, IndexDocument, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
     TokenizerType, create_index,
 };
 use seekstorm::vector::Inference;
@@ -20,24 +20,15 @@ async fn run_case(access: AccessType, compression: DocumentCompression, tag: &st
     [{"field":"title","field_type":"Text","store":true,"index_lexical":true,"longest":true},
     {"field":"tag","field_type":"Text","store":false,"index_lexical":true}]"#;
     let schema = serde_json::from_str(schema_json).unwrap();
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "succ".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
-        frequent_words: FrequentwordType::None,
-        ngram_indexing: NgramSet::SingleTerm as u8,
         document_compression: compression,
         access_type: access,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     };
-    let index_arc = create_index(index_path, meta, &schema, &Vec::new(), false, Some(1))
+    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(1))
         .await
         .unwrap();
     // doc 0: indexed-only field -> no stored content -> slot stays 0.

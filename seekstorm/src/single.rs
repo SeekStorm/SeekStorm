@@ -11,7 +11,7 @@ use crate::{
         PostingListObjectQuery, SORT_FLAG, SPEEDUP_FLAG, Shard,
     },
     intersection::{BlockObject, bitpacking32_get_delta},
-    search::{FilterSparse, ResultType, SearchResult},
+    search::{FilterSparse, ResultType, SearchResultObject},
     utils::{read_u16, read_u64},
 };
 
@@ -28,7 +28,7 @@ pub(crate) async fn single_docid<'a>(
     blo: &BlockObjectIndex,
     term_index: usize,
     result_count: &mut i32,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -85,7 +85,7 @@ pub(crate) async fn single_docid<'a>(
         query_list_item_mut.compressed_doc_id_range =
             query_list_item_mut.rank_position_pointer_range as usize + posting_pointer_size_sum;
 
-        if shard.meta.access_type == AccessType::Mmap {
+        if shard.index_config.access_type == AccessType::Mmap {
             let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
             query_list_item_mut.byte_array =
                 &shard.index_file_mmap[segment.byte_array_blocks_pointer[blo.block_id as usize].0
@@ -140,7 +140,7 @@ pub(crate) async fn single_docid<'a>(
 
     let query_list_item_mut = &mut query_list[term_index];
 
-    let byte_array = if shard.meta.access_type == AccessType::Mmap {
+    let byte_array = if shard.index_config.access_type == AccessType::Mmap {
         let segment = &shard.segments_index[query_list_item_mut.key0 as usize];
         &shard.index_file_mmap[segment.byte_array_blocks_pointer[blo.block_id as usize].0
             ..segment.byte_array_blocks_pointer[blo.block_id as usize].0
@@ -296,7 +296,7 @@ pub(crate) async fn single_blockid<'a>(
     query_list: &mut Vec<PostingListObjectQuery<'a>>,
     not_query_list: &mut [PostingListObjectQuery<'a>],
     result_count_arc: &Arc<AtomicUsize>,
-    search_result: &mut SearchResult<'_>,
+    search_result: &mut SearchResultObject<'_>,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,

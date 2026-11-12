@@ -18,7 +18,7 @@ use crate::index::Shard;
 use crate::{
     add_result::add_result_multiterm_multifield,
     index::{NonUniquePostingListObjectQuery, PostingListObjectQuery},
-    search::{FilterSparse, ResultType, SearchResult},
+    search::{FilterSparse, ResultType, SearchResultObject},
     utils::read_u16,
 };
 use ahash::AHashSet;
@@ -246,7 +246,7 @@ pub(crate) fn intersection_vector16(
     result_count: &mut i32,
     block_id: usize,
     shard: &Shard,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -446,7 +446,7 @@ pub(crate) fn intersection_vector16(
     result_count: &mut i32,
     block_id: usize,
     index: &Shard,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
@@ -549,7 +549,7 @@ pub(crate) fn intersection_vector16(
     result_count: &mut i32,
     block_id: usize,
     index: &Shard,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     top_k: usize,
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,

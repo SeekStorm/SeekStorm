@@ -29,6 +29,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "lexical_similarity": "Bm25fProximity",
+        "tokenizer": "UnicodeAlphanumeric",
+    },
     "schema":[{
         "field": "title", 
         "field_type": "Text", 
@@ -36,7 +41,7 @@ content-type: application/json
         "index_lexical": true,
         "boost":10.0
     },
-        {
+    {
         "field": "body",
         "field_type": "Text", 
         "store": true, 
@@ -49,10 +54,9 @@ content-type: application/json
         "store": true, 
         "index_lexical": false
     }], 
-    "index_name": "test_index",
-    "similarity": "Bm25fProximity",
-    "tokenizer": "UnicodeAlphanumeric"
+  "synonyms": []
 }
+
 
 ### get index
 GET http://127.0.0.1/api/v1/index/0 HTTP/1.1
@@ -151,10 +155,10 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"test",
+    "query_string":"test",
     "offset":0,
     "length":10,
-    "realtime": true,
+    "include_uncommitted": true,
     "field_filter": ["title", "body"]
 }
 
@@ -178,7 +182,7 @@ GET http://127.0.0.1/api/v1/index/0/query
 ?query=test
 &offset=0
 &length=10
-&realtime=true 
+&include_uncommitted=true 
 apikey: {{api_key}}
 content-type: application/json
 
@@ -188,10 +192,10 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"test",
+    "query_string":"test",
     "offset":0,
     "length":10,
-    "realtime": true,
+    "include_uncommitted": true,
     "field_filter": ["title", "body"]
 }
 
@@ -201,11 +205,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"test",
+    "query_string":"test",
     "offset":0,
     "length":10,
     "result_type": "TopkCount",
-    "realtime": true,
+    "include_uncommitted": true,
     "field_filter": ["title", "body"]
 }
 
@@ -215,14 +219,17 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"test",
+    "query_string":"test",
     "offset":0,
     "length":10,
-    "realtime": true,
-    "highlights": [
-    { "field": "title", "fragment_number": 0, "fragment_size": 1000, "highlight_markup": true},
-    { "field": "body", "fragment_number": 2, "fragment_size": 160, "highlight_markup": true},
-    { "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}]
+    "include_uncommitted": true,
+    "return_documents": {
+        "highlights": [
+            { "field": "title", "fragment_number": 0, "fragment_size": 1000, "highlight_markup": true},
+            { "field": "body", "fragment_number": 2, "fragment_size": 160, "highlight_markup": true},
+            { "field": "body", "name": "body2", "fragment_number": 0, "fragment_size": 4000, "highlight_markup": true}
+        ]
+    }
 }
 
 ### create index NUMBER
@@ -231,6 +238,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "lexical_similarity": "Bm25fProximity",
+        "tokenizer": "UnicodeAlphanumeric",
+    },
     "schema":[{
         "field": "title",
         "field_type": "Text", 
@@ -256,9 +268,7 @@ content-type: application/json
         "store": true, 
         "index_lexical": true
     }],
-    "index_name": "test_index",
-    "similarity": "Bm25fProximity",
-    "tokenizer": "UnicodeAlphanumeric"
+    "synonyms": []
 }
 
 ### index doc NUMBER
@@ -279,12 +289,15 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"12345",
+    "query_string":"12345",
     "offset":0,
     "length":10,
-    "realtime": true,
-    "highlights": [
-    { "field": "number", "name":"_number","fragment_number": 0, "fragment_size": 1000, "highlight_markup": true}]
+    "include_uncommitted": true,
+    "return_documents": {
+        "highlights": [
+            { "field": "number", "name":"_number","fragment_number": 0, "fragment_size": 1000, "highlight_markup": true}
+        ]
+    }
 }
 
 ### get file
@@ -303,13 +316,15 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"bm25",
+    "query_string":"bm25",
     "offset":0,
     "length":10,
-    "realtime":false,
-    "highlights":[{"field":"title","fragment_number":0,"fragment_size":1000,"highlight_markup":true},
-    {"field":"body","fragment_number":2,"fragment_size":160,"highlight_markup":true},
-    {"field":"body","name":"body2","fragment_number":0,"fragment_size":4000,"highlight_markup":true}],
+    "include_uncommitted":false,
+    "return_documents": {
+        "highlights":[{"field":"title","fragment_number":0,"fragment_size":1000,"highlight_markup":true},
+        {"field":"body","fragment_number":2,"fragment_size":160,"highlight_markup":true},
+        {"field":"body","name":"body2","fragment_number":0,"fragment_size":4000,"highlight_markup":true}]
+    },
     "result_sort":[],
     "query_facets":[			
 	{"Timestamp":{"field":"date","range_type":"CountWithinRange",
@@ -387,11 +402,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"",
+    "query_string":"",
     "enable_empty_query": true,
     "offset":0,
     "length":10,
-    "realtime":false
+    "include_uncommitted":false
 } 
 
 ### search enable_empty_query: descending 
@@ -400,11 +415,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"",
+    "query_":"",
     "enable_empty_query": true,
     "offset":0,
     "length":10,
-    "realtime":false,
+    "include_uncommitted":false,
     "result_sort":[{"field": "_id", "order": "Descending", "base": "None" }]
 } 
 
@@ -414,11 +429,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"",
+    "query_string":"",
     "enable_empty_query": true,
     "offset":0,
     "length":10,
-    "realtime":false,
+    "include_uncommitted":false,
     "result_sort":[{"field": "_id", "order": "Ascending", "base": "None" }]
 } 
 
@@ -430,13 +445,18 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "lexical_similarity": "Bm25fProximity",
+        "tokenizer": "UnicodeAlphanumeric",
+    },
     "schema":[{
         "field": "title", 
         "field_type": "Text", 
         "store": true, 
         "index_lexical": true
     },
-    {
+        {
         "field": "body",
         "field_type": "Text", 
         "store": true, 
@@ -449,9 +469,7 @@ content-type: application/json
         "store": true, 
         "index_lexical": true
     }], 
-    "index_name": "test_index",
-    "similarity": "Bm25fProximity",
-    "tokenizer": "UnicodeAlphanumeric"
+    "synonyms": []
 }
 
 ### index document
@@ -486,11 +504,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"\"John Smith\"",
+    "query_string":"\"John Smith\"",
     "offset":0,
     "length":10,
     "result_type": "TopkCount",
-    "realtime": true
+    "include_uncommitted": true
 }
 
 // amazon.csv
@@ -501,6 +519,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "lexical_similarity": "Bm25fProximity",
+        "tokenizer": "UnicodeAlphanumeric",
+    },
     "schema":[{
         "field": "number", 
         "field_type": "U32", 
@@ -557,9 +580,7 @@ content-type: application/json
         "index_lexical": true
     }
     ], 
-    "index_name": "amazon_index",
-    "similarity": "Bm25fProximity",
-    "tokenizer": "UnicodeAlphanumeric"
+    "synonyms": []
 }
 
 // realtime vector search
@@ -570,6 +591,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "clustering": "None",
+        "inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
+    },
     "schema":[{
         "field": "title", 
         "field_type": "Text", 
@@ -591,9 +617,7 @@ content-type: application/json
         "index_lexical": false,
         "index_vector": false
     }], 
-    "index_name": "test_index",
-    "clustering": "None",
-    "inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
+    "synonyms": []
 }
 
 ### index document
@@ -613,11 +637,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"rosy panther",
+    "query_string":"rosy panther",
     "offset":0,
     "length":10,
     "result_type": "TopkCount",
-    "realtime": true,
+    "include_uncommitted": true,
     "search_mode": {"Vector":{"similarity_threshold": 0.7, "ann_mode": "All"}}
 }
 
@@ -629,6 +653,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "clustering": "None",
+        "inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
+    },
     "schema":[{
         "field": "title", 
         "field_type": "Text", 
@@ -650,9 +679,7 @@ content-type: application/json
         "index_lexical": false,
         "index_vector": false
     }], 
-    "index_name": "test_index",
-    "clustering": "None",
-    "inference": {"Model2Vec": { "model": "PotionBase2M", "chunk_size": 1000, "quantization": "ScalarQuantizationI8" }}
+    "synonyms": []
 }
 
 ### index document
@@ -735,11 +762,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"rosy panther",
+    "query_string":"rosy panther",
     "offset":0,
     "length":10,
     "result_type": "TopkCount",
-    "realtime": false,
+    "include_uncommitted": false,
     "search_mode": {"Vector":{"similarity_threshold": 0.7, "ann_mode": "All"}}
 }
 
@@ -752,6 +779,13 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "sift1m_index",
+        "clustering": "None",
+        "inference": {
+            "External": { "dimensions": 128, "precision": "F32", "quantization": "ScalarQuantizationI8", "similarity": "Euclidean" }
+        }
+    },
     "schema":[
     {
         "field":"vector",
@@ -767,11 +801,7 @@ content-type: application/json
         "index_lexical":false,
         "index_vector":false
     }] , 
-    "index_name": "sift1m_index",
-    "clustering": "None",
-    "inference": {
-        "External": { "dimensions": 128, "precision": "F32", "quantization": "ScalarQuantizationI8", "similarity": "Euclidean" }
-    }
+    "synonyms": []
 }
 
 ### index document
@@ -796,7 +826,7 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
-    "query":"",
+    "query_string":"",
     "query_vector": [
         0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010, 0.011, 0.012, 0.013,
         0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.020, 0.021, 0.022, 0.023, 0.024, 0.025, 0.026,
@@ -812,14 +842,13 @@ content-type: application/json
     "offset":0,
     "length":10,
     "result_type": "Topk",
-    "realtime": false,
+    "include_uncommitted": false,
     "search_mode": {
         "Vector":{
             "similarity_threshold": 0.7, 
             "ann_mode": {"Nprobe":55}
         }
     }
-
 }
 
 // e-commerce demo
@@ -832,6 +861,11 @@ apikey: {{api_key}}
 content-type: application/json
 
 {
+    "index_config": {
+        "name": "test_index",
+        "lexical_similarity": "Bm25fProximity",
+        "tokenizer": "UnicodeAlphanumeric"
+    },
     "schema":
     [
         { "field": "objectID",    "field_type": "String32", "store": true,  "index_lexical": false },
@@ -846,7 +880,5 @@ content-type: application/json
         { "field": "popularity",  "field_type": "U32",      "store": true,  "index_lexical": false, "facet": true },
         { "field": "price",       "field_type": "F64",      "store": true,  "index_lexical": false, "facet": true }
     ], 
-    "index_name": "test_index",
-    "similarity": "Bm25fProximity",
-    "tokenizer": "UnicodeAlphanumeric"
+    "synonyms": []
 }

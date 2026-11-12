@@ -5,6 +5,169 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-11-11
+
+### Breaking changes
+
+- **Improved Developer usability:** simpler, more concise library API, lower entry barrier: 
+  - **`search()`** takes a single `SearchRequest` struct** with `..Default::default()` and optional **chainable setters** instead of 14 positional parameters.
+  - **`delete_documents_by_query`** takes a single `SearchRequest` struct** with `..Default::default()` and optional **chainable setters** instead of 8 positional parameters. 
+  - **`IndexConfig::new(name)`**: formerly `IndexMetaObject`, only the name is required, to create index metadata with **sensible defaults**, and optional **chainable setters**.
+  - **`SchemaField::new(field,field_type)`**: only name and field_type required, to create a schema field with **sensible defaults**, and **optional chainable setters**.
+  - **More concise syntax**: achieve the same API functionality with less and less verbose lines of code.
+- **Improved consistency** between REST and library API
+  - The `SearchRequestObject` (REST) and the 14 positional search() parameters (library) are merged into a **single `SearchRequest`** used by both REST and library.
+  - `similarity` has been changed to `lexical_similarity`.
+  - `SearchResultObject` (REST) and `ResultObject` (library) have been merged into a **single `SearchResult`** used by both REST and library.
+  - Previously `SearchResultObject.results` has been Vec<Document> (Json doc wit all fields), and `ResultObject.results` has been `Vec<Result>` (Struct with doc_id and score).  
+    Now we have `SearchResult.results`, a `Vec<Result>` (Struct with doc_id and score) and `SearchResult.documents` with `Vec<Document>` (Json doc wit all fields).
+  - The result document related `SearchRequest` parameters `fields`, `distance_fields`, `highlights` have been moved into `return_documents=option<DocumentOption>`.
+  - This allows now both REST and library to decide via `return_documents=option<DocumentOption>` whether or not to immediately return in `SearchResult.documents` the full result document set, 
+    or only selected documents via separate get_document calls.  
+
+- **`search()` takes a single `SearchRequest` struct** instead of 14 positional parameters. The struct implements `Default` and has optional chainable setters.
+  - Library and REST API now use the same `SearchRequest` struct.
+  - Benefits: better developer experience (IDE autocomplete shows every field with its doc comment), and easy evolution (adding a field doesn't break callers that use `..Default::default()`).
+  - REST API (not breaking, old names remain as aliases): `realtime` is renamed to `include_uncommitted` and `query` to `query_string`, for naming parity between library and REST API.
+  - `query_string` type changed from `String` to `&str`.
+  - `query_vector` type changed from `Option<Embedding>` (old library) and `Option<Value>` (old REST) to `Option<QueryVector>` (new library and REST).
+    - REST: `query_vector` still accepts a **base64 encoded string** or an **array of f32 or i8**. REST behavior is unchanged.
+    - Library: `QueryVector` has the variants `Base64`, `VecF32` and `Embedding`.
+    - Use `encode_bytes_to_base64_string(&embedding_to_bytes_be(&Embedding::F32(fvecs)))` to get a base64 encoded string from an embedding.
+  - Usage examples:
+    ```rust
+    // before
+    let result = index_arc.search(
+        "rust".to_string(), 
+        None, 
+        QueryType::Intersection, 
+        SearchMode::Lexical, 
+        false, 
+        0, 
+        10, 
+        ResultType::TopkCount, 
+        false,
+        Vec::new(), 
+        Vec::new(), 
+        Vec::new(), 
+        Vec::new(), 
+        QueryRewriting::SearchOnly,
+    ).await;
+
+    // with default
+    let result = index.search(SearchRequest { query_string: "rust", include_uncommitted: true, ..Default::default() }).await;
+
+    // minimal
+    let result = index.search(SearchRequest::new("rust")).await;
+
+    // with setter
+    let result = index.search(SearchRequest::new("rust").length(20)).await;
+
+    // hybrid
+    let result = index.search(SearchRequest::new("rust").length(20).query_vector(vec![0.1, 0.2, 0.3]).search_mode(SearchMode::Hybrid { similarity_threshold: Some(0.7), ann_mode: AnnMode::All })).await;
+    ```
+- **`delete_documents_by_query`** takes a single `SearchRequest` struct** with `..Default::default()` and optional **chainable setters** instead of 8 positional parameters. 
+  - Both library and REST API now also support the parameters `query_vector`, `enable_empty_query`, `search_mode`.
+
+  ```rust
+  //before
+  let query="test".into();
+  let offset=0;
+  let length=10;
+  let query_type=QueryType::Intersection; 
+  let include_uncommitted=false;
+  let field_filter=Vec::new();
+  let facet_filter=Vec::new();
+  let result_sort=Vec::new();
+  index_arc.delete_documents_by_query(query, query_type, offset, length, include_uncommitted, field_filter, facet_filter, result_sort).await;
+
+  // with default
+  index.delete_documents_by_query(SearchRequest {query_string: "test", length: 10, ..Default::default()}).await;
+
+  // with setter
+  index.delete_documents_by_query(SearchRequest::new("test").length(10)).await;
+  ```
+
+- **`SchemaField::new` takes only the required arguments**: `SchemaField::new(field, field_type)`.
+  All other properties default to `false` (`boost` defaults to `1.0`) and are set via chained setters.
+  The previous 10-argument constructor is still available as `SchemaField::new_full` (deprecated).
+  Migration:
+  ```rust
+  // before
+  SchemaField::new("body".to_owned(), true, true, false, FieldType::Text, false, false, 1.0, false, false)
+  
+  // after
+  SchemaField::new("body", FieldType::Text).store(true).index_lexical(true)
+  ```
+- `SchemaField::default()` now returns `boost: 1.0` (the derived `Default` returned `0.0`), consistent with the JSON/serde default.
+
+### Added
+- `SchemaField` setters: `store`, `index_lexical`, `index_vector`, `facet`, `longest`, `boost`, `dictionary_source`, `completion_source`.
+- JSON schema: `store` and `index_lexical` are now optional in `SchemaField` JSON and default to `false`, e.g. `{"field":"url","field_type":"Text"}`.
+- `IndexConfig::new(name)`: creates index metadata with sensible defaults, only the name is required.
+- `impl Default for IndexConfig`, so struct update syntax works: `IndexConfig { name: "x".into(), ..Default::default() }`.
+  - Defaults: `Bm25f`, `UnicodeAlphanumeric`, no stemmer, no stopwords, English frequent words, `NgramFF + NgramFFF`, `Snappy`, `Mmap`, no spelling correction, no query completion, no clustering, no inference, 11 segment bits.
+- `IndexConfig` setters: `id`, `lexical_similarity`, `tokenizer`, `stemmer`, `stop_words`, `frequent_words`, `ngram_indexing`, `document_compression`, `access_type`, `spelling_correction`, `query_completion`, `clustering`, `inference`, `segment_number_bits`.
+- `IndexConfig::ngram_indexing` accepts a list of `NgramSet` values and combines them, replacing manual `NgramSet::X as u8 | NgramSet::Y as u8` flag arithmetic.
+
+  ```rust
+  // before
+  let meta = IndexMetaObject {
+      id: 0,
+      name: "test_index".to_string(),
+      lexical_similarity: LexicalSimilarity::Bm25f,
+      tokenizer: TokenizerType::AsciiAlphabetic,
+      stemmer: StemmerType::None,
+      stop_words: StopwordType::None,
+      frequent_words: FrequentwordType::English,
+      ngram_indexing: NgramSet::NgramFF as u8,
+      document_compression: DocumentCompression::Snappy,
+      access_type: AccessType::Mmap,
+      spelling_correction: None,
+      query_completion: None,
+      clustering: Clustering::None,
+      inference: Inference::None,
+      segment_number_bits: 11,
+  };
+
+  // with defaults
+  let index_config = IndexConfig {
+      name: "test_index".to_string(),
+      lexical_similarity: LexicalSimilarity::Bm25f,
+      tokenizer: TokenizerType::AsciiAlphabetic,
+      ngram_indexing: NgramSet::NgramFF as u8,
+      ..Default::default()
+  };
+
+  // with setters
+  let index_config = IndexConfig::new("test_index")
+      .lexical_similarity(LexicalSimilarity::Bm25f)
+      .tokenizer(TokenizerType::AsciiAlphabetic)
+      .ngram_indexing([NgramSet::NgramFF]);
+  ```
+
+### Deprecated
+- `SchemaField::new_full` (the former 10-argument `new`): use `SchemaField::new` with setters instead.
+
+### Changed
+
+- The create_index parameter `meta: IndexMetaObject` has been renamed into `index_config: IndexConfig`.
+- CreateIndexRequest (REST) and IndexConfig (library) have been unified. A minimal CreateIndexRequest as parent for the REST route, with IndexConfig as CreateIndexRequest child (REST) or create_index parameter (library).
+- The ..Default::default() and setters of IndexConfig work now both for the REST and the library route.
+- Quickstart, README and examples use the new `SearchRequest`, `SchemaField` and `IndexMetaObject` API.
+
+### Improved
+
+- SeekStorm MCP server updated to full alignment with SeekStorm 5.0.0's enhanced delete_documents_by_query capabilities, enabling users to delete documents using vector embeddings in addition to lexical queries!
+- `model2vec-rs` dependency upgraded from 3.0.0 to 4.0.0. Encodes ~2.8 million docs per second (was 116k/s).
+
+### Fixed
+
+- Added seekstorm_client\README.md to the documentation tests
+- Enabled documentation tests in seekstorm_client\lib.rs by annotating the code snippets with ```rust ,no_run
+- The meta fields _id and _score are now always injected into returned Documents, even if no fields are set as stored in the schema. 
+  But you can always disable documents altogether with `return_documents: None`.
+
 ## [4.0.1] - 2026-10-31
 
 ### Fixed

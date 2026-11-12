@@ -4,9 +4,10 @@ use reqwest::StatusCode;
 use seekstorm::{
     index::{
         ApikeyQuotaObject, CreateIndexRequest, DeleteApikeyRequest, Document, GetDocumentRequest,
-        GetIteratorRequest, IndexResponseObject, SearchRequestObject, SearchResultObject,
+        GetIteratorRequest, IndexResponseObject,
     },
     iterator::IteratorResult,
+    search::{SearchRequest, SearchResult},
 };
 
 /// RestClient is a wrapper around reqwest::Client that provides methods for interacting with the SeekStorm server API.
@@ -352,19 +353,19 @@ impl RestClient {
     /// Commit Index
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
-    /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+    /// which is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.
     /// Commit is invoked automatically each time 64K documents are newly indexed as well as on close_index (e.g. server quit).
     /// There is no way to prevent this automatic commit by not manually invoking it.
     /// But commit can also be invoked manually at any time at any number of newly indexed documents.
     /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
     /// is invoked implicitly with every index_doc,
     /// i.e. the document can immediately searched and included in the search results
-    /// if it matches the query AND the query paramter realtime=true is enabled.
+    /// if it matches the query AND the query parameter include_uncommitted=true is enabled.
     /// **Use commit with caution, as it is an expensive operation**.
     /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents and when the index is closed with close_index.
     /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
     /// There are only 2 reasons that justify a manual commit:
-    /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+    /// 1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
     ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
@@ -460,7 +461,7 @@ impl RestClient {
     /// Index Document
     /// Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
     /// Index documents enables true real-time search (as opposed to near realtime.search):
-    /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+    /// When in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
     /// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
     ///
     /// Arguments:
@@ -511,7 +512,7 @@ impl RestClient {
     /// Index Documents
     /// Index a JSON document or an array of JSON documents (bulk), each consisting of arbitrary key-value pairs to the index with the specified apikey and index_id, and return the number of indexed docs.
     /// Index documents enables true real-time search (as opposed to near realtime.search):
-    /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+    /// When in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
     /// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
     ///
     /// Arguments:
@@ -718,7 +719,7 @@ impl RestClient {
     /// Update document is a combination of delete_document and index_document.
     /// All current limitations of delete_document apply.
     /// Update documents enables true real-time search (as opposed to near realtime.search):
-    /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+    /// When in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
     /// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
     ///
     /// Arguments:
@@ -771,7 +772,7 @@ impl RestClient {
     /// Update document is a combination of delete_document and index_document.
     /// All current limitations of delete_document apply.
     /// Update documents enables true real-time search (as opposed to near realtime.search):
-    /// When in query_index the parameter `realtime` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
+    /// When in query_index the parameter `include_uncommitted` is set to `true` then indexed, but uncommitted documents are immediately included in the search results, without requiring a commit or refresh.
     /// Therefore a explicit commit_index is almost never required, as it is invoked automatically after 64k documents are indexed or on close_index for persistence.
     ///
     /// Arguments:
@@ -951,7 +952,7 @@ impl RestClient {
         base_url: &str,
         apikey_base64: &str,
         index_id: u64,
-        query: &SearchRequestObject,
+        query: &SearchRequest<'_>,
     ) -> Result<usize, (StatusCode, String)> {
         let url = format!("{}/api/v1/index/{}/doc", base_url, index_id);
         if let Ok(response) = self
@@ -1087,8 +1088,8 @@ impl RestClient {
         base_url: &str,
         apikey_base64: &str,
         index_id: u64,
-        request: SearchRequestObject,
-    ) -> Result<SearchResultObject, (StatusCode, String)> {
+        request: SearchRequest<'_>,
+    ) -> Result<SearchResult, (StatusCode, String)> {
         let url = format!("{}/api/v1/index/{}/query", base_url, index_id);
         if let Ok(response) = self
             .client
@@ -1102,7 +1103,7 @@ impl RestClient {
                 && let Ok(response_bytes) = response.bytes().await
             {
                 if status.is_success() {
-                    serde_json::from_slice::<SearchResultObject>(&response_bytes).map_err(|_| {
+                    serde_json::from_slice::<SearchResult>(&response_bytes).map_err(|_| {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Deserialization error".to_string(),

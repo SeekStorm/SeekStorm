@@ -12,10 +12,10 @@
 use seekstorm::commit::Commit;
 use seekstorm::index::{
     AccessType, Close, Clustering, DeleteDocuments, DocumentCompression, FrequentwordType,
-    IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
+    IndexConfig, IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
     TokenizerType, create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 use std::{collections::HashSet, fs, path::Path};
 
@@ -32,8 +32,8 @@ impl Rng {
     }
 }
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
+fn index_config() -> IndexConfig {
+    IndexConfig {
         id: 0,
         name: "bitmap_delete_consistency".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
@@ -64,24 +64,15 @@ async fn search(
     query: &str,
     query_type: QueryType,
     result_type: ResultType,
-) -> seekstorm::search::ResultObject {
+) -> seekstorm::search::SearchResult {
     index
-        .search(
-            query.into(),
-            None,
-            query_type,
-            SearchMode::Lexical,
-            false,
-            0,
-            100,
-            result_type,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            query_type_default: query_type,
+            length: 100,
+            result_type: result_type,
+            ..Default::default()
+        })
         .await
 }
 
@@ -89,9 +80,7 @@ async fn setup() -> (seekstorm::index::IndexArc, HashSet<u64>, HashSet<u64>) {
     const N: u64 = 12000;
     let path = Path::new("tests/index_delete_bitmap/");
     let _ = fs::remove_dir_all(path);
-    // Single shard: per-shard postings stay >= 4096 scattered docs, which
-    // forces Bitmap encoding (RLE aborts past 2048 runs).
-    let index = create_index(path, meta(), &schema(), &Vec::new(), true, Some(1))
+    let index = create_index(path, index_config(), &schema(), &[], true, Some(1))
         .await
         .unwrap();
     let mut rng = Rng(0xabc);
@@ -139,7 +128,6 @@ async fn setup() -> (seekstorm::index::IndexArc, HashSet<u64>, HashSet<u64>) {
 #[tokio::test]
 async fn bitmap_and_count_excludes_deleted() {
     let (index, set_x, set_y) = setup().await;
-    // Recompute ground truth with the same seeds as setup.
     let (live_and, _) = ground_truth(&set_x, &set_y);
     let count = search(
         &index,
@@ -155,8 +143,8 @@ async fn bitmap_and_count_excludes_deleted() {
         ResultType::TopkCount,
     )
     .await;
-    assert_eq!(count.result_count_total, live_and.len());
-    assert_eq!(topk.result_count_total, live_and.len());
+    assert_eq!(count.count_total, live_and.len());
+    assert_eq!(topk.count_total, live_and.len());
     index.close().await;
 }
 
@@ -173,8 +161,8 @@ async fn bitmap_or_count_excludes_deleted() {
         ResultType::TopkCount,
     )
     .await;
-    assert_eq!(count.result_count_total, live_or.len());
-    assert_eq!(topk.result_count_total, live_or.len());
+    assert_eq!(count.count_total, live_or.len());
+    assert_eq!(topk.count_total, live_or.len());
     index.close().await;
 }
 

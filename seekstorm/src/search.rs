@@ -1,20 +1,24 @@
 use crate::INDEX_RUNTIME;
 use crate::geo_search::{decode_morton_2_d, point_distance_to_morton_range};
+use crate::highlighter::{Highlight, highlighter};
+pub use crate::index::DistanceUnit;
 use crate::index::{
-    DOCUMENT_LENGTH_COMPRESSION, DistanceUnit, Facet, FieldType, NgramType, ResultFacet, Shard,
-    ShardArc,
+    DOCUMENT_LENGTH_COMPRESSION, DistanceField, Document, Facet, FieldType, IS_SYSTEM_LE,
+    NgramType, ResultFacet, Shard, ShardArc,
 };
 use crate::iterator::{search_iterator_index, search_iterator_shard};
 use crate::min_heap::{Result, result_ordering_root};
 use crate::tokenizer::{tokenizer, tokenizer_lite};
 use crate::union::{union_docid_2, union_docid_3};
 use crate::utils::{
-    read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u8, read_u16, read_u32,
-    read_u64,
+    decode_bytes_from_base64_string, read_f32, read_f64, read_i8, read_i16, read_i32, read_i64,
+    read_u8, read_u16, read_u32, read_u64,
 };
 #[cfg(feature = "vb")]
 use crate::vector::ResultSource;
-use crate::vector::{Embedding, Inference, Quantization, SearchVectorShard};
+use crate::vector::{
+    Embedding, Inference, Precision, Quantization, SearchVectorShard, embedding_from_bytes_be,
+};
 use crate::vector_similarity::{
     AnnMode, QuantizedVector, VectorSimilarity, normalize_f32, normalize_f32_simd,
     quantize_f32_to_i8, quantize_f32_to_i8_simd,
@@ -37,6 +41,7 @@ use itertools::Itertools;
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use std::collections::HashSet;
 use std::mem::discriminant;
 use std::ops::Range;
 use std::sync::{
@@ -47,6 +52,362 @@ use std::{cmp, mem};
 use utoipa::ToSchema;
 
 use symspell_complete_rs::Suggestion;
+
+/// Query vector for semantic search.
+/// JSON string = base64-encoded vector, JSON array = numeric values.
+/// The element type (f32 or i8) is taken from the index's vector field definition at search time.
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
+#[serde(untagged)]
+pub enum QueryVector {
+    /// Base64-encoded raw vector bytes.
+    Base64(String),
+    /// Vector as array of numbers.
+    VecF32(Vec<f32>),
+    /// Already typed embedding F32 or I8 (library only):
+    #[serde(skip)]
+    #[schema(skip)]
+    Embedding(Embedding),
+}
+
+impl QueryVector {
+    pub(crate) fn into_embedding(
+        self,
+        precision: Precision,
+        dimensions: usize,
+    ) -> Option<Embedding> {
+        match (self, precision) {
+            (QueryVector::VecF32(vector), Precision::F32) if vector.len() == dimensions => {
+                Some(Embedding::F32(vector))
+            }
+
+            (QueryVector::VecF32(vector), Precision::I8) if vector.len() == dimensions => {
+                let mut out = Vec::with_capacity(vector.len());
+                for x in vector {
+                    out.push(x as i8);
+                }
+                Some(Embedding::I8(out))
+            }
+
+            (QueryVector::Base64(string_base64), _) => {
+                if let Ok(bytes) = decode_bytes_from_base64_string(&string_base64) {
+                    embedding_from_bytes_be(&bytes, precision, dimensions, *IS_SYSTEM_LE)
+                } else {
+                    None
+                }
+            }
+
+            (QueryVector::Embedding(embedding), _) => {
+                let valid = match (&embedding, precision) {
+                    (Embedding::F32(vector), Precision::F32) => vector.len() == dimensions,
+                    (Embedding::I8(vector), Precision::I8) => vector.len() == dimensions,
+                    _ => false,
+                };
+                valid.then_some(embedding)
+            }
+
+            _ => None,
+        }
+    }
+}
+
+impl From<Vec<f32>> for QueryVector {
+    fn from(v: Vec<f32>) -> Self {
+        QueryVector::Embedding(Embedding::F32(v))
+    }
+}
+
+impl From<Vec<i8>> for QueryVector {
+    fn from(v: Vec<i8>) -> Self {
+        QueryVector::Embedding(Embedding::I8(v))
+    }
+}
+
+impl From<String> for QueryVector {
+    fn from(s: String) -> Self {
+        QueryVector::Base64(s)
+    }
+}
+
+impl From<&str> for QueryVector {
+    fn from(s: &str) -> Self {
+        QueryVector::Base64(s.to_owned())
+    }
+}
+
+impl From<Embedding> for QueryVector {
+    fn from(e: Embedding) -> Self {
+        QueryVector::Embedding(e)
+    }
+}
+
+/// Options for document retrieval
+#[derive(Deserialize, Serialize, Clone, ToSchema, Debug, Default)]
+pub struct DocumentOption {
+    /// Specify names of fields to return in the search results, where SchemaField.store is set at index time. If empty then all stored fields are returned.
+    #[serde(default)]
+    pub fields: Vec<String>,
+    /// Specify distance fields to derive at query time and return in the search results.
+    #[serde(default)]
+    pub distance_fields: Vec<DistanceField>,
+    /// Specify field names where to create keyword-in-context fragments and highlight query terms.
+    #[serde(default)]
+    pub highlights: Vec<Highlight>,
+}
+
+/// Search request object
+#[derive(Deserialize, Serialize, Clone, ToSchema, Debug)]
+#[serde(default)]
+pub struct SearchRequest<'a> {
+    /// Query string, search operators `+` `-` `""` are recognized.
+    #[serde(alias = "query")]
+    pub query_string: &'a str,
+    /// Optional query vector: If None, then the query vector is derived from the query string using the specified model.
+    /// If Some, then the query vector is used for semantic search and the query string is only used for lexical search and highlighting.
+    pub query_vector: Option<QueryVector>,
+    #[schema(default = false, example = false)]
+    /// Enable empty query: if true, an empty query string iterates through all indexed documents, supporting the query parameters: offset, length, query_facets, facet_filter, result_sort,
+    /// otherwise an empty query string returns no results.
+    /// Typical use cases include index browsing, index export, conversion, analytics, audits, and inspection.
+    pub enable_empty_query: bool,
+    #[schema(minimum = 0, default = 0, example = 0)]
+    /// Offset of search results to return.
+    pub offset: usize,
+    /// Number of search results to return.
+    /// With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
+    #[schema(minimum = 1, default = 10, example = 10)]
+    pub length: usize,
+    /// Specify the type of search results to return: Count, Topk, TopkCount.
+    /// Facets are only returned for Count and TopkCount, because Topk only returns the top-k results and does no exhaustive counting.
+    pub result_type: ResultType,
+    /// True real-time search: include indexed, but uncommitted documents into search results.
+    #[serde(alias = "realtime")]
+    pub include_uncommitted: bool,
+    /// Specify field names where to search at query time, whereas SchemaField.indexed is set at index time. If empty then all indexed fields are searched.
+    /// Field filters are active *during* vector and lexical search.
+    #[schema(example = json!(["title"]))]
+    pub field_filter: Vec<String>,
+    /// Facets to return with search results: Must be set if facets should be returned in [`SearchResult`]. If empty then no facets are returned.
+    /// Facets are only enabled on facet fields that are defined in schema at create_index!
+    /// Query facets are active *during* vector and lexical search.
+    /// Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
+    /// The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
+    /// The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
+    /// If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
+    /// The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
+    /// Examples:
+    /// ```rust ,no_run
+    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};
+    /// let query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
+    /// let query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
+    /// let query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
+    /// ```
+    pub query_facets: Vec<QueryFacet>,
+    /// Facet filters to filter search results by facet values: if empty then no facet filters are applied. Facet filters are only enabled on facet fields that are defined in schema at create_index!
+    /// Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.
+    /// Facet filters are active *during* vector and lexical search.
+    /// The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
+    /// If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
+    /// the query facets are counted over all documents matching the query and the facet filter.
+    ///   Examples:
+    /// ```rust ,no_run
+    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue, FacetFilter};
+    /// let facet_filter=vec![FacetFilter::String16{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String16{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
+    /// let facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
+    /// let facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
+    /// ```
+    pub facet_filter: Vec<FacetFilter>,
+    /// Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
+    /// If no sort field is specified, then the search results are sorted by rank in descending order per default.
+    /// Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
+    /// The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
+    /// until the n-th field value is either not equal or the last field is reached.
+    /// A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
+    /// Sort is only enabled on facet fields that are defined in schema at create_index!
+    /// Examples:
+    /// ```rust ,no_run
+    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};
+    /// let result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
+    /// let result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
+    /// ```
+    #[schema(example = json!([{"field": "date", "order": "Ascending", "base": "None" }]))]
+    pub result_sort: Vec<ResultSort>,
+    /// Specify default query type: (default=Union).
+    /// This can be overwritten by search operators within the query string (`+` `-` `""`).
+    /// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
+    /// | `query_type_default` | query string      | meaning              |
+    /// |----------------------|-------------------|----------------------|
+    /// | `Union`              | `red apple`       | OR                   |
+    /// | `Intersection`       | `red apple`       | AND                  |
+    /// | `Union`              | `+red +apple`     | AND via operators    |
+    /// | `Phrase`             | `red apple`       | phrase               |
+    /// | `Union`              | `\"red apple\"`   | phrase via operators |
+    /// | `Union`              | `apple -red`      | NOT                  |
+    /// | `Union`              | `+\"the who\" +uk`| phrase + intersection|
+    #[schema(example = QueryType::Intersection)]
+    pub query_type_default: QueryType,
+    /// Specify query rewriting method for search query correction and completion: (default=SearchOnly).
+    /// Enables query rewriting features such as spelling correction and query auto-completion (QAC).
+    /// The spelling correction of multi-term query strings handles three cases:
+    /// 1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`
+    /// 2. mistakenly omitted space between two correct terms led to one incorrect combined term: `modernart` -> `modern art`
+    /// 3. multiple independent input terms with/without spelling errors: `cinese indastrialication` -> `chinese industrialization`
+    ///
+    /// Query correction/completion supports phrases "", but is disabled, if +- operators are used,  or if a opening quote is used after the first term, or if a closing quote is used before the last term.
+    /// See QueryRewriting enum for details.
+    /// ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `index_config.spelling_correction`.
+    ///  
+    /// Facets:
+    /// If query_string is empty and enable_empty_query is false, then no query is executed and index facets (collected at index time) are returned.
+    /// Otherwise query facets (collected at query time) are returned, counted over the documents matching the query and the facet filter.
+    ///
+    /// Facets are defined in 3 different places:
+    /// - the facet fields are defined in schema at create_index,
+    /// - the facet field values are set in index_document at index time,
+    /// - the query_facets/facet_filter search parameters are specified at query time.
+    ///
+    /// Facets are then returned in [`SearchResult`].
+    #[schema(example = QueryRewriting::SearchOnly)]
+    pub query_rewriting: QueryRewriting,
+    /// Specify search mode: (default=Lexical).
+    #[schema(example = SearchMode::Lexical)]
+    pub search_mode: SearchMode,
+    /// Specify options for returning documents in the search results.
+    /// If None, no documents are returned.
+    /// If Some, the specified options are used to control which fields, distance fields, and highlights are returned.
+    /// If you just want to return the full documents with all stored fields, without highlighting or distance fields, you can set this to `return_documents: Some(Default::default()),`
+    #[serde(default = "return_documents_default_api")]
+    pub return_documents: Option<DocumentOption>,
+}
+
+impl Default for SearchRequest<'_> {
+    fn default() -> Self {
+        Self {
+            query_string: "",
+            query_vector: None,
+            enable_empty_query: false,
+            offset: 0,
+            length: 10,
+            result_type: ResultType::default(),
+            include_uncommitted: false,
+
+            field_filter: Vec::new(),
+            query_facets: Vec::new(),
+            facet_filter: Vec::new(),
+            result_sort: Vec::new(),
+            query_type_default: QueryType::Union,
+            query_rewriting: QueryRewriting::SearchOnly,
+            search_mode: SearchMode::Lexical,
+
+            return_documents: None,
+        }
+    }
+}
+
+fn return_documents_default_api() -> Option<DocumentOption> {
+    Some(DocumentOption {
+        fields: Vec::new(),
+        distance_fields: Vec::new(),
+        highlights: Vec::new(),
+    })
+}
+
+impl<'a> SearchRequest<'a> {
+    /// Create a new `SearchRequest` with the given query string.
+    #[must_use]
+    pub fn new(query_string: &'a str) -> Self {
+        Self {
+            query_string,
+            ..Default::default()
+        }
+    }
+    /// Set the query vector for the search.
+    #[must_use]
+    pub fn query_vector(mut self, v: impl Into<QueryVector>) -> Self {
+        self.query_vector = Some(v.into());
+        self
+    }
+    /// Set the query vector for the search, using an `Option` (e.g. `Option<Embedding>`).
+    #[must_use]
+    pub fn query_vector_opt(mut self, v: Option<impl Into<QueryVector>>) -> Self {
+        self.query_vector = v.map(Into::into);
+        self
+    }
+    /// Set the offset for the search results.
+    #[must_use]
+    pub fn offset(mut self, n: usize) -> Self {
+        self.offset = n;
+        self
+    }
+    /// Set the number of search results to return.
+    #[must_use]
+    pub fn length(mut self, n: usize) -> Self {
+        self.length = n;
+        self
+    }
+    /// Include uncommitted documents in the search results.
+    #[must_use]
+    pub fn include_uncommitted(mut self, b: bool) -> Self {
+        self.include_uncommitted = b;
+        self
+    }
+    /// Set the field filter for the search.
+    #[must_use]
+    pub fn field_filter(mut self, f: Vec<String>) -> Self {
+        self.field_filter = f;
+        self
+    }
+    /// Set the query facets for the search.
+    #[must_use]
+    pub fn query_facets(mut self, f: Vec<QueryFacet>) -> Self {
+        self.query_facets = f;
+        self
+    }
+    /// Set the facet filter for the search.
+    #[must_use]
+    pub fn facet_filter(mut self, f: Vec<FacetFilter>) -> Self {
+        self.facet_filter = f;
+        self
+    }
+    /// Set the result sort order for the search.
+    #[must_use]
+    pub fn result_sort(mut self, s: Vec<ResultSort>) -> Self {
+        self.result_sort = s;
+        self
+    }
+    /// Set the search mode.
+    #[must_use]
+    pub fn search_mode(mut self, m: SearchMode) -> Self {
+        self.search_mode = m;
+        self
+    }
+    /// Set the default query type.
+    #[must_use]
+    pub fn query_type_default(mut self, qt: QueryType) -> Self {
+        self.query_type_default = qt;
+        self
+    }
+
+    /// Set the result type for the search.
+    #[must_use]
+    pub fn result_type(mut self, rt: ResultType) -> Self {
+        self.result_type = rt;
+        self
+    }
+
+    /// Set the query rewriting mode.
+    #[must_use]
+    pub fn query_rewriting(mut self, qr: QueryRewriting) -> Self {
+        self.query_rewriting = qr;
+        self
+    }
+
+    /// Set the return documents option for the search results.
+    #[must_use]
+    pub fn return_documents(mut self, rd: Option<DocumentOption>) -> Self {
+        self.return_documents = rd;
+        self
+    }
+}
 
 /// Specifies the default QueryType: The following query types are supported:
 /// - **Union** (OR, disjunction),
@@ -175,41 +536,49 @@ pub enum ResultType {
     TopkCount = 2,
 }
 
-pub(crate) struct SearchResult<'a> {
+pub(crate) struct SearchResultObject<'a> {
     pub topk_candidates: MinHeap<'a>,
     pub query_facets: Vec<ResultFacet>,
     pub skip_facet_count: bool,
 }
 
 /// Contains the results returned when searching the index.
-#[derive(Default, Debug, Deserialize, Serialize, Clone)]
-pub struct ResultObject {
+#[derive(Default, Debug, Deserialize, Serialize, Clone, ToSchema)]
+pub struct SearchResult {
     /// Search query string
     pub original_query: String,
     /// Search query string after any automatic query correction or completion
     pub query: String,
     /// Vector of search query terms. Can be used e.g. for custom highlighting.
     pub query_terms: Vec<String>,
+    /// Offset of the returned search results
+    pub offset: usize,
+    /// Number of requested search results
+    pub length: usize,
     /// Number of returned search results. Identical to results.len()
-    pub result_count: usize,
-
+    pub count: usize,
     /// Total number of search results that match the query
-    /// result_count_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
-    pub result_count_total: usize,
-
+    /// count_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk (then it is set to count).
+    pub count_total: usize,
     ///number of vectors observed during search
     pub observed_vector_count: usize,
-
     ///number of clusters observed during search
     pub observed_cluster_count: usize,
 
     /// List of search results: doc ID and BM25 score
     pub results: Vec<Result>,
+    #[schema(value_type=Vec<HashMap<String, serde_json::Value>>)]
+    /// Vector of search result documents
+    pub documents: Vec<Document>,
     /// List of facet fields: field name and vector of unique values and their counts.
     /// Unique values and their counts are only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
+    #[schema(value_type=HashMap<String, Vec<(String, usize)>>)]
     pub facets: AHashMap<String, Facet>,
+
     ///Suggestions for auto complete and spelling correction.
     pub suggestions: Vec<String>,
+    /// Time taken to execute the search query in nanoseconds
+    pub time: u128,
 }
 
 /// Create query_list and non_unique_query_list
@@ -917,261 +1286,81 @@ pub(crate) struct ResultSortIndex<'a> {
 /// longitude lon
 pub type Point = Vec<f64>;
 
-#[allow(clippy::too_many_arguments)]
+/// Search the index using a [`SearchRequest`].
 #[allow(async_fn_in_trait)]
-/// Search the index for all indexed documents, both for committed and uncommitted documents.
-/// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
-///
-/// Arguments:
-/// * `query_string`: query string `+` `-` `""` search operators are recognized.
-/// * `query_type_default`: Specifiy default QueryType:
-///   * **Union**, disjunction, OR,
-///   * **Intersection**,  conjunction, AND, `+`,
-///   * **Phrase** `""`,
-///   * **Not**, except, minus `-`.
-///
-/// The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (`+` `-` `""`).
-///   
-/// Boolean queries are specified in the search method either via the query_type parameter or via operator chars within the query parameter.
-/// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
-///
-/// Intersection, AND `+`
-///
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Union;
-/// let query_string="+red +apple".to_string();
-/// ```
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Intersection;
-/// let query_string="red apple".to_string();
-/// ```
-/// Union, OR
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Union;
-/// let query_string="red apple".to_string();
-/// ```
-/// Phrase `""`
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Union;
-/// let query_string="\"red apple\"".to_string();
-/// ```
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Phrase;
-/// let query_string="red apple".to_string();
-/// ```
-/// Except, minus, NOT `-`
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Union;
-/// let query_string="apple -red".to_string();
-/// ```
-/// Mixed phrase and intersection
-/// ```rust ,no_run
-/// use seekstorm::search::QueryType;
-/// let query_type=QueryType::Union;
-/// let query_string="+\"the who\" +uk".to_string();
-/// ```
-/// * `offset`: offset of search results to return.
-/// * `length`: number of search results to return.
-///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-///
-/// * `result_type`: type of search results to return: Count, Topk, TopkCount.
-/// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
-/// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched. Field filters are active *during* vector and lexical search.
-/// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned. Query facets are active *during* vector and lexical search.
-///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
-///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
-///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
-///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-///   Examples:
-///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
-///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
-///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
-///
-/// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered. Facet filters are active *during* vector and lexical search.
-///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-///   If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
-///   the query facets are counted over all documents matching the query and the facet filter.
-///   Examples:
-///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
-///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
-///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
-///
-/// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
-///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
-///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
-///   The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
-///   until the n-th field value is either not equal or the last field is reached.
-///   A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
-///   Sort is only enabled on facet fields that are defined in schema at create_index!
-///   Examples:
-///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
-///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
-///  
-///   If query_string is empty and enable_empty_query is false, then no query is executed and index facets (collected at index time) are returned.
-///   Otherwise query facets (collected at query time) are returned, counted over the documents matching the query and the facet filter.
-///   Facets are defined in 3 different places:
-///   the facet fields are defined in schema at create_index,
-///   the facet field values are set in index_document at index time,
-///   the query_facets/facet_filter search parameters are specified at query time.
-///   Facets are then returned in the search result object.
 pub trait Search {
-    /// Search the index for all indexed documents, both for committed and uncommitted documents.
-    /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.
-    ///
-    /// Arguments:
-    /// * `query_string`: query string `+` `-` `""` search operators are recognized.
-    /// * `query_type_default`: Specifiy default QueryType:
-    ///   * **Union**, disjunction, OR,
-    ///   * **Intersection**,  conjunction, AND, `+`,
-    ///   * **Phrase** `""`,
-    ///   * **Not**, except, minus `-`.
-    ///
-    /// The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (`+` `-` `""`).
-    ///   
-    /// Boolean queries are specified in the search method either via the query_type parameter or via operator chars within the query parameter.
-    /// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
-    ///
-    /// Intersection, AND `+`
-    ///
+    /// Search the index for all indexed documents, both committed and uncommitted.
+    /// Searching uncommitted documents (`include_uncommitted`) enables true realtime search:
+    /// documents are available for search in exactly the same millisecond they are indexed.
+    /// All search parameters (query string, query vector, paging, result type, filters, facets,
+    /// sorting, query rewriting, search mode, returned document fields) are specified
+    /// in the [`SearchRequest`] object. See its fields for details.
+    /// # Arguments
+    /// * `search_request`: a [`SearchRequest`]. Unspecified fields take their `Default` values,
+    ///   so use struct update syntax (`..Default::default()`) or the builder methods.
+    /// # Returns
+    /// A [`SearchResult`] with the results, result counts and facets.
+    /// # Examples
     /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Union;
-    /// let query_string="+red +apple".to_string();
+    /// # tokio_test::block_on(async {
+    /// use std::path::Path;
+    /// use seekstorm::index::open_index;
+    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest};
+    /// use seekstorm::vector_similarity::AnnMode;
+    /// let index_arc = open_index(Path::new("C:/index/")).await.unwrap();
+    /// // struct update syntax
+    /// let res = index_arc.search(SearchRequest {
+    ///     query_string: "rust",
+    ///     include_uncommitted: true,
+    ///     return_documents: Some(Default::default()),
+    ///     ..Default::default()
+    /// }).await;
+    /// // builder
+    /// let res = index_arc.search(SearchRequest::new("rust").length(20)).await;
+    /// // query operators within the query string (phrase + intersection)
+    /// let res = index_arc.search(SearchRequest::new("+\"the who\" +uk")).await;
+    /// // explicit default query type
+    /// let res = index_arc.search(
+    ///     SearchRequest::new("red apple").query_type_default(QueryType::Intersection)
+    /// ).await;
+    /// // hybrid lexical + vector search
+    /// let res = index_arc.search(
+    ///     SearchRequest::new("rust")
+    ///         .query_vector(vec![0.1, 0.2, 0.3])
+    ///         .search_mode(SearchMode::Hybrid {
+    ///             similarity_threshold: Some(0.7),
+    ///             ann_mode: AnnMode::All,
+    ///         })
+    /// ).await;
+    /// # });
     /// ```
-    /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Intersection;
-    /// let query_string="red apple".to_string();
-    /// ```
-    /// Union, OR
-    /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Union;
-    /// let query_string="red apple".to_string();
-    /// ```
-    /// Phrase `""`
-    /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Union;
-    /// let query_string="\"red apple\"".to_string();
-    /// ```
-    /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Phrase;
-    /// let query_string="red apple".to_string();
-    /// ```
-    /// Except, minus, NOT `-`
-    /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Union;
-    /// let query_string="apple -red".to_string();
-    /// ```
-    /// Mixed phrase and intersection
-    /// ```rust ,no_run
-    /// use seekstorm::search::QueryType;
-    /// let query_type=QueryType::Union;
-    /// let query_string="+\"the who\" +uk".to_string();
-    /// ```
-    /// * `offset`: offset of search results to return.
-    /// * `length`: number of search results to return.
-    ///   With length=0, resultType::TopkCount will be automatically downgraded to resultType::Count, returning the number of results only, without returning the results itself.
-    ///
-    /// * `result_type`: type of search results to return: Count, Topk, TopkCount.
-    /// * `include_uncommitted`: true realtime search: include indexed documents which where not yet committed into search results.
-    /// * `field_filter`: Specify field names where to search at querytime, whereas SchemaField.indexed is set at indextime. If set to Vec::new() then all indexed fields are searched. Field filters are active *during* vector and lexical search.
-    /// * `query_facets`: Must be set if facets should be returned in ResultObject. If set to Vec::new() then no facet fields are returned. Query facets are active *during* vector and lexical search.
-    ///   Facet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.
-    ///   The prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.
-    ///   The length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.
-    ///   If the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.
-    ///   The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
-    ///   Examples:
-    ///   query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
-    ///   query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
-    ///   query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
-    ///
-    /// * `facet_filter`: Search results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered. Facet filters are active *during* vector and lexical search.
-    ///   The filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.
-    ///   If the query is changed and/or the facet filter is changed then both search results and facet counts are changed:
-    ///   the query facets are counted over all documents matching the query and the facet filter.
-    ///   Examples:
-    ///   facet_filter=vec![FacetFilter::String{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
-    ///   facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
-    ///   facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
-    ///
-    /// * `result_sort`: Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.
-    ///   If no sort field is specified, then the search results are sorted by rank in descending order per default.
-    ///   Multiple sort fields are combined by a "sort by, then sort by"-method ("tie-breaking"-algorithm).
-    ///   The results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,
-    ///   until the n-th field value is either not equal or the last field is reached.
-    ///   A special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.
-    ///   Sort is only enabled on facet fields that are defined in schema at create_index!
-    ///   Examples:
-    ///   result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
-    ///   result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
-    ///
-    /// * `query_rewriting`: Enables query rewriting features such as spelling correction and query auto-completion (QAC).
-    ///   The spelling correction of multi-term query strings handles three cases:
-    ///     1. mistakenly inserted space into a correct term led to two incorrect terms: `hels inki` -> `helsinki`
-    ///     2. mistakenly omitted space between two correct terms led to one incorrect combined term: `modernart` -> `modern art`
-    ///     3. multiple independent input terms with/without spelling errors: `cinese indastrialication` -> `chinese industrialization`
-    ///
-    /// Query correction/completion supports phrases "", but is disabled, if +- operators are used,  or if a opening quote is used after the first term, or if a closing quote is used before the last term.
-    /// See QueryRewriting enum for details.
-    /// ⚠️ In addition to setting the query_rewriting parameter per query, the incremental creation of the Symspell dictionary during the indexing of documents has to be enabled via the create_index parameter `meta.spelling_correction`.
-    ///  
-    /// Facets:
-    ///    If query_string is empty and enable_empty_query is false, then no query is executed and index facets (collected at index time) are returned.
-    ///    Otherwise query facets (collected at query time) are returned, counted over the documents matching the query and the facet filter.
-    ///    Facets are defined in 3 different places:
-    ///    the facet fields are defined in schema at create_index,
-    ///    the facet field values are set in index_document at index time,
-    ///    the query_facets/facet_filter search parameters are specified at query time.
-    ///    Facets are then returned in the search result object.
-    async fn search(
-        &self,
-        query_string: String,
-        query_vector: Option<Embedding>,
-        query_type_default: QueryType,
-        search_mode: SearchMode,
-        enable_empty_query: bool,
-        offset: usize,
-        length: usize,
-        result_type: ResultType,
-        include_uncommitted: bool,
-        field_filter: Vec<String>,
-        query_facets: Vec<QueryFacet>,
-        facet_filter: Vec<FacetFilter>,
-        result_sort: Vec<ResultSort>,
-        query_rewriting: QueryRewriting,
-    ) -> ResultObject;
+    async fn search(&self, search_request: SearchRequest<'_>) -> SearchResult;
 }
 
 impl Search for IndexArc {
-    async fn search(
-        &self,
-        query_string: String,
-        query_vector: Option<Embedding>,
-        query_type_default: QueryType,
-        search_mode: SearchMode,
-        enable_empty_query: bool,
-        offset: usize,
-        length: usize,
-        result_type: ResultType,
-        include_uncommitted: bool,
-        field_filter: Vec<String>,
-        query_facets: Vec<QueryFacet>,
-        facet_filter: Vec<FacetFilter>,
-        result_sort: Vec<ResultSort>,
-        query_rewriting: QueryRewriting,
-    ) -> ResultObject {
+    async fn search(&self, search_request: SearchRequest<'_>) -> SearchResult {
+        let (precision, dimensions) = {
+            let index = self.read().await;
+            (index.vector_precision, index.vector_dimensions_original)
+        };
+
+        let query_string = search_request.query_string.to_string();
+        let query_vector = search_request
+            .query_vector
+            .and_then(|vector| vector.into_embedding(precision, dimensions));
+        let query_type_default = search_request.query_type_default.clone();
+        let search_mode = search_request.search_mode.clone();
+        let enable_empty_query = search_request.enable_empty_query;
+        let offset = search_request.offset;
+        let length = search_request.length;
+        let result_type = search_request.result_type.clone();
+        let include_uncommitted = search_request.include_uncommitted;
+        let field_filter = search_request.field_filter.clone();
+        let query_facets = search_request.query_facets.clone();
+        let facet_filter = search_request.facet_filter.clone();
+        let result_sort = search_request.result_sort.clone();
+        let query_rewriting = search_request.query_rewriting.clone();
+
         let index_ref = self.read().await;
         let original_query = query_string.clone();
 
@@ -1207,7 +1396,8 @@ impl Search for IndexArc {
             let mut previous_qac: Option<(String, Vec<Suggestion>)> = None;
             loop {
                 let shard = index_ref.shard_vec[0].read().await;
-                let query_terms = tokenizer_lite(&query_string, &index_ref.meta.tokenizer, &shard);
+                let query_terms =
+                    tokenizer_lite(&query_string, &index_ref.index_config.tokenizer, &shard);
                 drop(shard);
 
                 let qac = if !query_terms.is_empty() {
@@ -1402,7 +1592,7 @@ impl Search for IndexArc {
                 length: None,
             })
         {
-            let mut result_object = ResultObject {
+            let mut result_object = SearchResult {
                 original_query,
                 query: query_string.clone(),
                 ..Default::default()
@@ -1466,7 +1656,7 @@ impl Search for IndexArc {
         let query_vector = if index_ref.is_vector_indexing && search_mode != SearchMode::Lexical {
             Some(if let Some(mut qv) = query_vector {
                 if index_ref.vector_similarity == VectorSimilarity::Cosine
-                    && matches!(index_ref.meta.inference, Inference::External { .. })
+                    && matches!(index_ref.index_config.inference, Inference::External { .. })
                     && let Embedding::F32(ref mut fvecs) = qv
                 {
                     if index_ref.is_simd {
@@ -1634,7 +1824,7 @@ impl Search for IndexArc {
                 println!(
                     "No/invalid query_vector specified for vector search in external vector index"
                 );
-                let result_object: ResultObject = Default::default();
+                let result_object: SearchResult = Default::default();
                 return result_object;
             })
         } else {
@@ -1652,7 +1842,7 @@ impl Search for IndexArc {
             let query_facets_clone = query_facets.clone();
             let facet_filter_clone = facet_filter.clone();
             let result_sort_clone = result_sort.clone();
-            let shard_id = shard.read().await.meta.id;
+            let shard_id = shard.read().await.index_config.id;
 
             result_object_list.push(INDEX_RUNTIME.handle().spawn(async move {
                 match search_mode_clone {
@@ -1757,7 +1947,7 @@ impl Search for IndexArc {
             }));
         }
 
-        let mut result_object: ResultObject = Default::default();
+        let mut result_object: SearchResult = Default::default();
 
         let mut result_facets: AHashMap<String, (AHashMap<String, usize>, u32)> = AHashMap::new();
         if result_type != ResultType::Topk {
@@ -1896,7 +2086,7 @@ impl Search for IndexArc {
                     if aggregate_results {
                         result_object_results_lexical.append(&mut rlo_shard_lexical.results)
                     };
-                    result_object.result_count_total += rlo_shard_lexical.result_count_total;
+                    result_object.count_total += rlo_shard_lexical.count_total;
                     if result_object.query_terms.is_empty() {
                         result_object.query_terms = rlo_shard_lexical.query_terms.clone()
                     };
@@ -1911,14 +2101,14 @@ impl Search for IndexArc {
                     };
                     result_object.observed_vector_count += rlo_shard_vector.observed_vector_count;
                     result_object.observed_cluster_count += rlo_shard_vector.observed_cluster_count;
-                    result_object.result_count_total += rlo_shard_vector.result_count_total;
+                    result_object.count_total += rlo_shard_vector.count_total;
                     if result_object.query_terms.is_empty() {
                         result_object.query_terms = query_string
                             .to_lowercase()
                             .split_whitespace()
                             .map(|s| s.trim_matches(['\"', '+', '-']).to_string())
                             .filter(|s| !s.is_empty())
-                            .collect::<Vec<String>>();
+                            .collect::<Vec<String>>(); /*rlo_shard_vector.query_terms.clone()*/
                     };
                 }
                 SearchMode::Hybrid {
@@ -1931,9 +2121,9 @@ impl Search for IndexArc {
                         result_object_results_lexical.append(&mut rlo_shard_lexical.results);
                         result_object_results_vector.append(&mut rlo_shard_vector.results);
                     }
-                    result_object.result_count_total += rlo_shard_lexical
-                        .result_count_total
-                        .max(rlo_shard_vector.result_count_total);
+                    result_object.count_total += rlo_shard_lexical
+                        .count_total
+                        .max(rlo_shard_vector.count_total);
                     result_object.observed_vector_count += rlo_shard_vector.observed_vector_count;
                     result_object.observed_cluster_count += rlo_shard_vector.observed_cluster_count;
                     if result_object.query_terms.is_empty() {
@@ -1952,7 +2142,6 @@ impl Search for IndexArc {
                     };
                 }
             }
-
             if let Some(rlo_shard_vector) = rlo_shard_hybrid_options.1
                 && !rlo_shard_vector.facets.is_empty()
             {
@@ -2142,10 +2331,13 @@ impl Search for IndexArc {
             if result_object.results.len() > length {
                 result_object.results.truncate(length);
             }
-            result_object.result_count = result_object.results.len();
+
+            result_object.offset = search_request.offset;
+            result_object.length = search_request.length;
+            result_object.count = result_object.results.len();
 
             if result_type == ResultType::Topk {
-                result_object.result_count_total = result_object.result_count;
+                result_object.count_total = result_object.count;
             }
         }
 
@@ -2153,6 +2345,47 @@ impl Search for IndexArc {
         result_object.query = query_string.clone();
         if let Some(suggestions) = suggestions {
             result_object.suggestions = suggestions.into_iter().map(|s| s.term.clone()).collect();
+        }
+
+        if let Some(return_documents_option) = &search_request.return_documents {
+            let mut documents: Vec<Document> = Vec::new();
+
+            let return_fields_filter = HashSet::from_iter(return_documents_option.fields.clone());
+            let highlighter_option = if return_documents_option.highlights.is_empty() {
+                None
+            } else {
+                Some(
+                    highlighter(
+                        self,
+                        return_documents_option.highlights.clone(),
+                        result_object.query_terms.clone(),
+                    )
+                    .await,
+                )
+            };
+
+            for result in result_object.results.iter() {
+                let mut doc = if !index_ref.stored_field_names.is_empty()
+                    && let Ok(doc) = index_ref
+                        .get_document(
+                            result.doc_id,
+                            search_request.include_uncommitted,
+                            &highlighter_option,
+                            &return_fields_filter,
+                            &return_documents_option.distance_fields,
+                        )
+                        .await
+                {
+                    doc
+                } else {
+                    Document::new()
+                };
+
+                doc.insert("_id".to_string(), result.doc_id.into());
+                doc.insert("_score".to_string(), result.score.into());
+                documents.push(doc);
+            }
+            result_object.documents = documents;
         }
 
         result_object
@@ -2208,6 +2441,7 @@ pub(crate) fn decode_posting_list_count(
         .take(block_id_last + 1)
     {
         let key_count = pointer.2 as usize;
+
         let byte_array =
             &index.index_file_mmap[pointer.0 - (key_count * index.key_head_size)..pointer.0];
         let key_index = binary_search(byte_array, key_count, key_hash1, index.key_head_size);
@@ -2336,6 +2570,7 @@ pub(crate) fn decode_posting_list_object(
 
     for (block_id, pointer) in segment.byte_array_blocks_pointer.iter().enumerate() {
         let key_count = pointer.2 as usize;
+
         let byte_array =
             &shard.index_file_mmap[pointer.0 - (key_count * shard.key_head_size)..pointer.0];
         let key_index = binary_search(byte_array, key_count, key_hash1, shard.key_head_size);
@@ -2640,7 +2875,7 @@ pub(crate) fn set_facet_filter_sparse(
 
 pub(crate) fn set_query_facets(
     shard_ref: &Shard,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     query_facets: &[QueryFacet],
 ) -> bool {
     let mut is_range_facet = false;
@@ -2946,11 +3181,11 @@ pub(crate) fn set_query_facets(
 
 pub(crate) fn get_query_facets(
     shard_ref: &Shard,
-    search_result: &mut SearchResult,
+    search_result: &mut SearchResultObject,
     query_string: &str,
     enable_empty_query: bool,
     query_facets: Vec<QueryFacet>,
-    result_object: &mut ResultObject,
+    result_object: &mut SearchResult,
     facet_cap: u32,
 ) {
     if !search_result.query_facets.is_empty() {
@@ -3109,7 +3344,6 @@ pub(crate) fn get_query_facets(
                         .filter(|(a, _c)| facet.prefix.is_empty() || a.starts_with(&facet.prefix))
                         .collect::<Vec<_>>()
                 };
-
                 if !v.is_empty() {
                     facets.insert(facet.field.clone(), v);
                 }
@@ -3135,7 +3369,7 @@ pub(crate) trait SearchLexicalShard {
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
-    ) -> ResultObject;
+    ) -> SearchResult;
 }
 
 impl SearchLexicalShard for ShardArc {
@@ -3152,8 +3386,8 @@ impl SearchLexicalShard for ShardArc {
         query_facets: Vec<QueryFacet>,
         facet_filter: Vec<FacetFilter>,
         result_sort: Vec<ResultSort>,
-    ) -> ResultObject {
-        let mut result_object: ResultObject = Default::default();
+    ) -> SearchResult {
+        let mut result_object: SearchResult = Default::default();
         let shard_ref = self.read().await;
         if !shard_ref.is_lexical_indexing {
             return result_object;
@@ -3226,7 +3460,7 @@ impl SearchLexicalShard for ShardArc {
         } else {
             0
         };
-        let mut search_result = SearchResult {
+        let mut search_result = SearchResultObject {
             topk_candidates: MinHeap::new(
                 heap_size,
                 &shard_ref,
@@ -3253,14 +3487,14 @@ impl SearchLexicalShard for ShardArc {
                 &query_string,
                 &mut unique_terms,
                 &mut non_unique_terms,
-                shard_ref.meta.tokenizer,
+                shard_ref.index_config.tokenizer,
                 shard_ref.segment_number_mask,
                 &mut nonunique_terms_count,
                 u16::MAX as u32,
                 MAX_POSITIONS_PER_TERM,
                 true,
                 &mut query_type_mut,
-                shard_ref.meta.ngram_indexing,
+                shard_ref.index_config.ngram_indexing, //true
                 0,
                 1,
             )
@@ -3291,7 +3525,6 @@ impl SearchLexicalShard for ShardArc {
             let mut blocks_vec: Vec<Vec<BlockObjectIndex>> = Vec::new();
 
             let mut not_found_terms_hashset: AHashSet<u64> = AHashSet::new();
-
             for non_unique_term in non_unique_terms.iter() {
                 let term = unique_terms.get(&non_unique_term.term).unwrap();
                 let key0: u32 = term.key0;
@@ -3314,7 +3547,7 @@ impl SearchLexicalShard for ShardArc {
                         let max_list_score;
                         let blocks;
                         let blocks_len;
-                        let found_plo = if shard_ref.meta.access_type == AccessType::Mmap {
+                        let found_plo = if shard_ref.index_config.access_type == AccessType::Mmap {
                             let posting_list_object_index_option = decode_posting_list_object(
                                 &shard_ref.segments_index[key0 as usize],
                                 &shard_ref,
@@ -3390,64 +3623,66 @@ impl SearchLexicalShard for ShardArc {
                                 let max_list_score;
                                 let blocks;
                                 let blocks_len;
-                                let found_plo = if shard_ref.meta.access_type == AccessType::Mmap {
-                                    let posting_list_object_index_option =
-                                        decode_posting_list_object(
-                                            &shard_ref.segments_index[key0 as usize],
-                                            &shard_ref,
-                                            key_hash,
-                                            true,
-                                        );
-                                    if let Some(plo) = posting_list_object_index_option {
-                                        posting_count = plo.posting_count;
-                                        posting_count_ngram_1 = plo.posting_count_ngram_1;
-                                        posting_count_ngram_2 = plo.posting_count_ngram_2;
-                                        posting_count_ngram_3 = plo.posting_count_ngram_3;
-                                        max_list_score = plo.max_list_score;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = plo.blocks.len();
-                                        blocks_vec.push(plo.blocks);
-                                        true
+                                let found_plo =
+                                    if shard_ref.index_config.access_type == AccessType::Mmap {
+                                        let posting_list_object_index_option =
+                                            decode_posting_list_object(
+                                                &shard_ref.segments_index[key0 as usize],
+                                                &shard_ref,
+                                                key_hash,
+                                                true,
+                                            );
+                                        if let Some(plo) = posting_list_object_index_option {
+                                            posting_count = plo.posting_count;
+                                            posting_count_ngram_1 = plo.posting_count_ngram_1;
+                                            posting_count_ngram_2 = plo.posting_count_ngram_2;
+                                            posting_count_ngram_3 = plo.posting_count_ngram_3;
+                                            max_list_score = plo.max_list_score;
+                                            blocks = &DUMMY_VEC;
+                                            blocks_len = plo.blocks.len();
+                                            blocks_vec.push(plo.blocks);
+                                            true
+                                        } else {
+                                            posting_count = 0;
+                                            posting_count_ngram_1 = 0;
+                                            posting_count_ngram_2 = 0;
+                                            posting_count_ngram_3 = 0;
+                                            max_list_score = 0.0;
+                                            blocks = &DUMMY_VEC;
+                                            blocks_len = 0;
+                                            false
+                                        }
                                     } else {
-                                        posting_count = 0;
-                                        posting_count_ngram_1 = 0;
-                                        posting_count_ngram_2 = 0;
-                                        posting_count_ngram_3 = 0;
-                                        max_list_score = 0.0;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = 0;
-                                        false
-                                    }
-                                } else {
-                                    let posting_list_object_index_option = shard_ref.segments_index
-                                        [key0 as usize]
-                                        .segment
-                                        .get(&key_hash);
-                                    if let Some(plo) = posting_list_object_index_option {
-                                        posting_count = plo.posting_count;
-                                        posting_count_ngram_1 = plo.posting_count_ngram_1;
-                                        posting_count_ngram_2 = plo.posting_count_ngram_2;
-                                        posting_count_ngram_3 = plo.posting_count_ngram_3;
-                                        max_list_score = plo.max_list_score;
-                                        blocks_len = plo.blocks.len();
-                                        blocks = &plo.blocks;
-                                        true
-                                    } else {
-                                        posting_count = 0;
-                                        posting_count_ngram_1 = 0;
-                                        posting_count_ngram_2 = 0;
-                                        posting_count_ngram_3 = 0;
-                                        max_list_score = 0.0;
-                                        blocks = &DUMMY_VEC;
-                                        blocks_len = 0;
-                                        false
-                                    }
-                                };
+                                        let posting_list_object_index_option =
+                                            shard_ref.segments_index[key0 as usize]
+                                                .segment
+                                                .get(&key_hash);
+
+                                        if let Some(plo) = posting_list_object_index_option {
+                                            posting_count = plo.posting_count;
+                                            posting_count_ngram_1 = plo.posting_count_ngram_1;
+                                            posting_count_ngram_2 = plo.posting_count_ngram_2;
+                                            posting_count_ngram_3 = plo.posting_count_ngram_3;
+                                            max_list_score = plo.max_list_score;
+                                            blocks_len = plo.blocks.len();
+                                            blocks = &plo.blocks;
+                                            true
+                                        } else {
+                                            posting_count = 0;
+                                            posting_count_ngram_1 = 0;
+                                            posting_count_ngram_2 = 0;
+                                            posting_count_ngram_3 = 0;
+                                            max_list_score = 0.0;
+                                            blocks = &DUMMY_VEC;
+                                            blocks_len = 0;
+                                            false
+                                        }
+                                    };
 
                                 if found_plo {
                                     if result_type != ResultType::Count {
                                         if non_unique_term.ngram_type == NgramType::SingleTerm
-                                            || shard_ref.meta.lexical_similarity
+                                            || shard_ref.index_config.lexical_similarity
                                                 == LexicalSimilarity::Bm25fProximity
                                         {
                                             idf = (((shard_ref.indexed_doc_count as f32
@@ -3587,7 +3822,7 @@ impl SearchLexicalShard for ShardArc {
             not_query_list = not_query_list_map.into_values().collect();
             query_list = query_list_map.into_values().collect();
 
-            if shard_ref.meta.access_type == AccessType::Mmap {
+            if shard_ref.index_config.access_type == AccessType::Mmap {
                 for plo in query_list.iter_mut() {
                     plo.blocks = &blocks_vec[plo.blocks_index - 1]
                 }
@@ -3630,8 +3865,8 @@ impl SearchLexicalShard for ShardArc {
                     result_object
                         .query_terms
                         .clone_from(&stopword_result_object.query_terms);
-                    result_object.result_count = stopword_result_object.result_count;
-                    result_object.result_count_total = stopword_result_object.result_count_total;
+                    result_object.count = stopword_result_object.count;
+                    result_object.count_total = stopword_result_object.count_total;
                     if result_type != ResultType::Count {
                         result_object
                             .results
@@ -3790,7 +4025,7 @@ impl SearchLexicalShard for ShardArc {
             break;
         }
 
-        result_object.result_count = search_result.topk_candidates.current_heap_size;
+        result_object.count = search_result.topk_candidates.current_heap_size;
 
         if search_result.topk_candidates.current_heap_size > offset {
             result_object.results = mem::take(&mut search_result.topk_candidates._elements);
@@ -3821,7 +4056,7 @@ impl SearchLexicalShard for ShardArc {
             }
         }
 
-        result_object.result_count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
+        result_object.count_total = result_count_uncommitted_arc.load(Ordering::Relaxed)
             + result_count_arc.load(Ordering::Relaxed);
         get_query_facets(
             &shard_ref,

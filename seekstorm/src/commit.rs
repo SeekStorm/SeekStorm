@@ -30,19 +30,19 @@ use crate::{
 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
-/// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+/// which is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.
 /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
 /// There is no way to prevent this automatic commit by not manually invoking it.
 /// But commit can also be invoked manually at any time at any number of newly indexed documents.
 /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
 /// is invoked implicitly with every index_doc,
 /// i.e. the document can immediately searched and included in the search results
-/// if it matches the query AND the query parameter realtime=true is enabled.
+/// if it matches the query AND the query parameter include_uncommitted=true is enabled.
 /// **Use commit with caution, as it is an expensive operation**.
 /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
 /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
 /// There are only 2 reasons that justify a manual commit:
-/// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+/// 1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
 ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
 ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
@@ -50,19 +50,19 @@ use crate::{
 pub trait Commit {
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
-    /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+    /// which is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.
     /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
     /// There is no way to prevent this automatic commit by not manually invoking it.
     /// But commit can also be invoked manually at any time at any number of newly indexed documents.
     /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
     /// is invoked implicitly with every index_doc,
     /// i.e. the document can immediately searched and included in the search results
-    /// if it matches the query AND the query parameter realtime=true is enabled.
+    /// if it matches the query AND the query parameter include_uncommitted=true is enabled.
     /// **Use commit with caution, as it is an expensive operation**.
     /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
     /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
     /// There are only 2 reasons that justify a manual commit:
-    /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+    /// 1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
     ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
@@ -71,38 +71,38 @@ pub trait Commit {
 
 /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
 /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
-/// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+/// which is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.
 /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
 /// There is no way to prevent this automatic commit by not manually invoking it.
 /// But commit can also be invoked manually at any time at any number of newly indexed documents.
 /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
 /// is invoked implicitly with every index_doc,
 /// i.e. the document can immediately searched and included in the search results
-/// if it matches the query AND the query parameter realtime=true is enabled.
+/// if it matches the query AND the query parameter include_uncommitted=true is enabled.
 /// **Use commit with caution, as it is an expensive operation**.
 /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
 /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
 /// There are only 2 reasons that justify a manual commit:
-/// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+/// 1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or
 /// 2. if after indexing new documents there won't be more documents indexed (for some time),
 ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
 ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
 impl Commit for IndexArc {
     /// Commit moves indexed documents from the intermediate uncompressed data structure (array lists/HashMap, queryable by realtime search) in RAM
     /// to the final compressed data structure (roaring bitmap) on Mmap or disk -
-    /// which is persistent, more compact, with lower query latency and allows search with realtime=false.
+    /// which is persistent, more compact, with lower query latency and allows search with include_uncommitted=false.
     /// Commit is invoked automatically each time 64K documents are newly indexed **per shard** as well as on close_index (e.g. server quit).
     /// There is no way to prevent this automatic commit by not manually invoking it.
     /// But commit can also be invoked manually at any time at any number of newly indexed documents.
     /// commit is a **hard commit** for persistence on disk. A **soft commit** for searchability
     /// is invoked implicitly with every index_doc,
     /// i.e. the document can immediately searched and included in the search results
-    /// if it matches the query AND the query parameter realtime=true is enabled.
+    /// if it matches the query AND the query parameter include_uncommitted=true is enabled.
     /// **Use commit with caution, as it is an expensive operation**.
     /// **Usually, there is no need to invoke it manually**, as it is invoked automatically every 64k documents **per shard** and when the index is closed with close_index.
     /// Before terminating the program, always call close_index (commit), otherwise all documents indexed since last (manual or automatic) commit are lost.
     /// There are only 2 reasons that justify a manual commit:
-    /// 1. if you want to search newly indexed documents without using realtime=true for search performance reasons or
+    /// 1. if you want to search newly indexed documents without using include_uncommitted=true for search performance reasons or
     /// 2. if after indexing new documents there won't be more documents indexed (for some time),
     ///    so there won't be (soon) a commit invoked automatically at the next 64k threshold **per shard** or close_index,
     ///    but you still need immediate persistence guarantees on disk to protect against data loss in the event of a crash.
@@ -171,13 +171,13 @@ impl Commit for IndexArc {
             if uncommitted_doc_count == 0 && uncommitted_vec_count == 0 {
                 println!(
                     "commit index {} level {} no uncommitted documents and vectors, skipping commit",
-                    index_ref.meta.id,
+                    index_ref.index_config.id,
                     index_ref.level_count().await,
                 );
             } else {
                 println!(
                     "commit index {} level {} committed documents {} {} committed vectors {} {}",
-                    index_ref.meta.id,
+                    index_ref.index_config.id,
                     index_ref
                         .level_count()
                         .await
@@ -226,7 +226,7 @@ impl Shard {
                 .seek(SeekFrom::Start(self.last_level_index_file_start_pos));
 
             let idx = self.level_index.len() - 1;
-            if self.meta.access_type == AccessType::Mmap {
+            if self.index_config.access_type == AccessType::Mmap {
                 self.index_file_mmap =
                     unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
 
@@ -283,7 +283,7 @@ impl Shard {
         if !self.mute {
             println!(
                 "commit shard {} level {} indexed documents {} ({})",
-                self.meta.id,
+                self.index_config.id,
                 self.level_index.len(),
                 indexed_doc_count.to_formatted_string(&Locale::en),
                 (if indexed_doc_count == 0 {
@@ -332,7 +332,7 @@ impl Shard {
 
         if !is_last_level_incomplete {
             let mut document_length_compressed_array: Vec<[u8; ROARING_BLOCK_SIZE]> = Vec::new();
-            if self.meta.access_type != AccessType::Mmap {
+            if self.index_config.access_type != AccessType::Mmap {
                 for document_length_compressed_array_item in
                     self.document_length_compressed_array.iter_mut()
                 {
@@ -372,7 +372,7 @@ impl Shard {
             self.commit_docstore(indexed_doc_count, is_last_level_incomplete);
         }
 
-        if self.meta.access_type == AccessType::Mmap {
+        if self.index_config.access_type == AccessType::Mmap {
             self.index_file.flush().expect("Unable to flush Mmap");
 
             self.index_file_mmap =
@@ -429,7 +429,7 @@ impl Shard {
                 if symspell.read().await.get_dictionary_size() < root_index.max_dictionary_entries {
                     for key0 in 0..self.segment_number {
                         for (key, plo) in self.segments_level0[key0].segment.iter() {
-                            if self.meta.spelling_correction.is_some()
+                            if self.index_config.spelling_correction.is_some()
                                 && symspell.read().await.get_dictionary_size()
                                     < root_index.max_dictionary_entries
                                 && key & 7 == 0
@@ -447,7 +447,7 @@ impl Shard {
         };
 
         self.compressed_index_segment_block_buffer =
-            vec![0; SEGMENT_BLOCK_CAPACITY[self.meta.segment_number_bits - 8]];
+            vec![0; SEGMENT_BLOCK_CAPACITY[self.index_config.segment_number_bits - 8]];
         self.postings_buffer = vec![0; POSTING_BUFFER_SIZE];
 
         self.postings_buffer_pointer = 0;
@@ -544,7 +544,7 @@ impl Shard {
             .index_file
             .write(&self.compressed_index_segment_block_buffer[0..compressed_segment_block_size]);
 
-        if self.meta.access_type == AccessType::Mmap {
+        if self.index_config.access_type == AccessType::Mmap {
             self.segments_index[key0].byte_array_blocks_pointer.push((
                 file_position + key_body_pointer_wstart,
                 (compressed_segment_block_size - key_body_pointer_wstart),
@@ -576,7 +576,7 @@ impl Shard {
                 let exists: bool = value.posting_count > 0;
 
                 if !self.indexed_doc_count.is_multiple_of(ROARING_BLOCK_SIZE)
-                    && self.meta.access_type == AccessType::Ram
+                    && self.index_config.access_type == AccessType::Ram
                 {
                     let position_range_previous = if key_index == 0 {
                         0
@@ -625,7 +625,7 @@ impl Shard {
 
                 if exists {
                     value.posting_count += plo.posting_count as u32;
-                    if self.meta.access_type != AccessType::Mmap {
+                    if self.index_config.access_type != AccessType::Mmap {
                         value.blocks.push(BlockObjectIndex {
                             block_id,
                             posting_count: (plo.posting_count - 1) as u16,
@@ -658,7 +658,7 @@ impl Shard {
                         }
                     }
 
-                    if self.meta.access_type != AccessType::Mmap {
+                    if self.index_config.access_type != AccessType::Mmap {
                         value.blocks = vec![BlockObjectIndex {
                             block_id,
                             posting_count: (plo.posting_count - 1) as u16,
@@ -869,7 +869,7 @@ impl Shard {
             };
         let compressed_doc_id_range: u32 = rank_position_pointer_range + posting_pointer_size_sum;
 
-        let byte_array = if self.meta.access_type == AccessType::Mmap {
+        let byte_array = if self.index_config.access_type == AccessType::Mmap {
             let segment = &self.segments_index[key0];
             let byte_array = &self.index_file_mmap[segment.byte_array_blocks_pointer[block_id].0
                 ..segment.byte_array_blocks_pointer[block_id].0
@@ -992,7 +992,7 @@ impl Shard {
         let committed_doc_count = ((self.committed_doc_count - 1) % ROARING_BLOCK_SIZE) + 1;
 
         for i in 0..self.indexed_field_vec.len() {
-            if self.meta.access_type == AccessType::Mmap {
+            if self.index_config.access_type == AccessType::Mmap {
                 block_copy(
                     &self.index_file_mmap[self.level_index[block_id]
                         .document_length_compressed_array_pointer
@@ -1014,7 +1014,7 @@ impl Shard {
         }
 
         for key0 in 0..self.segment_number {
-            if self.meta.access_type == AccessType::Mmap {
+            if self.index_config.access_type == AccessType::Mmap {
                 let pointer = self.segments_index[key0].byte_array_blocks_pointer[block_id];
 
                 let key_count = pointer.2 as usize;

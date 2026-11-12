@@ -25,31 +25,24 @@
 
 use seekstorm::commit::Commit;
 use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexDocuments,
-    IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
+    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexConfig,
+    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
     create_index,
 };
-use seekstorm::search::{QueryRewriting, QueryType, ResultObject, ResultType, Search, SearchMode};
+use seekstorm::search::{
+    QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest, SearchResult,
+};
 use seekstorm::vector::Inference;
 use std::{fs, path::Path};
 
-fn meta() -> IndexMetaObject {
-    IndexMetaObject {
-        id: 0,
+fn index_config() -> IndexConfig {
+    IndexConfig {
         name: "union_topk_fill_ranking".into(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
         frequent_words: FrequentwordType::None,
         ngram_indexing: NgramSet::SingleTerm as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits: 11,
+        ..Default::default()
     }
 }
 
@@ -70,42 +63,33 @@ async fn search(
     offset: usize,
     length: usize,
     result_type: ResultType,
-) -> ResultObject {
+) -> SearchResult {
     index
-        .search(
-            query.into(),
-            None,
-            QueryType::Union,
-            SearchMode::Lexical,
-            false,
-            offset,
-            length,
-            result_type,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
-        )
+        .search(SearchRequest {
+            query_string: query.into(),
+            offset: offset,
+            length: length,
+            result_type: result_type,
+            ..Default::default()
+        })
         .await
 }
 
 async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, meta(), &schema(), &Vec::new(), true, None)
+    create_index(path, index_config(), &schema(), &[], true, None)
         .await
         .unwrap()
 }
 
 /// Assert `topk` equals a valid exact top-`k` of the full ranking `oracle`.
 /// Tie-tolerant: only the score threshold structure is compared.
-fn assert_valid_topk(topk: &ResultObject, oracle: &ResultObject) {
+fn assert_valid_topk(topk: &SearchResult, oracle: &SearchResult) {
     let k = topk.results.len();
     assert!(k > 0, "top_k run returned nothing");
     assert_eq!(
-        topk.result_count_total, oracle.result_count_total,
+        topk.count_total, oracle.count_total,
         "hit totals disagree between the truncated and full runs"
     );
 
@@ -166,7 +150,7 @@ async fn scan32_topk_matches_global_ranking() {
 
     let query = words.join(" ");
     let total = search(&index, &query, 0, 1, ResultType::Count).await;
-    assert_eq!(total.result_count_total, 1000);
+    assert_eq!(total.count_total, 1000);
 
     // Oracle: length == total hits => heap never full => exact global ranking.
     let oracle = search(&index, &query, 0, 1000, ResultType::TopkCount).await;
@@ -202,7 +186,7 @@ async fn scan32_sparse_uniform_fills_heap() {
         .join(" ");
 
     let total = search(&index, &query, 0, 1, ResultType::Count).await;
-    assert_eq!(total.result_count_total, 2000);
+    assert_eq!(total.count_total, 2000);
 
     let oracle = search(&index, &query, 0, 2000, ResultType::Topk).await;
     assert_eq!(oracle.results.len(), 2000);
@@ -286,7 +270,7 @@ async fn scan32_topkcount_and_topk_agree() {
     let topk = search(&index, &query, 0, 50, ResultType::Topk).await;
     let topk_count = search(&index, &query, 0, 50, ResultType::TopkCount).await;
 
-    assert_eq!(topk_count.result_count_total, oracle.result_count_total);
+    assert_eq!(topk_count.count_total, oracle.count_total);
     assert_valid_topk(&topk_count, &oracle);
 
     let a: Vec<(usize, u32)> = topk

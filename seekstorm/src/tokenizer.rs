@@ -1390,7 +1390,7 @@ pub(crate) async fn tokenizer(
 }
 
 /// Parse a string into words, using the specified tokenizer type.
-pub fn tokenizer_lite(
+pub(crate) fn tokenizer_lite(
     text: &str,
     tokenizer: &TokenizerType,
     index: &Shard,

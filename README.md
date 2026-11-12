@@ -147,12 +147,12 @@ In [production](https://seekstorm.com) since 2020. Open source under the [Apache
 
 ### SeekStorm multi-tenancy search server 
 
-* Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#rest-api-endpoints) with CORS.
+* Index and search via [RESTful API](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#rest-api) with CORS.
 * Ingest local data files in [CSV](https://en.wikipedia.org/wiki/Comma-separated_values), [JSON](https://en.wikipedia.org/wiki/JSON), [Newline-delimited JSON](https://github.com/ndjson/ndjson-spec) (ndjson), and [Concatenated JSON](https://en.wikipedia.org/wiki/JSON_streaming) formats via console command.  
 * Ingest local PDF files via console command (single file or all files in a directory).
 * Multi-tenancy index management.
 * API-key management.
-* [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
+* [Embedded web server and web UI](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/README.md#open-embedded-web-ui-in-browser) to search and display results from any index without coding.
 * Web UI with query auto correction, query auto-completion, instant search, keyword highlighting, histogram, date filter, faceting, result sorting, document preview (as demo, for testing, as template).
 * Code first OpenAPI generated [REST API documentation](https://seekstorm.com/documentation/)
 * Cross-platform: runs on Linux, Windows, and macOS (other OS untested).
@@ -210,8 +210,8 @@ cargo add tokio --features full
 ```rust ,no_run
 use std::path::Path;
 use seekstorm::commit::Commit;
-use seekstorm::index::{create_index, AccessType, Clustering, DocumentCompression, FrequentwordType, IndexDocuments, IndexMetaObject, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode};
+use seekstorm::index::{create_index, AccessType, Clustering, DocumentCompression, FrequentwordType, IndexDocuments, IndexConfig, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType};
+use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
 use seekstorm::vector::Inference;
 
 #[tokio::main]
@@ -223,24 +223,14 @@ async fn main() {
     ]"#).unwrap();
 
     // 2. Create the index
-    let meta = IndexMetaObject {
-        id: 0,
-        name: "quickstart".into(),
+    let index_config = IndexConfig {
+        name: "quickstart".to_string(),
         lexical_similarity: LexicalSimilarity::Bm25f,
         tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None,
-        frequent_words: FrequentwordType::English,
-        ngram_indexing: NgramSet::NgramFF as u8,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
-        clustering: Clustering::None,
-        inference: Inference::None,
-        segment_number_bits:11
+        ..Default::default()
     };
-    let mut index_arc = create_index(Path::new("./seekstorm_index"), meta, &schema, &Vec::new(), false, None).await.unwrap();
+
+    let mut index_arc = create_index(Path::new("./seekstorm_index"), index_config, &schema, &[], false, None).await.unwrap();
 
     // 3. Index documents
     let docs = r#"[{"title":"title1 test","body":"body1"}, {"title":"title2","body":"body2 test"}]"#;
@@ -249,14 +239,26 @@ async fn main() {
 
     // 4. Search
     let result_object = index_arc.search(
-        "test".to_string(), None, QueryType::Intersection, SearchMode::Lexical, false, 0, 10, ResultType::TopkCount, false,
-        Vec::new(), Vec::new(), Vec::new(), Vec::new(), QueryRewriting::SearchOnly,
+        SearchRequest {
+            query_string: "test",
+            query_type_default: QueryType::Intersection,
+            offset: 0,
+            length: 10,
+            search_mode: SearchMode::Lexical, 
+            result_type: ResultType::TopkCount,
+            query_rewriting:  QueryRewriting::SearchOnly,
+            return_documents: Some(Default::default()),
+            ..Default::default()
+        }
     ).await;
 
-    println!("{} hits", result_object.result_count_total);
-    for r in result_object.results.iter() {
-        println!("doc {} score {}", r.doc_id, r.score);
+    for doc in result_object.documents.iter() {
+        println!("document {:?}", doc);
     }
+    println!(
+        "result counts {} {}",
+        result_object.count, result_object.count_total
+    );
 }
 ```
 
@@ -680,7 +682,7 @@ Type 'ingest' into the command line of the running SeekStorm server:
 ingest
 ```
 
-This creates the demo index  and indexes the local wikipedia file.
+This creates the demo index and indexes the local wikipedia file.
 
 <img src="https://raw.githubusercontent.com/SeekStorm/SeekStorm/main/assets/server_info.png" width="800" alt="server info">
 <br>
@@ -693,9 +695,9 @@ Enter a query into the search box
 
 **Testing the REST API endpoints**
 
-Open src/seekstorm_server/test_api.rest in VSC together with the VSC extension "Rest client" to execute API calls and inspect responses
+Open seekstorm_server/src/test_api.rest in VSC together with the VSC extension "Rest client" to execute API calls and inspect responses
 
-[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/main/src/seekstorm_server/test_api.rest)
+[interactive API endpoint examples](https://github.com/SeekStorm/SeekStorm/blob/main/seekstorm_server/src/test_api.rest)
 
 Set the 'individual API key' in test_api.rest to the api key displayed in the server console when you typed 'index' above.
 
@@ -877,7 +879,7 @@ create schema (from JSON)
 use seekstorm::index::SchemaField;
 
 let schema_json = r#"
-[{"field":"title","field_type":"Text","store":false,"index_lexical":false,"dictionary_source":true,"completion_source":true},
+[{"field":"title","field_type":"Text","store":true,"index_lexical":true,"dictionary_source":true,"completion_source":true},
 {"field":"body","field_type":"Text","store":true,"index_lexical":true},
 {"field":"url","field_type":"Text","store":false,"index_lexical":false}]"#;
 let schema:Vec<SchemaField>=serde_json::from_str(schema_json).unwrap();
@@ -888,9 +890,9 @@ create schema (from SchemaField)
 use seekstorm::index::{SchemaField,FieldType};
 
 let schema= vec![
-    SchemaField::new("title".to_owned(), false, false,false, FieldType::Text, false,false, 1.0,true,true),
-    SchemaField::new("body".to_owned(),true,true,false,FieldType::Text,false,true,1.0,false,false),
-    SchemaField::new("url".to_owned(), false, false,false, FieldType::Text,false,false,1.0,false,false),
+    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).completion_source(true).dictionary_source(true),
+    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
+    SchemaField::new("url", FieldType::Text).store(true),
 ];
 ```
 
@@ -899,37 +901,28 @@ create index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
+use seekstorm::index::{IndexConfig, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
 use seekstorm::vector::Inference;
 use seekstorm::vector_similarity::VectorSimilarity;
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    SchemaField::new("title".to_owned(), false, false,false, FieldType::Text, false,false, 1.0,true,true),
-    SchemaField::new("body".to_owned(),true,true,false,FieldType::Text,false,true,1.0,false,false),
-    SchemaField::new("url".to_owned(), false, false, false,FieldType::Text,false,false,1.0,false,false),
+    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).completion_source(true).dictionary_source(true),
+    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
+    SchemaField::new("url", FieldType::Text).store(true),
 ];
 
-let meta = IndexMetaObject {
-    id: 0,
+let index_config = IndexConfig {
     name: "test_index".into(),
     lexical_similarity: LexicalSimilarity::Bm25f,
     tokenizer: TokenizerType::UnicodeAlphanumeric,
-    stemmer: StemmerType::None,
-    stop_words: StopwordType::None,
-    frequent_words: FrequentwordType::English,
-    ngram_indexing: NgramSet::NgramFF as u8,
-    document_compression: DocumentCompression::Snappy,
-    access_type: AccessType::Mmap,
     spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
-    clustering: Clustering::None,
-    inference: Inference::None,
-    segment_number_bits:11
+    ..Default::default()
 };
 
-let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 
 # });
 ```
@@ -1010,55 +1003,43 @@ search index
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryRewriting};
+use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryRewriting, SearchRequest, DocumentOption};
+use seekstorm::highlighter::Highlight;
 use seekstorm::index::open_index;
 use std::path::Path;
 
 let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path).await.unwrap(); 
 
-let query="test".to_string();
-let query_vector=None;
-let search_mode=SearchMode::Lexical;
-let enable_empty_query=false;
-let offset=0;
-let length=10;
-let query_type=QueryType::Intersection; 
-let result_type=ResultType::TopkCount;
-let include_uncommitted=false;
-let field_filter=Vec::new();
-let query_facets=Vec::new();
-let facet_filter=Vec::new();
-let result_sort=Vec::new();
-let query_rewriting= QueryRewriting::SearchRewrite { distance: 1, term_length_threshold: Some([2,8].into()), correct:Some(2),complete: Some(3), length: Some(5) };
-let result_object = index_arc.search(query, query_vector, query_type, search_mode, enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,query_rewriting).await;
+let highlights: Vec<Highlight> = vec![Highlight {
+    field: "body".to_string(),
+    name: String::new(),
+    fragment_number: 2,
+    fragment_size: 160,
+    highlight_markup: true,
+    ..Default::default()
+}];
+
+let result_object = index_arc.search(
+    SearchRequest {
+        query_string: "test", 
+        query_type_default: QueryType::Intersection, 
+        query_rewriting: QueryRewriting::SearchRewrite { distance: 1, term_length_threshold: Some([2,8].into()), correct:Some(2),complete: Some(3), length: Some(5) },
+        search_mode: SearchMode::Lexical, 
+        offset: 0, 
+        length: 10, 
+        result_type: ResultType::TopkCount,
+        return_documents: Some(DocumentOption { highlights, ..Default::default()}),
+        ..Default::default()
+    }
+).await;
 
 // ### display results
 
-use seekstorm::highlighter::{Highlight, highlighter};
-use std::collections::HashSet;
-
-let highlights:Vec<Highlight>= vec![
-    Highlight {
-        field: "body".to_string(),
-        name:String::new(),
-        fragment_number: 2,
-        fragment_size: 160,
-        highlight_markup: true,
-        ..Default::default()
-    },
-];    
-
-let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
-let return_fields_filter= HashSet::new();
-let distance_fields=Vec::new();
-let mut index=index_arc.write().await;
-for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
-  println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+for doc in result_object.documents.iter() {
+    println!("document {:?}", doc);
 }
-
-println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+println!( "result counts {} {}", result_object.count, result_object.count_total);
 
 // ### display suggestions
 
@@ -1073,8 +1054,8 @@ for suggesion in result_object.suggestions.iter() {
 
 *Query operators and query type*
 
-Boolean queries are specified in the search method either via the query_type parameter or via operator chars within the query parameter.  
-The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
+Boolean queries are specified in the search method either via the query_type_default parameter or via operator chars within the query parameter.  
+The interpretation of operator chars within the query string (set `query_type_default=QueryType::Union`) allows to specify advanced search operations via a simple search box.
 
 Intersection, AND `+`
 ```rust ,no_run
@@ -1128,7 +1109,7 @@ multi-threaded search
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::search::{QueryType, SearchMode, ResultType, QueryRewriting, Search};
+use seekstorm::search::{QueryType, SearchMode, ResultType, QueryRewriting, Search, SearchRequest};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use seekstorm::index::open_index;
@@ -1138,19 +1119,11 @@ let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path).await.unwrap(); 
 
 let query_vec=vec!["house".to_string(),"car".to_string(),"bird".to_string(),"sky".to_string()];
-let query_vector=None;
 let offset=0;
 let length=10;
 let search_mode=SearchMode::Lexical;
-let enable_empty_query=false;
 let query_type=QueryType::Union; 
 let result_type=ResultType::TopkCount;
-
-let include_uncommitted=false;
-let field_filter=Vec::new();
-let query_facets=Vec::new();
-let facet_filter=Vec::new();
-let result_sort=Vec::new();
 
 let thread_number = 4;
 let permits = Arc::new(Semaphore::new(thread_number));
@@ -1158,41 +1131,33 @@ for query in query_vec {
     let permit_thread = permits.clone().acquire_owned().await.unwrap();
 
     let query_clone = query.clone();
-    let query_vector_clone=query_vector.clone();
     let index_arc_clone = index_arc.clone();
     let search_mode_clone=search_mode.clone();
-    let enable_empty_query_clone=enable_empty_query.clone();
     let offset_clone = offset;
     let length_clone = length;
     let query_type_clone = query_type.clone();
     let result_type_clone = result_type.clone();
-    let include_uncommitted_clone=include_uncommitted;
-    let field_filter_clone=field_filter.clone();
-    let query_facets_clone=query_facets.clone();
-    let facet_filter_clone=facet_filter.clone();
-    let result_sort_clone=result_sort.clone();
 
     tokio::spawn(async move {
-        let rlo = index_arc_clone
+        let result_object = index_arc_clone
             .search(
-                query_clone,
-                query_vector_clone,
-                query_type_clone,
-                search_mode_clone,
-                enable_empty_query_clone,
-                offset_clone,
-                length_clone,
-                result_type_clone,
-                include_uncommitted_clone,
-                field_filter_clone,
-                query_facets_clone,
-                facet_filter_clone,
-                result_sort_clone,
-                QueryRewriting::SearchOnly
+                SearchRequest {
+                    query_string: &query_clone,
+                    query_type_default: query_type_clone,
+                    search_mode: search_mode_clone, 
+                    offset: offset_clone,
+                    length: length_clone,
+                    result_type: result_type_clone,
+                    return_documents: Some(Default::default()),
+                    ..Default::default()
+                }
             )
             .await;
 
-        println!("result count {}", rlo.result_count);
+        for doc in result_object.documents.iter() {
+            println!("document {:?}", doc);
+        }
+        println!( "result counts {} {}", result_object.count, result_object.count_total);
         
         drop(permit_thread);
     });
@@ -1206,38 +1171,28 @@ First, you need to create an index with a schema matching the JSON file fields t
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject,Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
+use seekstorm::index::{IndexConfig,Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
 use seekstorm::vector::Inference;
 use seekstorm::vector_similarity::VectorSimilarity;
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    // field, stored, indexed, field_type, facet, longest, boost
-    SchemaField::new("title".to_owned(), true, true, false,FieldType::Text, false,false, 10.0,false,false),
-    SchemaField::new("body".to_owned(),true,true,false,FieldType::Text,false,true,1.0,false,false),
-    SchemaField::new("url".to_owned(), true, false,false, FieldType::Text,false,false,1.0,false,false),
+    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).completion_source(true).dictionary_source(true),
+    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
+    SchemaField::new("url", FieldType::Text).store(true),
 ];
 
-let meta = IndexMetaObject {
-    id: 0,
+let index_config = IndexConfig {
     name: "wikipedia_index".into(),
     lexical_similarity: LexicalSimilarity::Bm25f,
     tokenizer: TokenizerType::UnicodeAlphanumeric,
-    stemmer: StemmerType::None,
-    stop_words: StopwordType::None,
-    frequent_words: FrequentwordType::English,
-    ngram_indexing: NgramSet::NgramFF as u8,
-    document_compression: DocumentCompression::Snappy,
-    access_type: AccessType::Mmap,
     spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
-    clustering: Clustering::None,
-    inference: Inference::None,
-    segment_number_bits:11
+    ..Default::default()
 };
 
-let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 
 # });
 ```
@@ -1270,39 +1225,29 @@ First, you need to create an index with the following PDF specific schema (index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexMetaObject,Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
+use seekstorm::index::{IndexConfig,Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
 use seekstorm::vector::Inference;
 use seekstorm::vector_similarity::VectorSimilarity;
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    // field, stored, indexed, field_type, facet, longest, boost
-    SchemaField::new("title".to_owned(), true, true,false, FieldType::Text, false,false, 10.0,false,false),
-    SchemaField::new("body".to_owned(),true,true,false,FieldType::Text,false,true,1.0,false,false),
-    SchemaField::new("url".to_owned(), true, false,false, FieldType::Text,false,false,1.0,false,false),
-    SchemaField::new("date".to_owned(), true, false,false, FieldType::Timestamp,true,false,1.0,false,false),
+    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).boost(10.0).completion_source(true).dictionary_source(true),
+    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
+    SchemaField::new("url", FieldType::Text).store(true),
+    SchemaField::new("date", FieldType::Timestamp).store(true),
 ];
 
-let meta = IndexMetaObject {
-    id: 0,
+let index_config = IndexConfig {
     name: "pdf_index".into(),
     lexical_similarity: LexicalSimilarity::Bm25fProximity,
     tokenizer: TokenizerType::UnicodeAlphanumeric,
-    stemmer: StemmerType::None,
-    stop_words: StopwordType::None,
-    frequent_words: FrequentwordType::English,
-    ngram_indexing: NgramSet::NgramFF as u8,
-    document_compression: DocumentCompression::Snappy,
-    access_type: AccessType::Mmap,
     spelling_correction: Some(SpellingCorrection { max_dictionary_edit_distance: 1, term_length_threshold: Some([2,8].into()),count_threshold: 20,max_dictionary_entries:500_000 }),
     query_completion: Some(QueryCompletion{max_completion_entries:10_000_000}),
-    clustering: Clustering::None,
-    inference: Inference::None,
-    segment_number_bits:11
+    ..Default::default()
 };
 
-let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 
 # });
 ```
@@ -1490,7 +1435,7 @@ Facets are defined in 3 different places:
 1. The facet fields are defined in the schema at create_index.
 2. The facet field values are set in index_document at index time.
 3. The query_facets/facet_filter parameters are specified at query time.  
-   Facets are then returned in the search result object.
+   Facets are then returned in [`SearchResult`].
 
 A minimal working example of faceted indexing & search requires just 60 lines of code. But to puzzle it all together from the documentation alone might be tedious. This is why we provide a quick start example here:
 
@@ -1518,40 +1463,27 @@ create index
 
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use seekstorm::index::{IndexMetaObject, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+use seekstorm::index::{IndexConfig,SchemaField,FieldType, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
 use seekstorm::vector::Inference;
 use seekstorm::vector_similarity::VectorSimilarity;
 
 let index_path=Path::new("C:/index/");//x
 
-let schema_json = r#"
-[{"field":"title","field_type":"Text","store":false,"index_lexical":false},
-{"field":"body","field_type":"Text","store":true,"index_lexical":true},
-{"field":"url","field_type":"Text","store":true,"index_lexical":false},
-{"field":"town","field_type":"String16","store":false,"index_lexical":false,"facet":true}]"#;
-let schema=serde_json::from_str(schema_json).unwrap();
+let schema= vec![
+    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true),
+    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
+    SchemaField::new("url", FieldType::Text).store(true),
+    SchemaField::new("town", FieldType::String16).facet(true),
+];
 
-let meta = IndexMetaObject {
-    id: 0,
+let index_config = IndexConfig {
     name: "test_index".into(),
     lexical_similarity: LexicalSimilarity::Bm25f,
     tokenizer: TokenizerType::AsciiAlphabetic,
-    stemmer: StemmerType::None,
-    stop_words: StopwordType::None,
-    frequent_words: FrequentwordType::English,
-    ngram_indexing: NgramSet::NgramFF as u8,
-    document_compression: DocumentCompression::Snappy,
-    access_type: AccessType::Mmap,
-    spelling_correction: None,
-    query_completion: None,
-    clustering: Clustering::None,
-    inference: Inference::None,
-    segment_number_bits:11
+    ..Default::default()
 };
 
-let synonyms=Vec::new();
-
-let index_arc=create_index(index_path,meta,&schema,&synonyms,false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
 
 # });
 ```
@@ -1588,51 +1520,43 @@ search index
 
 use std::path::Path;
 use seekstorm::index::{IndexDocuments,open_index};
-use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting};
+use seekstorm::search::{Search,SearchMode,QueryType,ResultType,FacetFilter,QueryFacet,QueryRewriting, SearchRequest, DocumentOption};
 use seekstorm::highlighter::{Highlight,highlighter};
 use std::collections::HashSet;
 
 let index_path=Path::new("C:/index/");
 let index_arc=open_index(index_path).await.unwrap();
-let query="test".to_string();
-let query_vector=None;
-let search_mode=SearchMode::Lexical;
-let enable_empty_query=false;
-let offset=0;
-let length=10;
-let query_type=QueryType::Intersection; 
-let result_type=ResultType::TopkCount;
-let include_uncommitted=false;
-let field_filter=Vec::new();
-let query_facets = vec![QueryFacet::String16 {field: "age".to_string(),prefix: "".to_string(),length:u16::MAX}];
-let facet_filter=Vec::new();
-//let facet_filter = vec![FacetFilter::String { field: "town".to_string(),filter: vec!["Berlin".to_string()],}];
-let result_sort=Vec::new();
 
-let result_object = index_arc.search(query, query_vector, query_type, search_mode, enable_empty_query, offset, length, result_type,include_uncommitted,field_filter,query_facets,facet_filter,result_sort,QueryRewriting::SearchOnly).await;
+let highlights: Vec<Highlight> = vec![Highlight {
+    field: "body".to_string(),
+    name: String::new(),
+    fragment_number: 2,
+    fragment_size: 160,
+    highlight_markup: true,
+    ..Default::default()
+}];
+
+let result_object = index_arc.search(
+    SearchRequest {
+        query_string: "test",
+        query_type_default: QueryType::Intersection,
+        search_mode: SearchMode::Lexical, 
+        offset: 0,
+        length: 10,
+        result_type: ResultType::TopkCount,
+        query_facets: vec![QueryFacet::String16 {field: "age".to_string(),prefix: "".to_string(),length:u16::MAX}],
+        facet_filter: vec![FacetFilter::String16 { field: "town".to_string(),filter: vec!["Berlin".to_string()],}],
+        return_documents: Some(DocumentOption { highlights, ..Default::default()}),
+        ..Default::default()
+    }
+).await;
 
 // ### display results
 
-let highlights:Vec<Highlight>= vec![
-        Highlight {
-            field: "body".to_owned(),
-            name:String::new(),
-            fragment_number: 2,
-            fragment_size: 160,
-            highlight_markup: true,
-            ..Default::default()
-        },
-    ];    
-
-let highlighter=Some(highlighter(&index_arc,highlights, result_object.query_terms).await);
-let return_fields_filter= HashSet::new();
-let distance_fields=Vec::new();
-let index=index_arc.write().await;
-for result in result_object.results.iter() {
-  let doc=index.get_document(result.doc_id,false,&highlighter,&return_fields_filter,&distance_fields).await.unwrap();
-  println!("result {} rank {} body field {:?}" , result.doc_id,result.score, doc.get("body"));
+for doc in result_object.documents.iter() {
+    println!("document {:?}", doc);
 }
-println!("result counts {} {} {}",result_object.results.len(), result_object.result_count, result_object.result_count_total);
+println!( "result counts {} {}", result_object.count, result_object.count_total);
 
 // ### display facets
 
@@ -1654,7 +1578,7 @@ create index
 
     use std::path::Path;
     use std::sync::{Arc, RwLock};
-    use seekstorm::index::{IndexMetaObject, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+    use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
     use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
     use seekstorm::vector_similarity::VectorSimilarity;
 
@@ -1666,28 +1590,17 @@ create index
     {"field":"url","field_type":"Text","store":false,"index_lexical":false,"index_vector":false}]"#;
     let schema=serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "test_index".into(),
-        lexical_similarity: LexicalSimilarity::Bm25f,
-        tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None ,
-        frequent_words: FrequentwordType::English,
-        ngram_indexing: NgramSet::SingleTerm as u8 ,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
         clustering: Clustering::None,
         inference: Inference::Model2Vec { model: Model::PotionBase2M, chunk_size: 1000, quantization: Quantization::ScalarQuantizationI8 },
-        segment_number_bits:11
+        ..Default::default()
     };
     
-    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+    let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
     let index=index_arc.read().await;
 
-    let result=index.meta.id;
+    let result=index.index_config.id;
     assert_eq!(result, 0);
 # });
 ```
@@ -1726,7 +1639,7 @@ query documents/vectors
 
     use std::path::Path;
     use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting};
+    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting,SearchRequest};
     use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
     use seekstorm::commit::Commit;
     use seekstorm::highlighter::{Highlight,highlighter};
@@ -1739,33 +1652,28 @@ query documents/vectors
     let result=index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 3);
 
-    let query="rosy panther".into();
     let result_object = index_arc
         .search(
-            query,
-            None,
-            QueryType::Union,
-            SearchMode::Vector { similarity_threshold: Some(0.7), ann_mode: AnnMode::All },
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
+            SearchRequest {
+                query_string: "rosy panther",
+                query_vector: None,
+                query_type_default: QueryType::Union,
+                search_mode: SearchMode::Vector { similarity_threshold: Some(0.7), ann_mode: AnnMode::All }, 
+                offset: 0,
+                length: 10,
+                result_type: ResultType::TopkCount,
+                ..Default::default()
+            }
         )
         .await;
 
     let result=result_object.results.len();
     assert_eq!(result, 1);
 
-    let result=result_object.result_count;
+    let result=result_object.count;
     assert_eq!(result, 1);
 
-    let result=result_object.result_count_total;
+    let result=result_object.count_total;
     assert_eq!(result, 1);
 # });
 ```
@@ -1783,7 +1691,7 @@ create index
 
     use std::path::Path;
     use std::sync::{Arc, RwLock};
-    use seekstorm::index::{IndexMetaObject, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+    use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
     use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
     use seekstorm::vector_similarity::VectorSimilarity;
 
@@ -1794,28 +1702,18 @@ create index
     {"field":"index","field_type":"Text","store":true,"index_lexical":false,"index_vector":false}]"#;
     let schema=serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "test_index".into(),
-        lexical_similarity: LexicalSimilarity::Bm25f,
-        tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None ,
-        frequent_words: FrequentwordType::English,
-        ngram_indexing: NgramSet::SingleTerm as u8 ,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
         clustering: Clustering::None,
         inference: Inference::External { dimensions: 128, precision: Precision::F32,  quantization: Quantization::None,similarity:VectorSimilarity::Euclidean },
-        segment_number_bits:11
+        segment_number_bits:11,
+        ..Default::default()
     };
     
-    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+    let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
     let index=index_arc.read().await;
 
-    let result=index.meta.id;
+    let result=index.index_config.id;
     assert_eq!(result, 0);
 
 # });
@@ -1856,7 +1754,7 @@ query documents/vectors
 
     use std::path::Path;
     use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting};
+    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting,SearchRequest,QueryVector};
     use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
     use seekstorm::commit::Commit;
     use seekstorm::vector::Embedding;
@@ -1870,35 +1768,29 @@ query documents/vectors
     let result=index_arc.read().await.indexed_doc_count().await;
     assert_eq!(result, 3);
 
-    let query=String::new();
     let query_vector = vec![0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010, 0.011, 0.012, 0.013, 0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.020, 0.021, 0.022, 0.023, 0.024, 0.025, 0.026, 0.027, 0.028, 0.029, 0.030, 0.031, 0.032, 0.033, 0.034, 0.035, 0.036, 0.037, 0.038, 0.039, 0.040, 0.041, 0.042, 0.043, 0.044, 0.045, 0.046, 0.047, 0.048, 0.049, 0.050, 0.051, 0.052, 0.053, 0.054, 0.055, 0.056, 0.057, 0.058, 0.059, 0.060, 0.061, 0.062, 0.063, 0.064, 0.065, 0.066, 0.067, 0.068, 0.069, 0.070, 0.071, 0.072, 0.073, 0.074, 0.075, 0.076, 0.077, 0.078, 0.079, 0.080, 0.081, 0.082, 0.083, 0.084, 0.085, 0.086, 0.087, 0.088, 0.089, 0.090, 0.091, 0.092, 0.093, 0.094, 0.095, 0.096, 0.097, 0.098, 0.099, 0.100, 0.101, 0.102, 0.103, 0.104, 0.105, 0.106, 0.107, 0.108, 0.109, 0.110, 0.111, 0.112, 0.113, 0.114, 0.115, 0.116, 0.117, 0.118, 0.119, 0.120, 0.121, 0.122, 0.123, 0.124, 0.125, 0.126, 0.127, 0.128];
-    let query_embedding=Embedding::F32(query_vector);
     let result_object = index_arc
         .search(
-            query,
-            Some(query_embedding),
-            QueryType::Union,
-            SearchMode::Vector { similarity_threshold: None, ann_mode: AnnMode::All },
-            false,
-            0,
-            10,
-            ResultType::TopkCount,
-            false,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            QueryRewriting::SearchOnly,
+            SearchRequest {
+                query_vector: Some(QueryVector::VecF32(query_vector)),
+                query_type_default: QueryType::Union,
+                search_mode: SearchMode::Vector { similarity_threshold: None, ann_mode: AnnMode::All }, 
+                offset: 0,
+                length: 10,
+                result_type: ResultType::TopkCount,
+                query_rewriting:  QueryRewriting::SearchOnly,
+                ..Default::default()
+            }
         )
         .await;
 
     let result=result_object.results.len();
     assert_eq!(result, 3);
 
-    let result=result_object.result_count;
+    let result=result_object.count;
     assert_eq!(result, 3);
 
-    let result=result_object.result_count_total;
+    let result=result_object.count_total;
     assert_eq!(result, 3);
 
 # });
@@ -1923,7 +1815,7 @@ create index
 
     use std::path::Path;
     use std::sync::{Arc, RwLock};
-    use seekstorm::index::{IndexMetaObject, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
+    use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
     use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
     use seekstorm::vector_similarity::VectorSimilarity;
 
@@ -1934,28 +1826,17 @@ create index
     {"field":"index","field_type":"Text","store":true,"index_lexical":false,"index_vector":false}]"#;
     let schema=serde_json::from_str(schema_json).unwrap();
 
-    let meta = IndexMetaObject {
-        id: 0,
+    let index_config = IndexConfig {
         name: "test_index".into(),
-        lexical_similarity: LexicalSimilarity::Bm25f,
-        tokenizer: TokenizerType::UnicodeAlphanumeric,
-        stemmer: StemmerType::None,
-        stop_words: StopwordType::None ,
-        frequent_words: FrequentwordType::English,
-        ngram_indexing: NgramSet::SingleTerm as u8 ,
-        document_compression: DocumentCompression::Snappy,
-        access_type: AccessType::Mmap,
-        spelling_correction: None,
-        query_completion: None,
         clustering: Clustering::Auto,
         inference: Inference::External { dimensions: 128, precision: Precision::F32, quantization: Quantization::ScalarQuantizationI8, similarity:VectorSimilarity::Euclidean },
-        segment_number_bits:11
+        ..Default::default()
     };
     
-    let index_arc=create_index(index_path,meta,&schema,&Vec::new(),false,None).await.unwrap();
+    let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
     let index=index_arc.read().await;
 
-    let result=index.meta.id;
+    let result=index.index_config.id;
     assert_eq!(result, 0);
 
 # });
@@ -1993,7 +1874,7 @@ query documents/vectors
     use std::time::Instant;
     use indexmap::IndexMap;
     use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting};
+    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting,SearchRequest,QueryVector};
     use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
     use seekstorm::commit::Commit;
     use seekstorm::vector::Embedding;
@@ -2013,7 +1894,6 @@ query documents/vectors
 
     let len=10;
     let similarity_threshold=None;
-    let field_filter=Vec::new();
     let fields_hashset=HashSet::new();
 
     let mut search_time_sum=0;
@@ -2029,37 +1909,29 @@ query documents/vectors
 
             let queries_len=queries.len();
 
-            for (query_idx, query_embedding) in queries.into_iter().enumerate().take(queries_len) {
+            for (query_idx, query_vector) in queries.into_iter().enumerate().take(queries_len) {
 
                 let ground_truth_for_query:IndexMap<usize, usize> = ground_truth[query_idx].iter().take(len).enumerate().map(|(i, x)| (*x as usize, i)).collect();
-
-                let query_embedding=Embedding::F32(query_embedding);
 
                 let start_time = Instant::now();
 
                 let result_object_vector = index_arc
                 .search(
-                    query.to_string(),
-                    Some(query_embedding),
-                    QueryType::Intersection,
-                    SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Nprobe(16)},
-                    false,
-                    0,
-                    len,
-                    ResultType::Topk,
-                    false,
-                    field_filter.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    QueryRewriting::SearchOnly,
+                    SearchRequest {
+                        query_vector: Some(QueryVector::VecF32(query_vector)),
+                        search_mode: SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Nprobe(16)},
+                        offset: 0,
+                        length: len,
+                        result_type: ResultType::Topk,
+                        ..Default::default()
+                    }
                 )
                 .await;
 
                 let search_time = start_time.elapsed().as_nanos() as i64;
                 search_time_sum+=search_time;
                 results_sum+=result_object_vector.results.len();
-                result_count_total_sum+=result_object_vector.result_count_total;
+                result_count_total_sum+=result_object_vector.count_total;
                 observed_cluster_count_sum+=result_object_vector.observed_cluster_count;
                 observed_vector_count_sum+=result_object_vector.observed_vector_count;
 

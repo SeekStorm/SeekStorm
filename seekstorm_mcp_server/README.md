@@ -14,6 +14,7 @@ The server supports lexical, vector, and hybrid retrieval, plus document indexin
   - Supports configurable schemas and index settings, document indexing/updating/deletion, retrieval and iteration, JSON/NDJSON ingestion, and PDF indexing.
   - Supports lexical, vector, and hybrid search, including filters, facets, sorting, and highlighting.
   - Added unit, stdio integration, and MCP contract tests.
+  - Uses SeekStorm 5.0.0's simplified API with `SearchRequest` struct and optional chainable setters instead of positional parameters.
   - The MCP server does currently implement embedded mode only; it does not connect to a remote SeekStorm server.
 
 [Learn more about AI agents, RAG, and MCP — what they mean, and how they fit together.](https://seekstorm.com/ai_agent_rag_mcp)
@@ -67,14 +68,17 @@ To create an index with a different schema or vector settings at startup, set `S
 
 ```json
 {
-  "index_name": "project_docs",
+  "index_config": {
+        "name": "project_docs",
+        "lexical_similarity": "Bm25f",
+        "tokenizer": "UnicodeAlphanumericFolded"
+  },
   "schema": [
     { "field": "title", "field_type": "Text", "store": true, "index_lexical": true, "boost": 5 },
     { "field": "body", "field_type": "Text", "store": true, "index_lexical": true, "longest": true },
     { "field": "url", "field_type": "Text", "store": true, "index_lexical": false }
   ],
-  "similarity": "Bm25f",
-  "tokenizer": "UnicodeAlphanumericFolded"
+  "synonyms": []
 }
 ```
 
@@ -90,13 +94,31 @@ The request uses the same schema and index-setting types as the SeekStorm librar
 
 Documents are arbitrary JSON objects whose fields must match the active index schema. `ingest_json` streams JSON arrays, NDJSON, and concatenated JSON documents. `index_pdf_file` extracts text from a local PDF and requires an available Pdfium library. `get_file` returns the associated file bytes as base64 text.
 
-`delete_documents_by_query` uses `length` and `offset` to bound and page through matching documents before deletion. Search first to verify the intended matches.
+`delete_documents_by_query` supports lexical, vector, and hybrid deletion using a `SearchRequest`-compatible structure with `length` and `offset` to bound and page through matching documents before deletion. It ignores fields like `result_type`, `query_rewriting`, `query_facets`, `fields`, `distance_fields`, `highlights`, and `include_uncommitted` which are not applicable to deletion. Search first to verify the intended matches.
 
 ## Search
 
-`search` accepts a query, `length`, `offset`, and SeekStorm's `search_mode` enum (`Lexical`, `Vector`, or `Hybrid`). It also supports SeekStorm query types and rewriting, real-time search, field selection, facet filters/facets, sorting, and highlighting.
+`search` accepts SeekStorm's `SearchRequest` struct (version 5.0.0+) with optional chainable setters. The query string field can be specified as either `query` (for backward compatibility) or `query_string` (for consistency with the library API).
 
-For vector or hybrid search, provide `query_vector` as a SeekStorm `Embedding` enum (`{"F32": [...]}` or `{"I8": [...]}`), unless the active index is configured with an internal inference model. Explicit vectors must match the index dimensions. Vector search needs vector-indexed fields in the schema; hybrid search can combine lexical fields and vectors. `Vector` and `Hybrid` search modes carry their own `similarity_threshold` and `ann_mode` fields.
+Core search parameters:
+- `query` or `query_string`: The search query string. Supports operators `+` (AND), `-` (NOT), `""` (phrase).
+- `length`: Number of results to return (default 10).
+- `offset`: Number of results to skip for pagination (default 0).
+- `search_mode`: `Lexical` (default), `Vector`, or `Hybrid`.
+- `query_vector`: Optional embedding as `{"F32": [...]}` or `{"I8": [...]}` for vector/hybrid search.
+
+Advanced parameters:
+- `query_type`: Default query operator (`Union`, `Intersection`, `Phrase`, `Not`). Overridden by operators in the query string.
+- `result_type`: `Count`, `Topk`, or `TopkCount`.
+- `query_rewriting`: Query correction/completion mode.
+- `include_uncommitted`: Include indexed but uncommitted documents (default false).
+- `enable_empty_query`: Allow browsing all documents with empty query (default false).
+- `field_filter`: Search only specified indexed fields (empty means all).
+- `return_documents`: Optional document options. When omitted or null, results contain only `_id` and `_score`. Set it to an object to return documents:
+  - `fields`: Stored fields to return (empty means all).
+  - `distance_fields`: Distance fields to derive at query time.
+  - `highlights`: Highlighting definitions in SeekStorm's JSON format.
+- `query_facets`, `facet_filter`, `result_sort`: Facets, filters, and sorting definitions in SeekStorm's JSON format.
 
 Example lexical search tool arguments:
 
@@ -106,7 +128,8 @@ Example lexical search tool arguments:
   "search_mode": "Lexical",
   "length": 5,
   "offset": 0,
-  "field_filter": ["title", "body"]
+  "field_filter": ["title", "body"],
+  "return_documents": {"fields": ["title", "body"]}
 }
 ```
 
@@ -125,6 +148,8 @@ Example vector search arguments for a 3-dimensional vector index:
   "length": 5
 }
 ```
+
+For vector or hybrid search, provide `query_vector` as a SeekStorm `Embedding` enum, unless the active index is configured with an internal inference model. Explicit vectors must match the index dimensions. Vector search needs vector-indexed fields in the schema; hybrid search can combine lexical fields and vectors. `Vector` and `Hybrid` search modes carry their own `similarity_threshold` and `ann_mode` fields.
 
 Facet definitions, facet filters, sort definitions, highlights, query rewriting, and enum settings are passed in their SeekStorm serialized JSON forms. The schema and index settings are fixed when an index is created; changing them requires creating a new index and reindexing documents.
 
