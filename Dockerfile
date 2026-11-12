@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y g++
 
 COPY . /seekstorm
 
-RUN cargo build --release
+RUN cargo build --release -p seekstorm_server
 
 FROM debian:bookworm-slim
 

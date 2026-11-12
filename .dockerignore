@@ -1,5 +1,8 @@
 /assets/*.png
 /target
+/seekstorm/benches
+/seekstorm/seekstorm_client
+/seekstorm/seekstorm_mcp_server
 .vscode
 .idea
 *.md
