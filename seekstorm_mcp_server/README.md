@@ -14,7 +14,8 @@ The server supports lexical, vector, and hybrid retrieval, plus document indexin
   - Supports configurable schemas and index settings, document indexing/updating/deletion, retrieval and iteration, JSON/NDJSON ingestion, and PDF indexing.
   - Supports lexical, vector, and hybrid search, including filters, facets, sorting, and highlighting.
   - Added unit, stdio integration, and MCP contract tests.
-  - Uses SeekStorm 5.0.0's simplified API with `SearchRequest` struct and optional chainable setters instead of positional parameters.
+  - Uses SeekStorm 5.1.0's simplified API with `SearchRequest` struct and optional chainable setters instead of positional parameters.
+  - Supports the new OR operator `|` (disjunction, union) in query strings.
   - The MCP server does currently implement embedded mode only; it does not connect to a remote SeekStorm server.
 
 [Learn more about AI agents, RAG, and MCP — what they mean, and how they fit together.](https://seekstorm.com/ai_agent_rag_mcp)
@@ -98,10 +99,10 @@ Documents are arbitrary JSON objects whose fields must match the active index sc
 
 ## Search
 
-`search` accepts SeekStorm's `SearchRequest` struct (version 5.0.0+) with optional chainable setters. The query string field can be specified as either `query` (for backward compatibility) or `query_string` (for consistency with the library API).
+`search` accepts SeekStorm's `SearchRequest` struct (version 5.1.0+) with optional chainable setters. The query string field can be specified as either `query` (for backward compatibility) or `query_string` (for consistency with the library API).
 
 Core search parameters:
-- `query` or `query_string`: The search query string. Supports operators `+` (AND), `-` (NOT), `""` (phrase).
+- `query` or `query_string`: The search query string. Supports operators `+` (AND), `-` (NOT), `|` (OR), `""` (phrase).
 - `length`: Number of results to return (default 10).
 - `offset`: Number of results to skip for pagination (default 0).
 - `search_mode`: `Lexical` (default), `Vector`, or `Hybrid`.
@@ -114,10 +115,11 @@ Advanced parameters:
 - `include_uncommitted`: Include indexed but uncommitted documents (default false).
 - `enable_empty_query`: Allow browsing all documents with empty query (default false).
 - `field_filter`: Search only specified indexed fields (empty means all).
-- `return_documents`: Optional document options. When omitted or null, results contain only `_id` and `_score`. Set it to an object to return documents:
+- `return_documents`: Document options. By default (when not specified), documents are returned with all stored fields. Set it to customize which fields/distances/highlights to include:
   - `fields`: Stored fields to return (empty means all).
   - `distance_fields`: Distance fields to derive at query time.
   - `highlights`: Highlighting definitions in SeekStorm's JSON format.
+  - Note: Returning documents adds latency to search results; for benchmarking, explicitly set `return_documents: null` to return only `_id` and `_score`.
 - `query_facets`, `facet_filter`, `result_sort`: Facets, filters, and sorting definitions in SeekStorm's JSON format.
 
 Example lexical search tool arguments:

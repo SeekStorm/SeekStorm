@@ -383,16 +383,6 @@ pub struct ReadmeDoctests;
 /// The `api_endpoints` module contains the implementation of the REST API client for SeekStorm.
 pub mod api_endpoints;
 
-pub use seekstorm::{
-    highlighter::Highlight,
-    index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, Document, DocumentCompression,
-        FrequentwordType, GetDocumentRequest, GetIteratorRequest, IndexConfig, LexicalSimilarity,
-        NgramSet, StemmerType, StopwordType, TokenizerType,
-    },
-    iterator::{IteratorResult, IteratorResultItem},
-    search::{QueryRewriting, QueryType, ResultType, SearchMode, SearchRequest, SearchResult},
-    vector::Inference,
-};
+pub use seekstorm::prelude::*;
 
 pub use crate::api_endpoints::RestClient;

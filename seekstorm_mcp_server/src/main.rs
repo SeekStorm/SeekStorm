@@ -91,7 +91,9 @@ async fn open_or_create_index(index_path: &Path) -> Result<IndexArc, String> {
             }
         };
         let (index_config, schema, synonyms) = create_index_request(request);
-        create_index_library(index_path, index_config, &schema, &synonyms, true, None).await
+        create_index_library(index_path, index_config, &schema, &synonyms)
+            .mute(true)
+            .await
     }
 }
 
@@ -710,13 +712,13 @@ impl SeekStormMcpServer {
             )]));
         }
         let (index_config, schema, synonyms) = create_index_request(request);
-        let new_index =
-            match create_index_library(&index_path, index_config, &schema, &synonyms, true, None)
-                .await
-            {
-                Ok(index) => index,
-                Err(err) => return Ok(CallToolResult::error(vec![ContentBlock::text(err)])),
-            };
+        let new_index = match create_index_library(&index_path, index_config, &schema, &synonyms)
+            .mute(true)
+            .await
+        {
+            Ok(index) => index,
+            Err(err) => return Ok(CallToolResult::error(vec![ContentBlock::text(err)])),
+        };
         self.active_index().await.commit().await;
         *self.index_arc.write().await = new_index;
         *self.index_path.write().await = index_path.clone();

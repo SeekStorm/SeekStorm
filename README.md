@@ -135,9 +135,9 @@ In [production](https://seekstorm.com) since 2020. Open source under the [Apache
 + Vector (**externally generated embeddings**)
 
 #### Query types
-+ OR  disjunction  union
-+ AND conjunction intersection
-+ ""  phrase
++ | OR  disjunction  union
++ \+ AND conjunction intersection
++ ""  Phrase
 + \-   NOT
 
 #### Result types
@@ -209,58 +209,31 @@ cargo add tokio --features full
 
 ```rust ,no_run
 use std::path::Path;
-use seekstorm::commit::Commit;
-use seekstorm::index::{create_index, AccessType, Clustering, DocumentCompression, FrequentwordType, IndexDocuments, IndexConfig, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 
 #[tokio::main]
 async fn main() {
     // 1. Schema: which fields exist and how they are indexed
-    let schema = serde_json::from_str(r#"[
-        {"field":"title","field_type":"Text","store":true,"index_lexical":true},
-        {"field":"body","field_type":"Text","store":true,"index_lexical":true}
-    ]"#).unwrap();
+    let schema= vec![SchemaField::new("title"), SchemaField::new("body")];
 
     // 2. Create the index
-    let index_config = IndexConfig {
-        name: "quickstart".to_string(),
-        lexical_similarity: LexicalSimilarity::Bm25f,
-        tokenizer: TokenizerType::UnicodeAlphanumeric,
-        ..Default::default()
-    };
-
-    let mut index_arc = create_index(Path::new("./seekstorm_index"), index_config, &schema, &[], false, None).await.unwrap();
+    let index_config = IndexConfig::new("quickstart");
+    let mut index_arc = create_index(Path::new("./seekstorm_index"), index_config, &schema, &[]).await.unwrap();
 
     // 3. Index documents
-    let docs = r#"[{"title":"title1 test","body":"body1"}, {"title":"title2","body":"body2 test"}]"#;
-    index_arc.index_documents(serde_json::from_str(docs).unwrap()).await;
+    let docs = serde_json::from_str(r#"[{"title":"title1 test","body":"body1"}, {"title":"title2","body":"body2 test"}]"#).unwrap();
+    index_arc.index_documents(docs).await;
     index_arc.commit().await;
 
     // 4. Search
-    let result_object = index_arc.search(
-        SearchRequest {
-            query_string: "test",
-            query_type_default: QueryType::Intersection,
-            offset: 0,
-            length: 10,
-            search_mode: SearchMode::Lexical, 
-            result_type: ResultType::TopkCount,
-            query_rewriting:  QueryRewriting::SearchOnly,
-            return_documents: Some(Default::default()),
-            ..Default::default()
-        }
-    ).await;
+    let result_object = index_arc.search(SearchRequest::new("test")).await;
 
-    for doc in result_object.documents.iter() {
-        println!("document {:?}", doc);
-    }
-    println!(
-        "result counts {} {}",
-        result_object.count, result_object.count_total
-    );
+    // 5. Display results
+    for doc in result_object.documents.iter() {println!("document {:?}", doc);}
+    println!( "result counts {} {}", result_object.count, result_object.count_total);
 }
 ```
+All IndexConfig and SearchRequest fields have sensible defaults. See [IndexConfig](https://docs.rs/seekstorm/latest/seekstorm/index/struct.IndexConfig.html) for tokenizer, stemmer, query completion, spelling correction and [SearchRequest](https://docs.rs/seekstorm/latest/seekstorm/search/struct.SearchRequest.html) for search modes, query types, result types, query rewriting and more.
 
 Vector search, hybrid search, facets and more: see [Usage of the library](#usage-of-the-library).
 
@@ -876,7 +849,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 create schema (from JSON)
 ```rust
-use seekstorm::index::SchemaField;
+use seekstorm::prelude::*;
 
 let schema_json = r#"
 [{"field":"title","field_type":"Text","store":true,"index_lexical":true,"dictionary_source":true,"completion_source":true},
@@ -890,9 +863,9 @@ create schema (from SchemaField)
 use seekstorm::index::{SchemaField,FieldType};
 
 let schema= vec![
-    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).completion_source(true).dictionary_source(true),
-    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
-    SchemaField::new("url", FieldType::Text).store(true),
+    SchemaField::new("title").completion_source(true).dictionary_source(true),
+    SchemaField::new("body"),
+    SchemaField::new("url"),
 ];
 ```
 
@@ -901,16 +874,14 @@ create index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexConfig, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,SchemaField,FieldType,SpellingCorrection,QueryCompletion,DocumentCompression,create_index};
-use seekstorm::vector::Inference;
-use seekstorm::vector_similarity::VectorSimilarity;
+use seekstorm::prelude::*;
 
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).completion_source(true).dictionary_source(true),
-    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
-    SchemaField::new("url", FieldType::Text).store(true),
+    SchemaField::new("title").completion_source(true).dictionary_source(true),
+    SchemaField::new("body"),
+    SchemaField::new("url"),
 ];
 
 let index_config = IndexConfig {
@@ -922,7 +893,7 @@ let index_config = IndexConfig {
     ..Default::default()
 };
 
-let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 
 # });
 ```
@@ -945,7 +916,7 @@ index documents (from JSON)
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{open_index, IndexDocuments};
+use seekstorm::prelude::*;
 
 let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path).await.unwrap(); 
@@ -965,7 +936,7 @@ index document (from Document)
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::index::{FileType, Document, IndexDocument, open_index};
+use seekstorm::prelude::*;
 use std::path::Path;
 use serde_json::Value;
 
@@ -987,8 +958,7 @@ commit documents
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::commit::Commit;
-use seekstorm::index::open_index;
+use seekstorm::prelude::*;
 use std::path::Path;
 
 let index_path=Path::new("C:/index/");
@@ -1003,9 +973,7 @@ search index
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryRewriting, SearchRequest, DocumentOption};
-use seekstorm::highlighter::Highlight;
-use seekstorm::index::open_index;
+use seekstorm::prelude::*;
 use std::path::Path;
 
 let index_path=Path::new("C:/index/");
@@ -1109,10 +1077,9 @@ multi-threaded search
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::search::{QueryType, SearchMode, ResultType, QueryRewriting, Search, SearchRequest};
+use seekstorm::prelude::*;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use seekstorm::index::open_index;
 use std::path::Path;
 
 let index_path=Path::new("C:/index/");
@@ -1178,9 +1145,9 @@ use seekstorm::vector_similarity::VectorSimilarity;
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).completion_source(true).dictionary_source(true),
-    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
-    SchemaField::new("url", FieldType::Text).store(true),
+    SchemaField::new("title").completion_source(true).dictionary_source(true),
+    SchemaField::new("body"),
+    SchemaField::new("url"),
 ];
 
 let index_config = IndexConfig {
@@ -1192,7 +1159,7 @@ let index_config = IndexConfig {
     ..Default::default()
 };
 
-let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 
 # });
 ```
@@ -1232,10 +1199,10 @@ use seekstorm::vector_similarity::VectorSimilarity;
 let index_path=Path::new("C:/index/");
 
 let schema= vec![
-    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true).boost(10.0).completion_source(true).dictionary_source(true),
-    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
-    SchemaField::new("url", FieldType::Text).store(true),
-    SchemaField::new("date", FieldType::Timestamp).store(true),
+    SchemaField::new("title").boost(10.0).completion_source(true).dictionary_source(true),
+    SchemaField::new("body"),
+    SchemaField::new("url"),
+    SchemaField::new("date").field_type(FieldType::Timestamp).store(true),
 ];
 
 let index_config = IndexConfig {
@@ -1247,7 +1214,7 @@ let index_config = IndexConfig {
     ..Default::default()
 };
 
-let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 
 # });
 ```
@@ -1470,10 +1437,10 @@ use seekstorm::vector_similarity::VectorSimilarity;
 let index_path=Path::new("C:/index/");//x
 
 let schema= vec![
-    SchemaField::new("title", FieldType::Text).store(true).index_lexical(true),
-    SchemaField::new("body", FieldType::Text).store(true).index_lexical(true),
-    SchemaField::new("url", FieldType::Text).store(true),
-    SchemaField::new("town", FieldType::String16).facet(true),
+    SchemaField::new("title"),
+    SchemaField::new("body"),
+    SchemaField::new("url"),
+    SchemaField::new("town").field_type(FieldType::String16).facet(true),
 ];
 
 let index_config = IndexConfig {
@@ -1483,7 +1450,7 @@ let index_config = IndexConfig {
     ..Default::default()
 };
 
-let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 
 # });
 ```
@@ -1519,9 +1486,7 @@ search index
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::index::{IndexDocuments,open_index};
-use seekstorm::search::{Search,SearchMode,QueryType,ResultType,FacetFilter,QueryFacet,QueryRewriting, SearchRequest, DocumentOption};
-use seekstorm::highlighter::{Highlight,highlighter};
+use seekstorm::prelude::*;
 use std::collections::HashSet;
 
 let index_path=Path::new("C:/index/");
@@ -1578,9 +1543,7 @@ create index
 
     use std::path::Path;
     use std::sync::{Arc, RwLock};
-    use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
-    use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
-    use seekstorm::vector_similarity::VectorSimilarity;
+    use seekstorm::prelude::*;
 
     let index_path=Path::new("tests/index_test/");
 
@@ -1597,7 +1560,7 @@ create index
         ..Default::default()
     };
     
-    let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+    let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
     let index=index_arc.read().await;
 
     let result=index.index_config.id;
@@ -1610,8 +1573,7 @@ index documents/vectors
 # tokio_test::block_on(async {
 
     use std::path::Path;
-    use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::commit::Commit;
+    use seekstorm::prelude::*;
 
     // open index
     let index_path=Path::new("tests/index_test/");
@@ -1638,11 +1600,7 @@ query documents/vectors
 # tokio_test::block_on(async {
 
     use std::path::Path;
-    use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting,SearchRequest};
-    use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
-    use seekstorm::commit::Commit;
-    use seekstorm::highlighter::{Highlight,highlighter};
+    use seekstorm::prelude::*;
     use std::collections::HashSet;
 
    // open index
@@ -1691,9 +1649,7 @@ create index
 
     use std::path::Path;
     use std::sync::{Arc, RwLock};
-    use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
-    use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
-    use seekstorm::vector_similarity::VectorSimilarity;
+    use seekstorm::prelude::*;
 
    let index_path=Path::new("tests/index_test/");
 
@@ -1710,7 +1666,7 @@ create index
         ..Default::default()
     };
     
-    let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+    let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
     let index=index_arc.read().await;
 
     let result=index.index_config.id;
@@ -1724,8 +1680,7 @@ index documents/vectors
 # tokio_test::block_on(async {
 
     use std::path::Path;
-    use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::commit::Commit;
+    use seekstorm::prelude::*;
 
     // open index
     let index_path=Path::new("tests/index_test/");
@@ -1753,12 +1708,7 @@ query documents/vectors
 # tokio_test::block_on(async {
 
     use std::path::Path;
-    use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting,SearchRequest,QueryVector};
-    use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
-    use seekstorm::commit::Commit;
-    use seekstorm::vector::Embedding;
-    use seekstorm::highlighter::{Highlight,highlighter};
+    use seekstorm::prelude::*;
     use std::collections::HashSet;
 
   // open index
@@ -1815,9 +1765,7 @@ create index
 
     use std::path::Path;
     use std::sync::{Arc, RwLock};
-    use seekstorm::index::{IndexConfig, Clustering,LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
-    use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
-    use seekstorm::vector_similarity::VectorSimilarity;
+    use seekstorm::prelude::*;
 
    let index_path=Path::new("tests/index_test/");
 
@@ -1833,7 +1781,7 @@ create index
         ..Default::default()
     };
     
-    let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+    let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
     let index=index_arc.read().await;
 
     let result=index.index_config.id;
@@ -1847,9 +1795,7 @@ index documents/vectors
 # tokio_test::block_on(async {
 
     use std::path::Path;
-    use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::commit::Commit;
-    use seekstorm::ingest::{read_fvecs,ingest_sift};
+    use seekstorm::prelude::*;
 
     // open index
     let index_path=Path::new("tests/index_test/");
@@ -1873,13 +1819,7 @@ query documents/vectors
     use std::collections::HashSet;
     use std::time::Instant;
     use indexmap::IndexMap;
-    use seekstorm::index::{IndexDocuments,open_index};
-    use seekstorm::search::{Search,SearchMode,QueryType,ResultType,QueryFacet,QueryRewriting,SearchRequest,QueryVector};
-    use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
-    use seekstorm::commit::Commit;
-    use seekstorm::vector::Embedding;
-    use seekstorm::ingest::{read_fvecs, read_ivecs, ingest_sift};
-    use seekstorm::highlighter::{Highlight,highlighter};
+    use seekstorm::prelude::*;
     use num_format::{Locale, ToFormattedString};
     use serde_json::Value;
 

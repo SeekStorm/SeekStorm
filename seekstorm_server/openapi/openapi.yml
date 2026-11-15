@@ -8,7 +8,7 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
-  version: 5.0.0
+  version: 5.1.0
 servers:
 - url: http://127.0.0.1
   description: Local SeekStorm server
@@ -184,7 +184,7 @@ paths:
                       Model2Vec:
                         model: PotionBase2M
                         chunk_size: 1000
-                        quantization: I8
+                        quantization: ScalarQuantizationI8
                   schema:
                   - field: title
                     field_type: Text
@@ -233,7 +233,7 @@ paths:
                       External:
                         dimensions: 128
                         precision: F32
-                        quantization: I8
+                        quantization: ScalarQuantizationI8
                         similarity: Euclidean
                   schema:
                   - field: vector
@@ -2907,6 +2907,7 @@ components:
       - PotionMultilingual128M
       - PotionRetrieval32M
       - PotionBase8M
+      - Blink8M
       - PotionBase4M
       - PotionBase2M
     Precision:
@@ -3445,9 +3446,9 @@ components:
                   minimum: 0
                 description: |-
                   Term length thresholds for each edit distance.
-                    None    max_dictionary_edit_distance for all terms lengths
-                    Some(\[4\])    max_dictionary_edit_distance for all terms lengths >= 4,
-                    Some(\[2,8\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+                    None:    max_dictionary_edit_distance for all terms lengths
+                    Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+                    Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
               complete:
                 type:
                 - integer
@@ -3498,9 +3499,9 @@ components:
                   minimum: 0
                 description: |-
                   Term length thresholds for each edit distance.
-                    None    max_dictionary_edit_distance for all terms lengths
-                    Some(\[4\])    max_dictionary_edit_distance for all terms lengths >= 4,
-                    Some(\[2,8\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+                    None:    max_dictionary_edit_distance for all terms lengths
+                    Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+                    Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
               complete:
                 type:
                 - integer
@@ -3547,9 +3548,9 @@ components:
                   minimum: 0
                 description: |-
                   Term length thresholds for each edit distance.
-                    None    max_dictionary_edit_distance for all terms lengths
-                    Some(\[4\])    max_dictionary_edit_distance for all terms lengths >= 4,
-                    Some(\[2,8\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
+                    None:    max_dictionary_edit_distance for all terms lengths
+                    Some(\[4\]):    max_dictionary_edit_distance for all terms lengths >= 4,
+                    Some(\[2,8\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8
               complete:
                 type:
                 - integer
@@ -3965,7 +3966,7 @@ components:
       properties:
         query_string:
           type: string
-          description: Query string, search operators `+` `-` `""` are recognized.
+          description: Query string, search operators `+` `|` `-` `""` are recognized.
           default: ''
         query_vector:
           oneOf:
@@ -4032,7 +4033,7 @@ components:
             The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
             Examples:
             ```rust ,no_run
-            use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};
+            use seekstorm::prelude::*;
             let query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
             let query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
             let query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
@@ -4051,7 +4052,7 @@ components:
             the query facets are counted over all documents matching the query and the facet filter.
               Examples:
             ```rust ,no_run
-            use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue, FacetFilter};
+            use seekstorm::prelude::*;
             let facet_filter=vec![FacetFilter::String16{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String16{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
             let facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
             let facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
@@ -4071,7 +4072,7 @@ components:
             Sort is only enabled on facet fields that are defined in schema at create_index!
             Examples:
             ```rust ,no_run
-            use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};
+            use seekstorm::prelude::*;
             let result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
             let result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
             ```
@@ -4133,8 +4134,16 @@ components:
               If None, no documents are returned.
               If Some, the specified options are used to control which fields, distance fields, and highlights are returned.
               If you just want to return the full documents with all stored fields, without highlighting or distance fields, you can set this to `return_documents: Some(Default::default()),`
+              ⚠️ Benchmarking: Usually set `return_document` to `None` when benchmarking.
+              The document ID and score of the top-k hits, as well as the result counts, are still returned,
+              but the full documents are not loaded, decompressed, and deserialized.
+              Returning documents directly from a search request adds latency,
+              so setting `return_document` to `None` allows for a fair comparison with libraries that don't offer that convenience.
           - type: 'null'
-          default: null
+          default:
+            fields: []
+            distance_fields: []
+            highlights: []
     SearchResult:
       type: object
       description: Contains the results returned when searching the index.
@@ -4181,7 +4190,7 @@ components:
           type: integer
           description: |-
             Total number of search results that match the query
-            count_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk
+            count_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk (then it is set to count).
           minimum: 0
         observed_vector_count:
           type: integer
@@ -4239,6 +4248,7 @@ components:
       type: object
       description: |-
         Defines spelling correction (fuzzy search) and dictionary generation settings for an index.
+
         ⚠️ Either set index_lexical=true and dictionary_source=true in the schema for a field, then a spelling correction dictionary is automatically derived from the terms in this field during indexing.
         Or place a manually generated frequency dictionary at the following location: {index_path}/dictionary.csv
       required:
@@ -4403,11 +4413,11 @@ components:
 
         UnicodeAlphanumeric
         - All Unicode alphanumeric chars are recognized as token.
-        - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+        - Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
 
         UnicodeAlphanumericFolded
         - All Unicode alphanumeric chars are recognized as token.
-        - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+        - Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
         - Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
         - Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
         - Tokenizing might be slower due to folding and apostroph processing.

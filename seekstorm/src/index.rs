@@ -398,11 +398,11 @@ impl fmt::Display for LexicalSimilarity {
 ///
 /// UnicodeAlphanumeric
 /// - All Unicode alphanumeric chars are recognized as token.
-/// - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+/// - Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
 ///
 /// UnicodeAlphanumericFolded
 /// - All Unicode alphanumeric chars are recognized as token.
-/// - Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+/// - Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
 /// - Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
 /// - Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
 /// - Tokenizing might be slower due to folding and apostroph processing.
@@ -417,11 +417,11 @@ pub enum TokenizerType {
     /// Only ASCII alphabetic chars are recognized as token. Mainly for benchmark compatibility.
     AsciiAlphabetic = 0,
     /// All Unicode alphanumeric chars are recognized as token.
-    /// Allow '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+    /// Allow '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
     #[default]
     UnicodeAlphanumeric = 1,
     /// All Unicode alphanumeric chars are recognized as token.
-    /// Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.
+    /// Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
     /// Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
     /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
     /// Tokenizing might be slower due to folding and apostroph processing.
@@ -905,12 +905,8 @@ pub struct Synonym {
     /// Synonyms are supported in result highlighting.
     /// The synonyms that were created with the synonyms parameter in create_index are stored in synonyms.json in the index directory contains  
     /// Can be manually modified, but becomes effective only after restart and only for newly indexed documents.
-    #[serde(default = "default_as_true")]
+    #[serde(default = "default_true")]
     pub multiway: bool,
-}
-
-fn default_as_true() -> bool {
-    true
 }
 
 /// Defines a field in index schema: field, stored, indexed , field_type, facet, boost.
@@ -919,11 +915,11 @@ pub struct SchemaField {
     /// unique name of a field
     pub field: String,
     /// only stored fields are returned in the search results
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub store: bool,
     /// only indexed fields can be searched
     /// Even if index_lexical is true in the schema, the field in the actual document is optional. You can index documents without that field, but you cannot search for that field in those documents.
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub index_lexical: bool,
     /// only indexed fields can be searched
     /// Even if index_vector is true in the schema, the field in the actual document is optional. You can index documents without that field, but you cannot search for that field in those documents.
@@ -978,8 +974,8 @@ impl Default for SchemaField {
     fn default() -> Self {
         SchemaField {
             field: String::new(),
-            store: false,
-            index_lexical: false,
+            store: true,
+            index_lexical: true,
             index_vector: false,
             field_type: FieldType::default(),
             facet: false,
@@ -1011,7 +1007,7 @@ impl Default for SchemaField {
 /// # Example
 /// ```rust
 /// use seekstorm::index::{SchemaField, FieldType};
-/// let schema_field = SchemaField::new("title".to_string(), FieldType::Text).store(true).index_lexical(true);
+/// let schema_field = SchemaField::new("title");
 /// ```
 /// Defines a field in the index schema.
 /// Only the name and the type are required, everything else is optional and defaults to
@@ -1020,16 +1016,15 @@ impl Default for SchemaField {
 /// ```rust
 /// use seekstorm::index::{SchemaField, FieldType};
 /// let schema = vec![
-///     SchemaField::new("title", FieldType::Text).store(true).index_lexical(true),
-///     SchemaField::new("price", FieldType::F32).facet(true),
+///     SchemaField::new("title"),
+///     SchemaField::new("price").field_type(FieldType::F32).facet(true),
 /// ];
 /// ```
 impl SchemaField {
     /// Creates a new SchemaField with default settings.
-    pub fn new(field: impl Into<String>, field_type: FieldType) -> Self {
+    pub fn new(field: impl Into<String>) -> Self {
         SchemaField {
             field: field.into(),
-            field_type,
             ..Default::default()
         }
     }
@@ -1063,6 +1058,13 @@ impl SchemaField {
             indexed_field_id: 0,
             field_id: 0,
         }
+    }
+
+    /// Sets the field type for this schema field.
+    #[must_use]
+    pub fn field_type(mut self, field_type: FieldType) -> Self {
+        self.field_type = field_type;
+        self
     }
 
     /// Only stored fields are returned in the search results.
@@ -1122,6 +1124,10 @@ impl SchemaField {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_false() -> bool {
     false
 }
@@ -1146,7 +1152,7 @@ mod api_tests {
     fn schema_field_builder_matches_json_defaults() {
         let from_json: SchemaField =
             serde_json::from_str(r#"{"field":"url","field_type":"Text"}"#).unwrap();
-        let from_new = SchemaField::new("url", FieldType::Text);
+        let from_new = SchemaField::new("url");
         assert_eq!(
             serde_json::to_value(&from_json).unwrap(),
             serde_json::to_value(&from_new).unwrap()
@@ -1998,18 +2004,79 @@ pub(crate) enum NgramType {
     NgramFRF = 7,
 }
 
+use std::future::{Future, IntoFuture};
+use std::pin::Pin;
+
+/// Builder for creating an index. Optional settings (`mute`, `force_shard_number`)
+/// can be set before awaiting the builder, which runs `create_index`.
+pub struct CreateIndexBuilder<'a> {
+    index_path: &'a Path,
+    index_config: IndexConfig,
+    schema: &'a Vec<SchemaField>,
+    synonyms: &'a [Synonym],
+    mute: bool,
+    force_shard_number: Option<usize>,
+}
+
 /// Create index in RAM.
 /// Inner data structures for create index and open_index
 /// * `index_path` - index path: where the index directory will be created.  
 /// * `index_config` - index configuration object containing settings and options for the index.
 /// * `schema` - Schema definition for the index: field name, field type, and indexing options. The schema defines how documents are indexed and searched. It specifies the fields that are indexed, stored, and used for faceting, as well as the field types and their properties. It also defines whether lexical, hybrid, or vector search is enabled for each field.
 /// * `synonyms` - vector of synonyms: Specify synonyms for the index. Synonyms are used to expand search queries with additional terms that have the same or similar meaning, improving recall and search relevance. The multiway option specifies whether the synonym relationship is multiway (if true, all terms in the synonym set are considered synonyms of each other) or one-way (if false, only the first term in the synonym set is considered the main term, and the other terms are considered synonyms of the main term).
-/// * `mute` - prevent emitting status messages (e.g. when using pipes for data interprocess communication).  
-/// * `force_shard_number` - set number of shards manually or automatically.
-///   - none: number of shards is set automatically = number of physical processor cores (default)
-///   - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
-///   - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
-pub async fn create_index(
+pub fn create_index<'a>(
+    index_path: &'a Path,
+    index_config: IndexConfig,
+    schema: &'a Vec<SchemaField>,
+    synonyms: &'a [Synonym],
+) -> CreateIndexBuilder<'a> {
+    CreateIndexBuilder {
+        index_path,
+        index_config,
+        schema,
+        synonyms,
+        mute: false,
+        force_shard_number: None,
+    }
+}
+
+impl<'a> CreateIndexBuilder<'a> {
+    /// Prevent emitting status messages (e.g. when using pipes for interprocess communication).
+    pub fn mute(mut self, mute: bool) -> Self {
+        self.mute = mute;
+        self
+    }
+
+    /// Set number of shards manually or automatically.
+    /// - none: number of shards is set automatically = number of physical processor cores (default)
+    /// - small: slower indexing, higher latency, slightly higher throughput, faster realtime search, lower RAM consumption
+    /// - large: faster indexing, lower latency, slightly lower throughput, slower realtime search, higher RAM consumption
+    pub fn force_shard_number(mut self, force_shard_number: usize) -> Self {
+        self.force_shard_number = Some(force_shard_number);
+        self
+    }
+}
+
+impl<'a> IntoFuture for CreateIndexBuilder<'a> {
+    type Output = Result<IndexArc, String>;
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            create_index_inner(
+                self.index_path,
+                self.index_config,
+                self.schema,
+                self.synonyms,
+                self.mute,
+                self.force_shard_number,
+            )
+            .await
+        })
+    }
+}
+
+async fn create_index_inner(
     index_path: &Path,
     index_config: IndexConfig,
     schema: &Vec<SchemaField>,
@@ -2231,6 +2298,14 @@ pub(crate) async fn create_index_root(
                             Model::PotionBase8M => (
                                 0,
                                 "minishlab/potion-base-8M",
+                                Precision::F32,
+                                chunk_size,
+                                *quantization,
+                                VectorSimilarity::Cosine,
+                            ),
+                            Model::Blink8M => (
+                                0,
+                                "minishlab/blink-8M",
                                 Precision::F32,
                                 chunk_size,
                                 *quantization,

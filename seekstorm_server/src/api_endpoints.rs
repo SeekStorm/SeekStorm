@@ -375,16 +375,18 @@ pub(crate) async fn create_index_api<'a>(
         .segment_number_bits(11)
         .id(index_id);
 
-    let index_arc = create_index(
-        &index_id_path,
-        index_config,
-        &schema,
-        &synonyms,
-        mute,
-        force_shard_number,
-    )
-    .await
-    .unwrap();
+    let index_arc = if let Some(force_shard_number) = force_shard_number {
+        create_index(&index_id_path, index_config, &schema, &synonyms)
+            .mute(mute)
+            .force_shard_number(force_shard_number)
+            .await
+            .unwrap()
+    } else {
+        create_index(&index_id_path, index_config, &schema, &synonyms)
+            .mute(mute)
+            .await
+            .unwrap()
+    };
 
     apikey_object.index_list.insert(index_id, index_arc);
 

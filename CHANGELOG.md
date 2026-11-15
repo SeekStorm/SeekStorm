@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.0.0] - 2026-11-11
+## [5.1.0] - 2026-15-04
+
+### Added
+
+- **Prelude** added as convenient re-exports for the most common SeekStorm types and traits: `use seekstorm::prelude::*;`.
+- An additional query operator is recognized within the `query_string`: `|` (OR,  disjunction,  union). Previously only the query operators `+` `-` `""` had been recognized.
+  The `|` query operator within the `query_string` will overwrite any previously set `query_type_default: QueryType::Intersection`.
+- blink-8M, a fast English static embedding model by Minish, fully supersedes potion-base-8m, being the same size but better on every task.
+
+### Changed
+
+- The `SearchRequest.return_documents` default is now set also for the library to `Some(DocumentOption {fields: Vec::new(),distance_fields: Vec::new(), highlights: Vec::new(),})`.
+  This means that the document with all fields is returned directly as result of a search request.
+  Added a doc comment about incurred latency and benchmarking implications: For benchmarking set `SearchRequest.return_documents: None` to allow for a for a fair comparison.
+- `SchemaField::new("title")` has now only `name` as obligatory parameter, the `field_type` has become an optional setter with default `FieldType::Text`, 
+  and the defaults of `store` and `index_lexical` are set to `true`. 
+- `create_index()` has now a builder pattern. The two parameters `mute` and `force_shard_number` have become optional setters.
+  This makes the create_index parameters on par with the CreateIndexRequest pattern (apart from index_path, which is set automatically in the REST API).
+
+## [5.0.0] - 2026-11-04
 
 ### Breaking changes
 

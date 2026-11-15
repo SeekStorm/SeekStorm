@@ -140,7 +140,7 @@ let index_config = IndexConfig {
     ..Default::default()
 };
 
-let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 
 # });
 ```
@@ -196,8 +196,7 @@ Therefore only string facets can be returned with get_index_string_facets, while
 # tokio_test::block_on(async {
 
 use std::path::Path;
-use seekstorm::search::QueryFacet;
-use seekstorm::index::{IndexArc,open_index};
+use seekstorm::prelude::*;
 
 let index_path=Path::new("C:/index/");
 let index_arc=open_index(index_path).await.unwrap();
@@ -274,9 +273,7 @@ where the ranges can be defined dynamically with different boundaries for each q
 ```rust ,no_run
 # tokio_test::block_on(async {
 
-use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryFacet, QueryRewriting, SearchRequest, DocumentOption};
-use seekstorm::highlighter::Highlight;
-use seekstorm::index::open_index;
+use seekstorm::prelude::*;
 use std::path::Path;
 
 let index_path=Path::new("C:/index/");

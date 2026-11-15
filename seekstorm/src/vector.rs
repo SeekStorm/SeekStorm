@@ -278,6 +278,8 @@ pub enum Model {
     PotionRetrieval32M,
     /// bge-base-en-v1.5: 256 dimensions, 7.5M parameters, English only, general purpose
     PotionBase8M,
+    /// minishlab/blink-8M: 256 dimensions, 8M parameters, English only, general purpose
+    Blink8M,
     /// bge-base-en-v1.5: 128 dimensions, 3.7M parameters, English only, general purpose
     PotionBase4M,
     /// bge-base-en-v1.5: 64 dimensions, 1.8M parameters, English only, general purpose

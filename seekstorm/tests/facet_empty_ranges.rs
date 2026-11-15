@@ -2,16 +2,7 @@
 //! Public API only: create_index / index_document(s) / commit / search.
 //! Run: cargo test -p seekstorm --test facet_empty_ranges
 
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, Document, DocumentCompression, FileType, FrequentwordType,
-    IndexConfig, IndexDocument, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
-    TokenizerType, create_index,
-};
-use seekstorm::search::{
-    QueryFacet, QueryRewriting, QueryType, RangeType, ResultType, Search, SearchMode, SearchRequest,
-};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{fs, path::Path};
 
 #[tokio::test]
@@ -29,7 +20,7 @@ async fn repro_range_facet_empty_ranges_no_panic() {
         tokenizer: TokenizerType::UnicodeAlphanumeric,
         ..Default::default()
     };
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, None)
+    let index_arc = create_index(index_path, index_config, &schema, &[])
         .await
         .unwrap();
 

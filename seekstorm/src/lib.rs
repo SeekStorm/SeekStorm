@@ -26,9 +26,7 @@
 //! # tokio_test::block_on(async {
 //! use std::path::Path;
 //! use std::sync::{Arc, RwLock};
-//! use seekstorm::index::{IndexConfig, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
-//! use seekstorm::vector::Inference;
-//! use seekstorm::vector_similarity::VectorSimilarity;
+//! use seekstorm::prelude::*;
 //! let index_path=Path::new("C:/index/");
 //! let schema_json = r#"
 //! [{"field":"title","field_type":"Text","store":false,"index_lexical":false},
@@ -52,7 +50,7 @@
 //! ..Default::default()
 //! };
 //! let serialize_schema=true;
-//! let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+//! let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 //! # });
 //! ```
 //! ### open index (alternatively to create index)
@@ -71,8 +69,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::index::IndexDocument;
-//! use seekstorm::index::FileType;
+//! use seekstorm::prelude::*;
 //! let document_json = r#"
 //! {"title":"title1 test","body":"body1","url":"url1"}"#;
 //! let document=serde_json::from_str(document_json).unwrap();
@@ -102,7 +99,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::index::DeleteDocuments;
+//! use seekstorm::prelude::*;
 //! let docid_vec=vec![1,2];
 //! index_arc.delete_documents(docid_vec).await;
 //! # });
@@ -114,8 +111,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::index::DeleteDocumentsByQuery;
-//! use seekstorm::search::{QueryType,SearchRequest,SearchMode,ResultType,QueryRewriting};
+//! use seekstorm::prelude::*;
 //! let delete_request=                
 //! SearchRequest {
 //!     query_string: "test",
@@ -138,8 +134,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::index::UpdateDocuments;
-//! use seekstorm::commit::Commit;
+//! use seekstorm::prelude::*;
 //! let id_document_vec_json = r#"
 //! [[1,{"title":"title1 test","body":"body1","url":"url1"}],
 //! [2,{"title":"title3 test","body":"body3 test","url":"url3"}]]"#;
@@ -156,8 +151,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::search::{Search, SearchMode, QueryType, ResultType, QueryRewriting, SearchRequest, DocumentOption};
-//! use seekstorm::highlighter::Highlight;
+//! use seekstorm::prelude::*;
 //! let highlights:Vec<Highlight>= vec![
 //! Highlight {
 //!     field: "body".to_string(),
@@ -210,7 +204,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let mut index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::ingest::IngestJson;
+//! use seekstorm::prelude::*;
 //! use std::path::Path;
 //! let file_path=Path::new("wiki-articles.json");
 //! let _ =index_arc.ingest_json(file_path).await;
@@ -259,7 +253,7 @@
 //! # let index_path=Path::new("C:/index/");
 //! # let mut index_arc=open_index(index_path).await.unwrap();
 //! use std::path::Path;
-//! use seekstorm::ingest::IngestPdf;
+//! use seekstorm::prelude::*;
 //! let file_path=Path::new("C:/Users/johndoe/Downloads");
 //! let _ =index_arc.ingest_pdf(file_path).await;
 //! # });
@@ -271,7 +265,7 @@
 //! # let index_path=Path::new("C:/index/");
 //! # let mut index_arc=open_index(index_path).await.unwrap();
 //! use std::path::Path;
-//! use seekstorm::ingest::IndexPdfFile;
+//! use seekstorm::prelude::*;
 //! let file_path=Path::new("C:/test.pdf");
 //! let _ =index_arc.index_pdf_file(file_path).await;
 //! # });
@@ -285,7 +279,7 @@
 //! use std::path::Path;
 //! use std::fs;
 //! use chrono::Utc;
-//! use seekstorm::ingest::IndexPdfBytes;
+//! use seekstorm::prelude::*;
 //! let file_date=Utc::now().timestamp();
 //! let file_path=Path::new("C:/test.pdf");
 //! let document = fs::read(file_path).unwrap();
@@ -354,9 +348,7 @@
 //! ```rust ,no_run
 //! # tokio_test::block_on(async {
 //! use std::path::Path;
-//! use seekstorm::index::{IndexConfig, Clustering, LexicalSimilarity,TokenizerType,StopwordType,FrequentwordType,AccessType,StemmerType,NgramSet,DocumentCompression,create_index};
-//! use seekstorm::vector::Inference;
-//! use seekstorm::vector_similarity::VectorSimilarity;
+//! use seekstorm::prelude::*;
 //! let index_path=Path::new("C:/index/");
 //! let schema_json = r#"
 //! [{"field":"title","field_type":"Text","store":false,"index_lexical":false},
@@ -371,7 +363,7 @@
 //!     ..Default::default()
 //! };
 //! let serialize_schema=true;
-//! let index_arc=create_index(index_path,index_config,&schema,&[],false,None).await.unwrap();
+//! let index_arc=create_index(index_path,index_config,&schema,&[]).await.unwrap();
 //! # });
 //! ```
 //! ### index documents
@@ -381,9 +373,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::index::IndexDocuments;
-//! use seekstorm::commit::Commit;
-//! use seekstorm::search::{QueryType, ResultType, QueryFacet, FacetFilter};
+//! use seekstorm::prelude::*;
 //! let documents_json = r#"
 //! [{"title":"title1 test","body":"body1","url":"url1","town":"Berlin"},
 //! {"title":"title2","body":"body2 test","url":"url2","town":"Warsaw"},
@@ -401,8 +391,7 @@
 //! # use seekstorm::index::open_index;
 //! # let index_path=Path::new("C:/index/");
 //! # let index_arc=open_index(index_path).await.unwrap();
-//! use seekstorm::search::{QueryType, SearchMode, ResultType, QueryFacet, FacetFilter, QueryRewriting, Search, SearchRequest, DocumentOption};
-//! use seekstorm::highlighter::Highlight;
+//! use seekstorm::prelude::*;
 //! let highlights:Vec<Highlight>= vec![
 //!         Highlight {
 //!             field: "body".to_owned(),
@@ -490,6 +479,8 @@ pub(crate) mod intersection_simd;
 /// Iterator over all documents, also for search with empty query.
 pub mod iterator;
 pub(crate) mod min_heap;
+/// Convenient re-exports for the most common SeekStorm types and traits.
+pub mod prelude;
 pub(crate) mod realtime_search;
 /// Search the index for all indexed documents, both for committed and uncommitted documents.
 /// The latter enables true realtime search: documents are available for search in exact the same millisecond they are indexed.

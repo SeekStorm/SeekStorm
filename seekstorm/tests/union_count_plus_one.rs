@@ -1,13 +1,6 @@
 //! Same-block overlapping union must count exactly (pins the `+1` encoding).
 
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexArc, IndexConfig,
-    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    create_index,
-};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{fs, path::Path};
 
 fn index_config() -> IndexConfig {
@@ -21,22 +14,18 @@ fn index_config() -> IndexConfig {
     }
 }
 
-fn schema() -> Vec<seekstorm::index::SchemaField> {
+fn schema() -> Vec<SchemaField> {
     serde_json::from_str(
         r#"[{"field":"title","field_type":"Text","store":true,"index_lexical":true}]"#,
     )
     .unwrap()
 }
 
-fn doc(title: &str) -> seekstorm::index::Document {
+fn doc(title: &str) -> Document {
     serde_json::from_str(&format!(r#"{{"title":"{title}"}}"#)).unwrap()
 }
 
-async fn search(
-    index: &IndexArc,
-    query: &str,
-    result_type: ResultType,
-) -> seekstorm::search::SearchResult {
+async fn search(index: &IndexArc, query: &str, result_type: ResultType) -> SearchResult {
     index
         .search(SearchRequest {
             query_string: query.into(),
@@ -52,7 +41,9 @@ async fn union_count_overlap_same_block() {
     let dir = "tests/index_union_plus_one/";
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    let index = create_index(path, index_config(), &schema(), &[], true, Some(1))
+    let index = create_index(path, index_config(), &schema(), &[])
+        .mute(true)
+        .force_shard_number(1)
         .await
         .unwrap();
 

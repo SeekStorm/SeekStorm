@@ -1,14 +1,7 @@
 //! `union_scan_32` bitmask holds at most 32 terms; >32-term TopkCount must
 //! not panic (`32 - len` underflow) and must report the exact total.
 
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexConfig,
-    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    create_index,
-};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{fs, path::Path};
 
 fn index_config() -> IndexConfig {
@@ -22,22 +15,18 @@ fn index_config() -> IndexConfig {
     }
 }
 
-fn schema() -> Vec<seekstorm::index::SchemaField> {
+fn schema() -> Vec<SchemaField> {
     serde_json::from_str(
         r#"[{"field":"title","field_type":"Text","store":true,"index_lexical":true}]"#,
     )
     .unwrap()
 }
 
-fn doc(title: &str) -> seekstorm::index::Document {
+fn doc(title: &str) -> Document {
     serde_json::from_str(&format!(r#"{{"title":"{title}"}}"#)).unwrap()
 }
 
-async fn search(
-    index: &seekstorm::index::IndexArc,
-    query: &str,
-    result_type: ResultType,
-) -> seekstorm::search::SearchResult {
+async fn search(index: &IndexArc, query: &str, result_type: ResultType) -> SearchResult {
     index
         .search(SearchRequest {
             query_string: query.into(),
@@ -54,7 +43,9 @@ async fn union_topk_forty_terms() {
     let dir = "tests/index_union_topk_many_terms/";
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    let index = create_index(path, index_config(), &schema(), &[], true, Some(1))
+    let index = create_index(path, index_config(), &schema(), &[])
+        .mute(true)
+        .force_shard_number(1)
         .await
         .unwrap();
 

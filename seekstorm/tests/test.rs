@@ -2,19 +2,7 @@
 //! Use: cargo test
 //! To show output use: cargo test -- --show-output
 
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, DeleteDocument, DocumentCompression, FileType, FrequentwordType,
-    IndexArc, IndexConfig, IndexDocument, IndexDocuments, LexicalSimilarity, NgramSet, StemmerType,
-    StopwordType, TokenizerType, create_index, open_index,
-};
-use seekstorm::iterator::GetIterator;
-use seekstorm::search::{
-    FacetFilter, FacetValue, QueryFacet, QueryRewriting, QueryType, QueryVector, ResultSort,
-    ResultType, Search, SearchMode, SearchRequest, SortOrder,
-};
-use seekstorm::vector::{Embedding, Inference, Model, Precision, Quantization};
-use seekstorm::vector_similarity::{AnnMode, VectorSimilarity};
+use seekstorm::prelude::*;
 use std::collections::HashSet;
 use std::{fs, path::Path};
 
@@ -39,7 +27,7 @@ async fn test_01_create_index() {
         ..Default::default()
     };
 
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, None)
+    let index_arc = create_index(index_path, index_config, &schema, &[])
         .await
         .unwrap();
     let index = index_arc.read().await;
@@ -160,6 +148,7 @@ async fn test_04_query_index() {
             query_type_default: QueryType::Union,
             length: 10,
             result_type: ResultType::Count,
+            return_documents: None,
             ..Default::default()
         })
         .await;
@@ -435,7 +424,7 @@ async fn test_09_create_index_vector_internal() {
         ..Default::default()
     };
 
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, None)
+    let index_arc = create_index(index_path, index_config, &schema, &[])
         .await
         .unwrap();
     let index = index_arc.read().await;
@@ -529,7 +518,8 @@ async fn test_12_create_index_vector_external() {
         ..Default::default()
     };
 
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(2))
+    let index_arc = create_index(index_path, index_config, &schema, &[])
+        .force_shard_number(2)
         .await
         .unwrap();
     let index = index_arc.read().await;
@@ -635,7 +625,8 @@ async fn test_15_facet_scope() {
     };
 
     // 3 shards: the 3 documents are distributed round-robin, one document per shard
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(3))
+    let index_arc = create_index(index_path, index_config, &schema, &[])
+        .force_shard_number(3)
         .await
         .unwrap();
 

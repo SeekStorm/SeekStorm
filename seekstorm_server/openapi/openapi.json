@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "5.0.0"
+    "version": "5.1.0"
   },
   "servers": [
     {
@@ -3650,6 +3650,7 @@
           "PotionMultilingual128M",
           "PotionRetrieval32M",
           "PotionBase8M",
+          "Blink8M",
           "PotionBase4M",
           "PotionBase2M"
         ]
@@ -4433,7 +4434,7 @@
                       "type": "integer",
                       "minimum": 0
                     },
-                    "description": "Term length thresholds for each edit distance.\n  None    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\])    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                    "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
                   "complete": {
                     "type": [
@@ -4491,7 +4492,7 @@
                       "type": "integer",
                       "minimum": 0
                     },
-                    "description": "Term length thresholds for each edit distance.\n  None    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\])    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                    "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
                   "complete": {
                     "type": [
@@ -4549,7 +4550,7 @@
                       "type": "integer",
                       "minimum": 0
                     },
-                    "description": "Term length thresholds for each edit distance.\n  None    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\])    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\])    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
+                    "description": "Term length thresholds for each edit distance.\n  None:    max_dictionary_edit_distance for all terms lengths\n  Some(\\[4\\]):    max_dictionary_edit_distance for all terms lengths >= 4,\n  Some(\\[2,8\\]):    max_dictionary_edit_distance for all terms lengths >=2, max_dictionary_edit_distance +1 for all terms for lengths>=8"
                   },
                   "complete": {
                     "type": [
@@ -5052,7 +5053,7 @@
         "properties": {
           "query_string": {
             "type": "string",
-            "description": "Query string, search operators `+` `-` `\"\"` are recognized.",
+            "description": "Query string, search operators `+` `|` `-` `\"\"` are recognized.",
             "default": ""
           },
           "query_vector": {
@@ -5113,7 +5114,7 @@
             "items": {
               "$ref": "#/components/schemas/QueryFacet"
             },
-            "description": "Facets to return with search results: Must be set if facets should be returned in [`SearchResult`]. If empty then no facets are returned.\nFacets are only enabled on facet fields that are defined in schema at create_index!\nQuery facets are active *during* vector and lexical search.\nFacet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.\nThe prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.\nThe length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.\nIf the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.\nThe facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.\nExamples:\n```rust ,no_run\nuse seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};\nlet query_facets = vec![QueryFacet::String16 {field: \"language\".into(),prefix: \"ger\".into(),length: 5},QueryFacet::String16 {field: \"brand\".into(),prefix: \"a\".into(),length: 5}];\nlet query_facets = vec![QueryFacet::U8 {field: \"age\".into(), range_type: RangeType::CountWithinRange, ranges: vec![(\"0-20\".into(), 0),(\"20-40\".into(), 20), (\"40-60\".into(), 40),(\"60-80\".into(), 60), (\"80-100\".into(), 80)]}];\nlet query_facets = vec![QueryFacet::Point {field: \"location\".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ (\"0-200\".into(), 0.0),(\"200-400\".into(), 200.0), (\"400-600\".into(), 400.0), (\"600-800\".into(), 600.0), (\"800-1000\".into(), 800.0)]}];\n```",
+            "description": "Facets to return with search results: Must be set if facets should be returned in [`SearchResult`]. If empty then no facets are returned.\nFacets are only enabled on facet fields that are defined in schema at create_index!\nQuery facets are active *during* vector and lexical search.\nFacet fields are only collected, counted and returned for ResultType::Count and ResultType::TopkCount, but not for ResultType::Topk.\nThe prefix property of a QueryFacet allows at query time to filter the returned facet values to those matching a given prefix, if there are too many distinct values per facet field.\nThe length property of a QueryFacet allows at query time limiting the number of returned distinct values per facet field, if there are too many distinct values.  The QueryFacet can be used to improve the usability in an UI.\nIf the length property of a QueryFacet is set to 0 then no facet values for that facet are collected, counted and returned at query time. That decreases the query latency significantly.\nThe facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.\nExamples:\n```rust ,no_run\nuse seekstorm::prelude::*;\nlet query_facets = vec![QueryFacet::String16 {field: \"language\".into(),prefix: \"ger\".into(),length: 5},QueryFacet::String16 {field: \"brand\".into(),prefix: \"a\".into(),length: 5}];\nlet query_facets = vec![QueryFacet::U8 {field: \"age\".into(), range_type: RangeType::CountWithinRange, ranges: vec![(\"0-20\".into(), 0),(\"20-40\".into(), 20), (\"40-60\".into(), 40),(\"60-80\".into(), 60), (\"80-100\".into(), 80)]}];\nlet query_facets = vec![QueryFacet::Point {field: \"location\".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ (\"0-200\".into(), 0.0),(\"200-400\".into(), 200.0), (\"400-600\".into(), 400.0), (\"600-800\".into(), 600.0), (\"800-1000\".into(), 800.0)]}];\n```",
             "default": []
           },
           "facet_filter": {
@@ -5121,7 +5122,7 @@
             "items": {
               "$ref": "#/components/schemas/FacetFilter"
             },
-            "description": "Facet filters to filter search results by facet values: if empty then no facet filters are applied. Facet filters are only enabled on facet fields that are defined in schema at create_index!\nSearch results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.\nFacet filters are active *during* vector and lexical search.\nThe filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.\nIf the query is changed and/or the facet filter is changed then both search results and facet counts are changed:\nthe query facets are counted over all documents matching the query and the facet filter.\n  Examples:\n```rust ,no_run\nuse seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue, FacetFilter};\nlet facet_filter=vec![FacetFilter::String16{field:\"language\".into(),filter:vec![\"german\".into()]},FacetFilter::String16{field:\"brand\".into(),filter:vec![\"apple\".into(),\"google\".into()]}];\nlet facet_filter=vec![FacetFilter::U8{field:\"age\".into(),filter: 21..65}];\nlet facet_filter = vec![FacetFilter::Point {field: \"location\".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];\n```",
+            "description": "Facet filters to filter search results by facet values: if empty then no facet filters are applied. Facet filters are only enabled on facet fields that are defined in schema at create_index!\nSearch results are filtered to documents matching specific string values or numerical ranges in the facet fields. If set to Vec::new() then result are not facet filtered.\nFacet filters are active *during* vector and lexical search.\nThe filter parameter filters the returned results to those documents both matching the query AND matching for all (boolean AND) stated facet filter fields at least one (boolean OR) of the stated values.\nIf the query is changed and/or the facet filter is changed then both search results and facet counts are changed:\nthe query facets are counted over all documents matching the query and the facet filter.\n  Examples:\n```rust ,no_run\nuse seekstorm::prelude::*;\nlet facet_filter=vec![FacetFilter::String16{field:\"language\".into(),filter:vec![\"german\".into()]},FacetFilter::String16{field:\"brand\".into(),filter:vec![\"apple\".into(),\"google\".into()]}];\nlet facet_filter=vec![FacetFilter::U8{field:\"age\".into(),filter: 21..65}];\nlet facet_filter = vec![FacetFilter::Point {field: \"location\".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];\n```",
             "default": []
           },
           "result_sort": {
@@ -5129,7 +5130,7 @@
             "items": {
               "$ref": "#/components/schemas/ResultSort"
             },
-            "description": "Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.\nIf no sort field is specified, then the search results are sorted by rank in descending order per default.\nMultiple sort fields are combined by a \"sort by, then sort by\"-method (\"tie-breaking\"-algorithm).\nThe results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,\nuntil the n-th field value is either not equal or the last field is reached.\nA special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.\nSort is only enabled on facet fields that are defined in schema at create_index!\nExamples:\n```rust ,no_run\nuse seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};\nlet result_sort = vec![ResultSort {field: \"price\".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: \"language\".into(), order: SortOrder::Ascending, base: FacetValue::None}];\nlet result_sort = vec![ResultSort {field: \"location\".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];\n```",
+            "description": "Sort field and order: Search results are sorted by the specified facet field, either in ascending or descending order.\nIf no sort field is specified, then the search results are sorted by rank in descending order per default.\nMultiple sort fields are combined by a \"sort by, then sort by\"-method (\"tie-breaking\"-algorithm).\nThe results are sorted by the first field, and only for those results where the first field value is identical (tie) the results are sub-sorted by the second field,\nuntil the n-th field value is either not equal or the last field is reached.\nA special _score field (BM25x), reflecting how relevant the result is for a given search query (phrase match, match in title etc.) can be combined with any of the other sort fields as primary, secondary or n-th search criterium.\nSort is only enabled on facet fields that are defined in schema at create_index!\nExamples:\n```rust ,no_run\nuse seekstorm::prelude::*;\nlet result_sort = vec![ResultSort {field: \"price\".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: \"language\".into(), order: SortOrder::Ascending, base: FacetValue::None}];\nlet result_sort = vec![ResultSort {field: \"location\".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];\n```",
             "example": [
               {
                 "field": "date",
@@ -5158,13 +5159,17 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/DocumentOption",
-                "description": "Specify options for returning documents in the search results.\nIf None, no documents are returned.\nIf Some, the specified options are used to control which fields, distance fields, and highlights are returned.\nIf you just want to return the full documents with all stored fields, without highlighting or distance fields, you can set this to `return_documents: Some(Default::default()),`"
+                "description": "Specify options for returning documents in the search results.\nIf None, no documents are returned.\nIf Some, the specified options are used to control which fields, distance fields, and highlights are returned.\nIf you just want to return the full documents with all stored fields, without highlighting or distance fields, you can set this to `return_documents: Some(Default::default()),`\n⚠️ Benchmarking: Usually set `return_document` to `None` when benchmarking.\nThe document ID and score of the top-k hits, as well as the result counts, are still returned,\nbut the full documents are not loaded, decompressed, and deserialized.\nReturning documents directly from a search request adds latency,\nso setting `return_document` to `None` allows for a fair comparison with libraries that don't offer that convenience."
               },
               {
                 "type": "null"
               }
             ],
-            "default": null
+            "default": {
+              "fields": [],
+              "distance_fields": [],
+              "highlights": []
+            }
           }
         }
       },
@@ -5220,7 +5225,7 @@
           },
           "count_total": {
             "type": "integer",
-            "description": "Total number of search results that match the query\ncount_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk",
+            "description": "Total number of search results that match the query\ncount_total is only accurate if result_type=TopkCount or ResultType=Count, but not for ResultType=Topk (then it is set to count).",
             "minimum": 0
           },
           "observed_vector_count": {
@@ -5298,7 +5303,7 @@
       },
       "SpellingCorrection": {
         "type": "object",
-        "description": "Defines spelling correction (fuzzy search) and dictionary generation settings for an index.\n⚠️ Either set index_lexical=true and dictionary_source=true in the schema for a field, then a spelling correction dictionary is automatically derived from the terms in this field during indexing.\nOr place a manually generated frequency dictionary at the following location: {index_path}/dictionary.csv",
+        "description": "Defines spelling correction (fuzzy search) and dictionary generation settings for an index.\n\n⚠️ Either set index_lexical=true and dictionary_source=true in the schema for a field, then a spelling correction dictionary is automatically derived from the terms in this field during indexing.\nOr place a manually generated frequency dictionary at the following location: {index_path}/dictionary.csv",
         "required": [
           "max_dictionary_edit_distance",
           "count_threshold",
@@ -5465,7 +5470,7 @@
       },
       "TokenizerType": {
         "type": "string",
-        "description": "Defines tokenizer behavior:\nAsciiAlphabetic\n- Mainly for for benchmark compatibility\n- Only ASCII alphabetic chars are recognized as token.\n\nUnicodeAlphanumeric\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.\n\nUnicodeAlphanumericFolded\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '#' in middle or end of a token: c++, c#, block-max.\n- Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.\n- Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. \"s\" in \"someone's\").\n- Tokenizing might be slower due to folding and apostroph processing.\n\nUnicodeAlphanumericZH\n- Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.\n- Supports mixed Latin and Chinese texts\n- Supports Chinese sentence boundary chars for KWIC snippets and highlighting.\n- Requires feature #[cfg(feature = \"zh\")]",
+        "description": "Defines tokenizer behavior:\nAsciiAlphabetic\n- Mainly for for benchmark compatibility\n- Only ASCII alphabetic chars are recognized as token.\n\nUnicodeAlphanumeric\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.\n\nUnicodeAlphanumericFolded\n- All Unicode alphanumeric chars are recognized as token.\n- Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.\n- Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.\n- Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. \"s\" in \"someone's\").\n- Tokenizing might be slower due to folding and apostroph processing.\n\nUnicodeAlphanumericZH\n- Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.\n- Supports mixed Latin and Chinese texts\n- Supports Chinese sentence boundary chars for KWIC snippets and highlighting.\n- Requires feature #[cfg(feature = \"zh\")]",
         "enum": [
           "AsciiAlphabetic",
           "UnicodeAlphanumeric",

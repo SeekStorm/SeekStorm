@@ -162,7 +162,7 @@ pub(crate) async fn tokenizer(
                 text_normalized = text.to_ascii_lowercase();
                 for char in text_normalized.char_indices() {
                     start = match char.1 {
-                        'a'..='z' | '"' | '+' | '-' => {
+                        'a'..='z' | '"' | '+' | '-' | '|' => {
                             if !start {
                                 start_pos = char.0;
                             }
@@ -187,7 +187,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-                        '"' | '+' | '-' | '#' => {
+                        '"' | '+' | '-' | '|' | '#' => {
                             if !start {
                                 start_pos = char.0;
                             }
@@ -212,7 +212,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-                        '"' | '+' | '-' | '#' => {
+                        '"' | '+' | '-' | '|' | '#' => {
                             if !start {
                                 start_pos = char.0;
                             }
@@ -294,7 +294,7 @@ pub(crate) async fn tokenizer(
                             }
                             true
                         }
-                        '"' | '+' | '-' | '#' => {
+                        '"' | '+' | '-' | '|' | '#' => {
                             if !start {
                                 start_pos = char.0;
                             }
@@ -347,7 +347,7 @@ pub(crate) async fn tokenizer(
                             true
                         }
 
-                        '+' | '-' | '#' => start,
+                        '+' | '-' | '|' | '#' => start,
 
                         _ => {
                             if start {
@@ -371,7 +371,7 @@ pub(crate) async fn tokenizer(
                             true
                         }
 
-                        '+' | '-' | '#' => start,
+                        '+' | '-' | '|' | '#' => start,
 
                         _ => {
                             let apostroph = APOSTROPH.contains(&char.1);
@@ -450,7 +450,7 @@ pub(crate) async fn tokenizer(
                             true
                         }
 
-                        '+' | '-' | '#' => start,
+                        '+' | '-' | '|' | '#' => start,
 
                         _ => {
                             if start {
@@ -548,6 +548,12 @@ pub(crate) async fn tokenizer(
                     *query_type = QueryType::Intersection;
                 }
                 query_type_term = QueryType::Intersection;
+                *term_string = &term_string[1..];
+            } else if term_string.starts_with('|') {
+                if query_type != &QueryType::Phrase {
+                    *query_type = QueryType::Union;
+                }
+                query_type_term = QueryType::Union;
                 *term_string = &term_string[1..];
             } else if term_string.starts_with('-') {
                 query_type_term = QueryType::Not;
@@ -1407,7 +1413,7 @@ pub(crate) fn tokenizer_lite(
             text_normalized = text.to_ascii_lowercase();
             for char in text_normalized.char_indices() {
                 start = match char.1 {
-                    'a'..='z' | '"' | '+' | '-' => {
+                    'a'..='z' | '"' | '+' | '-' | '|' => {
                         if !start {
                             start_pos = char.0;
                         }
@@ -1433,7 +1439,7 @@ pub(crate) fn tokenizer_lite(
                         }
                         true
                     }
-                    '"' | '+' | '-' | '#' => {
+                    '"' | '+' | '-' | '|' | '#' => {
                         if !start {
                             start_pos = char.0;
                         }
@@ -1459,7 +1465,7 @@ pub(crate) fn tokenizer_lite(
                         }
                         true
                     }
-                    '"' | '+' | '-' | '#' => {
+                    '"' | '+' | '-' | '|' | '#' => {
                         if !start {
                             start_pos = char.0;
                         }
@@ -1543,7 +1549,7 @@ pub(crate) fn tokenizer_lite(
                         }
                         true
                     }
-                    '"' | '+' | '-' | '#' => {
+                    '"' | '+' | '-' | '|' | '#' => {
                         if !start {
                             start_pos = char.0;
                         }
@@ -1627,7 +1633,10 @@ pub(crate) fn tokenizer_lite(
         } else {
             query_type.clone()
         };
-        if term_string.starts_with('+') || term_string.starts_with('-') {
+        if term_string.starts_with('+')
+            || term_string.starts_with('-')
+            || term_string.starts_with('|')
+        {
             return Vec::new();
         }
         if term_string.starts_with('\"') {

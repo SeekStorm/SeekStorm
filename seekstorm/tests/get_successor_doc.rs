@@ -1,13 +1,7 @@
 //! Repro: get_document on a valid doc following doc(s) with no stored fields.
 //! Stale-zero predecessor slots made it slice from 0 and panic.
 //! Matrix: Ram/Mmap x None/Snappy. Public API only.
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, Document, DocumentCompression, FileType, FrequentwordType,
-    IndexConfig, IndexDocument, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
-    TokenizerType, create_index,
-};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{collections::HashSet, fs, path::Path};
 
 use futures::FutureExt;
@@ -28,7 +22,8 @@ async fn run_case(access: AccessType, compression: DocumentCompression, tag: &st
         access_type: access,
         ..Default::default()
     };
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(1))
+    let index_arc = create_index(index_path, index_config, &schema, &[])
+        .force_shard_number(1)
         .await
         .unwrap();
     // doc 0: indexed-only field -> no stored content -> slot stays 0.

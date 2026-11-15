@@ -3,23 +3,18 @@
 //! Use: cargo test -p seekstorm_client_rs
 //! Note: The tests will automatically build the server binary if it doesn't exist, and launch it for testing. It will also clean up the index_test folder before running the tests.
 //! If a test fails, the server process needs to be killed manually, e.g. by restarting VSC
-use seekstorm::index::IndexConfig;
-use seekstorm::search::DocumentOption;
-use seekstorm_client_rs::{
-    ApikeyQuotaObject, CreateIndexRequest, Document, FrequentwordType, GetDocumentRequest,
-    Highlight, LexicalSimilarity, QueryType, RestClient, ResultType, SearchRequest, TokenizerType,
-};
+use seekstorm_client_rs::*;
 use std::{env, fs, path::PathBuf, sync::LazyLock, time::Duration};
 use tokio::process::Command;
 use tokio::time::sleep;
 
-pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
+pub(crate) static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
+pub(crate) static SERVER_BINARY_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| get_server_binary_path());
 
-pub static SERVER_BINARY_PATH: LazyLock<PathBuf> = LazyLock::new(|| get_server_binary_path());
-
-pub static BASE_URL: &str = "http://127.0.0.1:80";
-pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-pub static MASTER_API_KEY: &str = "/iWStCpyfpd/BVlHOFtwnMgrFrmof4jGq/OQDWXQzcM=";
+pub(crate) static BASE_URL: &str = "http://127.0.0.1:80";
+pub(crate) static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+pub(crate) static MASTER_API_KEY: &str = "/iWStCpyfpd/BVlHOFtwnMgrFrmof4jGq/OQDWXQzcM=";
 
 fn get_server_binary_path() -> PathBuf {
     // 1. Start from the client package directory (where the test executes)

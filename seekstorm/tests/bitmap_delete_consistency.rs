@@ -9,14 +9,7 @@
 //!
 //! Self-contained (own index directory), deterministic (xorshift), no sleeps.
 
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, DeleteDocuments, DocumentCompression, FrequentwordType,
-    IndexConfig, IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
-    TokenizerType, create_index,
-};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{collections::HashSet, fs, path::Path};
 
 struct Rng(u64);
@@ -52,7 +45,7 @@ fn index_config() -> IndexConfig {
     }
 }
 
-fn schema() -> Vec<seekstorm::index::SchemaField> {
+fn schema() -> Vec<SchemaField> {
     serde_json::from_str(
         r#"[{"field":"title","field_type":"Text","store":true,"index_lexical":true}]"#,
     )
@@ -60,11 +53,11 @@ fn schema() -> Vec<seekstorm::index::SchemaField> {
 }
 
 async fn search(
-    index: &seekstorm::index::IndexArc,
+    index: &IndexArc,
     query: &str,
     query_type: QueryType,
     result_type: ResultType,
-) -> seekstorm::search::SearchResult {
+) -> SearchResult {
     index
         .search(SearchRequest {
             query_string: query.into(),
@@ -76,11 +69,15 @@ async fn search(
         .await
 }
 
-async fn setup() -> (seekstorm::index::IndexArc, HashSet<u64>, HashSet<u64>) {
+async fn setup() -> (IndexArc, HashSet<u64>, HashSet<u64>) {
     const N: u64 = 12000;
     let path = Path::new("tests/index_delete_bitmap/");
     let _ = fs::remove_dir_all(path);
-    let index = create_index(path, index_config(), &schema(), &[], true, Some(1))
+    // Single shard: per-shard postings stay >= 4096 scattered docs, which
+    // forces Bitmap encoding (RLE aborts past 2048 runs).
+    let index = create_index(path, index_config(), &schema(), &[])
+        .mute(true)
+        .force_shard_number(1)
         .await
         .unwrap();
     let mut rng = Rng(0xabc);
@@ -93,7 +90,7 @@ async fn setup() -> (seekstorm::index::IndexArc, HashSet<u64>, HashSet<u64>) {
         set_y.insert(rng.below(N));
     }
     let mut rng = Rng(0x1);
-    let docs: Vec<seekstorm::index::Document> = (0..N)
+    let docs: Vec<Document> = (0..N)
         .map(|i| {
             let mut t = format!("doc number {i}");
             if set_x.contains(&i) {
@@ -128,6 +125,7 @@ async fn setup() -> (seekstorm::index::IndexArc, HashSet<u64>, HashSet<u64>) {
 #[tokio::test]
 async fn bitmap_and_count_excludes_deleted() {
     let (index, set_x, set_y) = setup().await;
+    // Recompute ground truth with the same seeds as setup.
     let (live_and, _) = ground_truth(&set_x, &set_y);
     let count = search(
         &index,

@@ -158,7 +158,7 @@ pub struct DocumentOption {
 #[derive(Deserialize, Serialize, Clone, ToSchema, Debug)]
 #[serde(default)]
 pub struct SearchRequest<'a> {
-    /// Query string, search operators `+` `-` `""` are recognized.
+    /// Query string, search operators `+` `|` `-` `""` are recognized.
     #[serde(alias = "query")]
     pub query_string: &'a str,
     /// Optional query vector: If None, then the query vector is derived from the query string using the specified model.
@@ -196,7 +196,7 @@ pub struct SearchRequest<'a> {
     /// The facet values are sorted by the frequency of the appearance of the value within the indexed documents matching the query in descending order.
     /// Examples:
     /// ```rust ,no_run
-    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};
+    /// use seekstorm::prelude::*;
     /// let query_facets = vec![QueryFacet::String16 {field: "language".into(),prefix: "ger".into(),length: 5},QueryFacet::String16 {field: "brand".into(),prefix: "a".into(),length: 5}];
     /// let query_facets = vec![QueryFacet::U8 {field: "age".into(), range_type: RangeType::CountWithinRange, ranges: vec![("0-20".into(), 0),("20-40".into(), 20), ("40-60".into(), 40),("60-80".into(), 60), ("80-100".into(), 80)]}];
     /// let query_facets = vec![QueryFacet::Point {field: "location".into(),base:vec![38.8951, -77.0364],unit:DistanceUnit::Kilometers,range_type: RangeType::CountWithinRange,ranges: vec![ ("0-200".into(), 0.0),("200-400".into(), 200.0), ("400-600".into(), 400.0), ("600-800".into(), 600.0), ("800-1000".into(), 800.0)]}];
@@ -210,7 +210,7 @@ pub struct SearchRequest<'a> {
     /// the query facets are counted over all documents matching the query and the facet filter.
     ///   Examples:
     /// ```rust ,no_run
-    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue, FacetFilter};
+    /// use seekstorm::prelude::*;
     /// let facet_filter=vec![FacetFilter::String16{field:"language".into(),filter:vec!["german".into()]},FacetFilter::String16{field:"brand".into(),filter:vec!["apple".into(),"google".into()]}];
     /// let facet_filter=vec![FacetFilter::U8{field:"age".into(),filter: 21..65}];
     /// let facet_filter = vec![FacetFilter::Point {field: "location".into(),filter: (vec![38.8951, -77.0364], 0.0..1000.0, DistanceUnit::Kilometers)}];
@@ -225,7 +225,7 @@ pub struct SearchRequest<'a> {
     /// Sort is only enabled on facet fields that are defined in schema at create_index!
     /// Examples:
     /// ```rust ,no_run
-    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest, QueryFacet, RangeType, DistanceUnit, ResultSort, SortOrder, FacetValue};
+    /// use seekstorm::prelude::*;
     /// let result_sort = vec![ResultSort {field: "price".into(), order: SortOrder::Descending, base: FacetValue::None},ResultSort {field: "language".into(), order: SortOrder::Ascending, base: FacetValue::None}];
     /// let result_sort = vec![ResultSort {field: "location".into(),order: SortOrder::Ascending, base: FacetValue::Point(vec![38.8951, -77.0364])}];
     /// ```
@@ -275,6 +275,11 @@ pub struct SearchRequest<'a> {
     /// If None, no documents are returned.
     /// If Some, the specified options are used to control which fields, distance fields, and highlights are returned.
     /// If you just want to return the full documents with all stored fields, without highlighting or distance fields, you can set this to `return_documents: Some(Default::default()),`
+    /// ⚠️ Benchmarking: Usually set `return_document` to `None` when benchmarking.
+    /// The document ID and score of the top-k hits, as well as the result counts, are still returned,
+    /// but the full documents are not loaded, decompressed, and deserialized.
+    /// Returning documents directly from a search request adds latency,
+    /// so setting `return_document` to `None` allows for a fair comparison with libraries that don't offer that convenience.
     #[serde(default = "return_documents_default_api")]
     pub return_documents: Option<DocumentOption>,
 }
@@ -298,7 +303,11 @@ impl Default for SearchRequest<'_> {
             query_rewriting: QueryRewriting::SearchOnly,
             search_mode: SearchMode::Lexical,
 
-            return_documents: None,
+            return_documents: Some(DocumentOption {
+                fields: Vec::new(),
+                distance_fields: Vec::new(),
+                highlights: Vec::new(),
+            }),
         }
     }
 }
@@ -1304,9 +1313,7 @@ pub trait Search {
     /// ```rust ,no_run
     /// # tokio_test::block_on(async {
     /// use std::path::Path;
-    /// use seekstorm::index::open_index;
-    /// use seekstorm::search::{QueryType, Search, SearchMode, SearchRequest};
-    /// use seekstorm::vector_similarity::AnnMode;
+    /// use seekstorm::prelude::*;
     /// let index_arc = open_index(Path::new("C:/index/")).await.unwrap();
     /// // struct update syntax
     /// let res = index_arc.search(SearchRequest {
@@ -2106,7 +2113,7 @@ impl Search for IndexArc {
                         result_object.query_terms = query_string
                             .to_lowercase()
                             .split_whitespace()
-                            .map(|s| s.trim_matches(['\"', '+', '-']).to_string())
+                            .map(|s| s.trim_matches(['\"', '+', '-', '|']).to_string())
                             .filter(|s| !s.is_empty())
                             .collect::<Vec<String>>(); /*rlo_shard_vector.query_terms.clone()*/
                     };
@@ -3494,7 +3501,7 @@ impl SearchLexicalShard for ShardArc {
                 MAX_POSITIONS_PER_TERM,
                 true,
                 &mut query_type_mut,
-                shard_ref.index_config.ngram_indexing, //true
+                shard_ref.index_config.ngram_indexing,
                 0,
                 1,
             )

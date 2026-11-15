@@ -23,16 +23,7 @@
 //!
 //! Self-contained (own index directories), deterministic, no sleeps.
 
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, DocumentCompression, FrequentwordType, IndexConfig,
-    IndexDocuments, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    create_index,
-};
-use seekstorm::search::{
-    QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest, SearchResult,
-};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{fs, path::Path};
 
 fn index_config() -> IndexConfig {
@@ -46,19 +37,19 @@ fn index_config() -> IndexConfig {
     }
 }
 
-fn schema() -> Vec<seekstorm::index::SchemaField> {
+fn schema() -> Vec<SchemaField> {
     serde_json::from_str(
         r#"[{"field":"title","field_type":"Text","store":true,"index_lexical":true}]"#,
     )
     .unwrap()
 }
 
-fn doc(title: &str) -> seekstorm::index::Document {
+fn doc(title: &str) -> Document {
     serde_json::from_str(&format!(r#"{{"title":"{title}"}}"#)).unwrap()
 }
 
 async fn search(
-    index: &seekstorm::index::IndexArc,
+    index: &IndexArc,
     query: &str,
     offset: usize,
     length: usize,
@@ -75,10 +66,11 @@ async fn search(
         .await
 }
 
-async fn fresh(dir: &str) -> seekstorm::index::IndexArc {
+async fn fresh(dir: &str) -> IndexArc {
     let path = Path::new(dir);
     let _ = fs::remove_dir_all(path);
-    create_index(path, index_config(), &schema(), &[], true, None)
+    create_index(path, index_config(), &schema(), &[])
+        .mute(true)
         .await
         .unwrap()
 }
@@ -176,7 +168,7 @@ async fn scan32_sparse_uniform_fills_heap() {
             titles.push(format!("spar{w:02} uniq{}{w:02}", i));
         }
     }
-    let docs: Vec<seekstorm::index::Document> = titles.iter().map(|t| doc(t)).collect();
+    let docs: Vec<Document> = titles.iter().map(|t| doc(t)).collect();
     index.index_documents(docs).await;
     index.commit().await;
 

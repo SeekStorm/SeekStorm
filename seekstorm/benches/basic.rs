@@ -18,16 +18,7 @@
 
 use num_format::Locale;
 use num_format::ToFormattedString;
-use seekstorm::index::{
-    AccessType, Clustering, DocumentCompression, FrequentwordType, IndexConfig, LexicalSimilarity,
-    NgramSet, SchemaField, StemmerType, StopwordType, TokenizerType, create_index, open_index,
-};
-use seekstorm::ingest::IngestJson;
-use seekstorm::search::{
-    FacetFilter, QueryFacet, QueryRewriting, QueryType, ResultSort, ResultType, Search, SearchMode,
-    SearchRequest,
-};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -213,7 +204,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 ..Default::default()
             };
 
-            let mut index_arc = create_index(&index_path, index_config, &schema, &[], false, None)
+            let mut index_arc = create_index(&index_path, index_config, &schema, &[])
                 .await
                 .unwrap();
 
@@ -325,6 +316,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             search_mode: search_mode_clone,
                             length: result_length_clone,
                             result_type: result_type_clone,
+                            return_documents: None,
                             ..Default::default()
                         })
                         .await;
@@ -368,6 +360,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     */
 
     // verify result count for each query
+    let mut verified = true;
     let mut file = File::open(&count_path)?;
     for result in result_list.iter_mut() {
         let mut buffer = [0u8; 8];
@@ -381,12 +374,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 result.result_count,
                 read_result_count
             );
+            verified = false;
         }
 
         // sort search_time samples for each query
         result.search_time.sort();
     }
-    println!("Verified result count for each query.");
+    if verified {
+        println!("✅ Verified result count for each query.");
+    } else {
+        println!("❌ Mismatch found in result count for some queries.");
+    }
 
     // display min, median, and max search times for each query
     println!("\nDisplaying min, median, and max search times for each query:");
@@ -450,7 +448,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 result_count_total_sum.to_formatted_string(&Locale::en)
             );
 
-            // calculate and  display tail latency statistics
+            // calculate and display tail latency statistics
 
             let mut sample_search_time: Percentile = Percentile::default();
             for filtered_result in filtered_results.iter() {

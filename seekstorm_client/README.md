@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 ### live
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -50,12 +50,7 @@ let result=CLIENT.live(BASE_URL).await;
 ### create API key
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm::{
-     index::{
-         self, ApikeyQuotaObject,
-     },
- };
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -80,7 +75,7 @@ let apikey_quota_object=ApikeyQuotaObject {
 ### delete API key
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -96,7 +91,7 @@ let result = CLIENT
 ### get API key info
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -111,12 +106,7 @@ let result = CLIENT
 ### create index
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm::{
-    index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType, IndexConfig
-    }, vector::Inference,
-};
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -150,7 +140,7 @@ let result = CLIENT
 ### get index info
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -166,9 +156,8 @@ let result = CLIENT
 ### index document
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
-use seekstorm::index::Document;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
 pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -183,9 +172,8 @@ let _result = CLIENT.index_document(BASE_URL, DEMO_API_KEY, 0,&document).await;
 ### index documents
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
-use seekstorm::index::Document;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
 pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -203,7 +191,7 @@ CLIENT.index_documents(BASE_URL, DEMO_API_KEY, 0, &documents_vec).await;
 ### delete document by document id
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -218,7 +206,7 @@ CLIENT.delete_document_by_docid(BASE_URL, DEMO_API_KEY, index_id, doc_id).await;
 ### delete documents by document id
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -232,12 +220,7 @@ CLIENT.delete_documents_by_docid(BASE_URL, DEMO_API_KEY, 0, docid_vec).await;
 ### delete documents by query
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm::{
-    index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    }, search::{QueryRewriting, QueryType, ResultType, SearchMode, SearchRequest, DocumentOption}, vector::Inference,
-};
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -275,9 +258,8 @@ CLIENT.delete_documents_by_query(BASE_URL, DEMO_API_KEY, 0, &search_request_obje
 ### update document
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
-use seekstorm::index::Document;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
 pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -295,9 +277,8 @@ let result = CLIENT.commit_index(BASE_URL, DEMO_API_KEY, 0).await;
 ### update documents
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
-use seekstorm::index::Document;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
 pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -316,12 +297,7 @@ let result = CLIENT.commit_index(BASE_URL, DEMO_API_KEY, 0).await;
 ### query index
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm::{
-    index::{
-        self, ApikeyQuotaObject, Clustering, CreateIndexRequest, DocumentCompression, FrequentwordType, LexicalSimilarity, NgramSet, StemmerType, StopwordType, TokenizerType,
-    }, search::{QueryRewriting, QueryType, ResultType, SearchMode, SearchRequest}, vector::Inference,
-};
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -350,9 +326,8 @@ println!("result counts {} {} {}",result_object.as_ref().unwrap().results.len(),
 ### get document
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
-use seekstorm::{index::GetDocumentRequest, highlighter::{Highlight, highlighter}};
 use std::collections::HashSet;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -385,9 +360,8 @@ let highlights:Vec<Highlight>= vec![
 ### document iterator
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
-use seekstorm::{index::GetIteratorRequest};
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
 pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -410,7 +384,7 @@ let result=CLIENT.document_iterator(BASE_URL, DEMO_API_KEY, index_id,get_iterato
 ### index PDF file bytes
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 use std::fs;
 use std::path::Path;
@@ -430,7 +404,7 @@ let result=CLIENT.index_pdf(BASE_URL, DEMO_API_KEY, index_id, file_path, file_da
 ### get PDF file bytes
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -446,7 +420,7 @@ let result=CLIENT.get_pdf(BASE_URL, DEMO_API_KEY, index_id, doc_id).await;
 ### clear index
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";
@@ -461,7 +435,7 @@ let result=CLIENT.clear_index(BASE_URL, DEMO_API_KEY, index_id).await;
 ### delete index
 ```rust ,no_run
 # tokio_test::block_on(async {
-use seekstorm_client_rs::api_endpoints::RestClient;
+use seekstorm_client_rs::*;
 use std::sync::LazyLock;
 
 pub static BASE_URL: &str = "http://127.0.0.1:80";

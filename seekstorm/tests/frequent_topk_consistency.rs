@@ -1,23 +1,16 @@
 //! Repro: multi-term Topk/TopkCount over all-frequent terms must return results,
 //! not an empty heap. Pure public API.
 //! Run: cargo test -p seekstorm --test frequent_topk_consistency
-use seekstorm::commit::Commit;
-use seekstorm::index::{
-    AccessType, Close, Clustering, Document, DocumentCompression, FileType, FrequentwordType,
-    IndexConfig, IndexDocument, LexicalSimilarity, NgramSet, StemmerType, StopwordType,
-    TokenizerType, create_index,
-};
-use seekstorm::search::{QueryRewriting, QueryType, ResultType, Search, SearchMode, SearchRequest};
-use seekstorm::vector::Inference;
+use seekstorm::prelude::*;
 use std::{fs, path::Path};
 
 async fn search(
-    index_arc: &seekstorm::index::IndexArc,
+    index_arc: &IndexArc,
     q: &str,
     qt: QueryType,
     rt: ResultType,
     len: usize,
-) -> seekstorm::search::SearchResult {
+) -> SearchResult {
     index_arc
         .search(SearchRequest {
             query_string: q.into(),
@@ -43,7 +36,8 @@ async fn frequent_terms_topk_returns_results() {
         ..Default::default()
     };
     // NOTE: keep on the single-shard fast path; multi-shard covered by suite.
-    let index_arc = create_index(index_path, index_config, &schema, &[], false, Some(1))
+    let index_arc = create_index(index_path, index_config, &schema, &[])
+        .force_shard_number(1)
         .await
         .unwrap();
 
