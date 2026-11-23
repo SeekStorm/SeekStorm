@@ -43,12 +43,6 @@ pub struct IteratorResult {
 /// The iterator guarantees that only valid document IDs are returned, even though document IDs are not strictly continuous.
 /// Document IDs can also be fetched in batches, reducing round trips and significantly improving performance, especially when using the REST API.
 /// Typical use cases include index export, conversion, analytics, audits, and inspection.
-/// Explanation of "eventually continuous" docid:
-/// In SeekStorm, document IDs become continuous over time. In a multi-sharded index, each shard maintains its own document ID space.
-/// Because documents are distributed across shards in a non-deterministic, load-dependent way, shard-local document IDs advance at different rates.
-/// When these are mapped to global document IDs, temporary gaps can appear.
-/// As a result, simply iterating from 0 to the total document count may encounter invalid IDs near the end.
-/// The Document Iterator abstracts this complexity and reliably returns only valid document IDs.
 /// - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
 /// - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
 /// - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.
@@ -70,12 +64,6 @@ pub trait GetIterator {
     /// The iterator guarantees that only valid document IDs are returned, even though document IDs are not strictly continuous.
     /// Document IDs can also be fetched in batches, reducing round trips and significantly improving performance, especially when using the REST API.
     /// Typical use cases include index export, conversion, analytics, audits, and inspection.
-    /// Explanation of "eventually continuous" docid:
-    /// In SeekStorm, document IDs become continuous over time. In a multi-sharded index, each shard maintains its own document ID space.
-    /// Because documents are distributed across shards in a non-deterministic, load-dependent way, shard-local document IDs advance at different rates.
-    /// When these are mapped to global document IDs, temporary gaps can appear.
-    /// As a result, simply iterating from 0 to the total document count may encounter invalid IDs near the end.
-    /// The Document Iterator abstracts this complexity and reliably returns only valid document IDs.
     /// - docid=None, take>0: **skip first s document IDs**, then **take next t document IDs** of an index.
     /// - docid=None, take<0: **skip last s document IDs**, then **take previous t document IDs** of an index.
     /// - docid=Some, take>0: **skip next s document IDs**, then **take next t document IDs** of an index, relative to a given document ID, with end-of-index indicator.

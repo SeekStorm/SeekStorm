@@ -14,7 +14,7 @@ The server supports lexical, vector, and hybrid retrieval, plus document indexin
   - Supports configurable schemas and index settings, document indexing/updating/deletion, retrieval and iteration, JSON/NDJSON ingestion, and PDF indexing.
   - Supports lexical, vector, and hybrid search, including filters, facets, sorting, and highlighting.
   - Added unit, stdio integration, and MCP contract tests.
-  - Uses SeekStorm 5.1.0's simplified API with `SearchRequest` struct and optional chainable setters instead of positional parameters.
+  - Uses SeekStorm 5.1.0+ simplified API with `SearchRequest` struct and optional chainable setters instead of positional parameters.
   - Supports the new OR operator `|` (disjunction, union) in query strings.
   - The MCP server does currently implement embedded mode only; it does not connect to a remote SeekStorm server.
 

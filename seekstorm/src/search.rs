@@ -2115,7 +2115,7 @@ impl Search for IndexArc {
                             .split_whitespace()
                             .map(|s| s.trim_matches(['\"', '+', '-', '|']).to_string())
                             .filter(|s| !s.is_empty())
-                            .collect::<Vec<String>>(); /*rlo_shard_vector.query_terms.clone()*/
+                            .collect::<Vec<String>>();
                     };
                 }
                 SearchMode::Hybrid {

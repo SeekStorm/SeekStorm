@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-11-16
+
+### Improved
+
+- 7.1x (Wikipedia) ... 14.8x (SIFT1M) faster vector indexing (faster clustering at same recall and query latency).
+
+### Changed
+
+- Updated stemmers to Snowball 3.2.0. Indices using stemming should be rebuilt after this update. 
+
+### Added
+
+- blink-multilingual-64M, a fast multilingual static embedding model by Minish, mostly supersedes potion-multilingual-128M,at half the size.
+
 ## [5.1.0] - 2026-11-15
 
 ### Added

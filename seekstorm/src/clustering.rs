@@ -1,11 +1,11 @@
-use std::cmp::Ordering;
-
+use ahash::AHashMap;
 use itertools::Itertools;
 use num::integer::Roots;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+use std::cmp::Ordering;
 
 use crate::{
     index::{Clustering, Shard},
@@ -225,6 +225,141 @@ pub(crate) fn accumulate(sum: &mut [f32], emb: &Embedding) {
 }
 
 impl Shard {
+    /// Similarity between the vector `a` (wrapped in `q`) and the vector `b`.
+    #[inline(always)]
+    fn pair_similarity(
+        &self,
+        q: &QuerySimd,
+        a: usize,
+        b: usize,
+        vs: VectorSimilarity,
+        enable_scale: bool,
+        non_affine: bool,
+    ) -> f32 {
+        let (va, vb) = (&self.block_vector_buffer[a], &self.block_vector_buffer[b]);
+        let scale_norm = if enable_scale {
+            Some((
+                va.scale,
+                va.norm,
+                va.zero_point,
+                va.sum_q,
+                vb.scale,
+                vb.norm,
+                vb.zero_point,
+                vb.sum_q,
+            ))
+        } else {
+            None
+        };
+        if self.is_simd {
+            unsafe {
+                similarity_embedding_simd(
+                    q,
+                    &vb.embedding,
+                    scale_norm,
+                    vs,
+                    self.quantization,
+                    non_affine,
+                )
+            }
+        } else {
+            similarity_embedding(
+                &va.embedding,
+                &vb.embedding,
+                scale_norm,
+                vs,
+                self.quantization,
+                non_affine,
+            )
+        }
+    }
+
+    /// D^1.5 seeding on a coreset. The first medoid already exists and every
+    /// vector's `.similarity` holds its similarity to it. Returns k-1 further seed indices.
+    fn seed_medoids_d15(
+        &self,
+        first: usize,
+        k: usize,
+        vs: VectorSimilarity,
+        enable_scale: bool,
+        non_affine: bool,
+    ) -> Vec<usize> {
+        let n = self.block_vector_buffer.len();
+        let m = n.min((4 * k).max(512));
+        let coreset: Vec<usize> = (0..m).map(|j| j * n / m).collect();
+        let m = coreset.len();
+
+        let q_first = unsafe { QuerySimd::new(&self.block_vector_buffer[first].embedding) };
+        let s_max = self.pair_similarity(&q_first, first, first, vs, enable_scale, non_affine);
+
+        let mut chosen: Vec<bool> = coreset.iter().map(|&i| i == first).collect();
+        let mut best: Vec<f32> = coreset
+            .iter()
+            .map(|&i| self.block_vector_buffer[i].similarity)
+            .collect();
+        let mut weights = vec![0.0f64; m];
+        let mut seeds = Vec::with_capacity(k.saturating_sub(1));
+
+        let mut rng: u64 = 0xD1B5_4A32_D192_ED03;
+
+        for _ in 1..k {
+            let mut total = 0.0f64;
+            for j in 0..m {
+                let w = if chosen[j] {
+                    0.0
+                } else {
+                    let d = (s_max - best[j]).max(0.0);
+                    let r = d.sqrt();
+                    let s = r.sqrt();
+                    (r * s * s.sqrt()) as f64
+                };
+                weights[j] = w;
+                total += w;
+            }
+
+            let pick = if total > 0.0 {
+                rng ^= rng >> 12;
+                rng ^= rng << 25;
+                rng ^= rng >> 27;
+                let u =
+                    (rng.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 11) as f64 / (1u64 << 53) as f64;
+                let target = u * total;
+                let (mut acc, mut hit, mut last) = (0.0f64, usize::MAX, 0usize);
+                for (j, weight) in weights.iter().enumerate().take(m) {
+                    acc += *weight;
+                    if *weight > 0.0 {
+                        last = j;
+                        if hit == usize::MAX && acc >= target {
+                            hit = j;
+                        }
+                    }
+                }
+                if hit == usize::MAX { last } else { hit }
+            } else {
+                match chosen.iter().position(|&c| !c) {
+                    Some(j) => j,
+                    None => break,
+                }
+            };
+
+            chosen[pick] = true;
+            let s = coreset[pick];
+            seeds.push(s);
+
+            let q = unsafe { QuerySimd::new(&self.block_vector_buffer[s].embedding) };
+            for j in 0..m {
+                if chosen[j] {
+                    continue;
+                }
+                let sim = self.pair_similarity(&q, s, coreset[j], vs, enable_scale, non_affine);
+                if sim > best[j] {
+                    best[j] = sim;
+                }
+            }
+        }
+        seeds
+    }
+
     /// cluster the vectors in the block_vector_buffer, and return the medoids
     pub(crate) async fn cluster_vector_shard(&mut self, sort: bool) -> Vec<Medoid> {
         let non_affine = self.max_vector_value == f32::MIN;
@@ -238,15 +373,10 @@ impl Shard {
         };
         let vector_similarity = self.vector_similarity;
 
-        let sample_size =
-            (vector_count_block as f32 / (1.0 + (vector_count_block as f32 * 0.0025))) as usize;
-        let m_step = (vector_count_block / sample_size).max(1);
-        let v_step = (vector_count_block / sample_size / 16).max(1);
-
-        let medoid_step = m_step;
-        let vector_step = v_step;
-
-        use ahash::AHashMap;
+        let sample_size = ((vector_count_block as f32
+            / (1.0 + (vector_count_block as f32 * 0.0025))) as usize)
+            .max(vector_count_block.min(10));
+        let vector_step = (vector_count_block / sample_size).max(1);
 
         let mut medoid = Medoid {
             medoid_index: 0,
@@ -362,149 +492,58 @@ impl Shard {
             medoid.child_count += self.block_vector_buffer.len();
         }
 
-        self.block_vector_buffer[medoid.medoid_index].medoid_index = medoid.medoid_index;
-        self.block_vector_buffer[medoid.medoid_index].is_medoid = true;
-        medoids.insert(medoid.medoid_index, medoid);
+        let first_medoid_index = medoid.medoid_index;
+        self.block_vector_buffer[first_medoid_index].medoid_index = first_medoid_index;
+        self.block_vector_buffer[first_medoid_index].is_medoid = true;
+        medoids.insert(first_medoid_index, medoid);
 
-        for cluster_id in 1..cluster_number {
-            let mut medoid = Medoid {
-                medoid_index: 0,
-                child_count: 0,
-            };
-            let mut best_medoid_similarity_sum = f32::MIN;
+        let first = first_medoid_index;
+        let seeds = self.seed_medoids_d15(
+            first,
+            cluster_number,
+            vector_similarity,
+            enable_scale,
+            non_affine,
+        );
 
-            unsafe {
-                for i in (0..vector_count_block)
-                    .skip(cluster_id)
-                    .step_by(medoid_step)
-                {
-                    if self.block_vector_buffer[i].is_medoid {
-                        continue;
-                    }
+        for &s in &seeds {
+            self.block_vector_buffer[s].is_medoid = true;
+            self.block_vector_buffer[s].medoid_index = s;
+            self.block_vector_buffer[s].similarity = 0.0;
+            medoids.insert(
+                s,
+                Medoid {
+                    medoid_index: s,
+                    child_count: 0,
+                },
+            );
+        }
 
-                    let record_outer_simd = QuerySimd::new(&self.block_vector_buffer[i].embedding);
-                    let mut similarity_sum = 0.0;
-
-                    for j in (0..vector_count_block)
-                        .skip(cluster_id)
-                        .step_by(vector_step)
-                    {
-                        if i != j && !self.block_vector_buffer[j].is_medoid {
-                            let scale_norm = if enable_scale {
-                                Some((
-                                    self.block_vector_buffer[i].scale,
-                                    self.block_vector_buffer[i].norm,
-                                    self.block_vector_buffer[i].zero_point,
-                                    self.block_vector_buffer[i].sum_q,
-                                    self.block_vector_buffer[j].scale,
-                                    self.block_vector_buffer[j].norm,
-                                    self.block_vector_buffer[j].zero_point,
-                                    self.block_vector_buffer[j].sum_q,
-                                ))
-                            } else {
-                                None
-                            };
-                            let similarity = if self.is_simd {
-                                similarity_embedding_simd(
-                                    &record_outer_simd,
-                                    &self.block_vector_buffer[j].embedding,
-                                    scale_norm,
-                                    vector_similarity,
-                                    self.quantization,
-                                    non_affine,
-                                )
-                            } else {
-                                similarity_embedding(
-                                    &self.block_vector_buffer[i].embedding,
-                                    &self.block_vector_buffer[j].embedding,
-                                    scale_norm,
-                                    vector_similarity,
-                                    self.quantization,
-                                    non_affine,
-                                )
-                            };
-
-                            if similarity > self.block_vector_buffer[j].similarity {
-                                let similarity_gain =
-                                    similarity - self.block_vector_buffer[j].similarity;
-                                similarity_sum += similarity_gain;
-                            }
-                        }
-                    }
-
-                    if similarity_sum > best_medoid_similarity_sum {
-                        medoid.medoid_index = i;
-                        best_medoid_similarity_sum = similarity_sum;
-                    }
+        for &s in &seeds {
+            let q = unsafe { QuerySimd::new(&self.block_vector_buffer[s].embedding) };
+            for i in 0..self.block_vector_buffer.len() {
+                if self.block_vector_buffer[i].is_medoid {
+                    continue;
                 }
-
-                for i in 0..self.block_vector_buffer.len() {
-                    if self.block_vector_buffer[i].is_medoid {
-                        continue;
-                    }
-                    if i != medoid.medoid_index {
-                        let scale_norm = if enable_scale {
-                            Some((
-                                self.block_vector_buffer[medoid.medoid_index].scale,
-                                self.block_vector_buffer[medoid.medoid_index].norm,
-                                self.block_vector_buffer[medoid.medoid_index].zero_point,
-                                self.block_vector_buffer[medoid.medoid_index].sum_q,
-                                self.block_vector_buffer[i].scale,
-                                self.block_vector_buffer[i].norm,
-                                self.block_vector_buffer[i].zero_point,
-                                self.block_vector_buffer[i].sum_q,
-                            ))
-                        } else {
-                            None
-                        };
-                        let similarity = if self.is_simd {
-                            similarity_embedding_simd(
-                                &QuerySimd::new(
-                                    &self.block_vector_buffer[medoid.medoid_index]
-                                        .embedding
-                                        .clone(),
-                                ),
-                                &self.block_vector_buffer[i].embedding,
-                                scale_norm,
-                                vector_similarity,
-                                self.quantization,
-                                non_affine,
-                            )
-                        } else {
-                            similarity_embedding(
-                                &self.block_vector_buffer[medoid.medoid_index].embedding,
-                                &self.block_vector_buffer[i].embedding,
-                                scale_norm,
-                                vector_similarity,
-                                self.quantization,
-                                non_affine,
-                            )
-                        };
-                        if similarity > self.block_vector_buffer[i].similarity {
-                            medoids
-                                .get_mut(&self.block_vector_buffer[i].medoid_index)
-                                .unwrap()
-                                .child_count -= 1;
-                            self.block_vector_buffer[i].similarity = similarity;
-                            self.block_vector_buffer[i].medoid_index = medoid.medoid_index;
-                            medoid.child_count += 1;
-                        }
-                    } else {
-                        medoids
-                            .get_mut(&self.block_vector_buffer[i].medoid_index)
-                            .unwrap()
-                            .child_count -= 1;
-                        self.block_vector_buffer[i].similarity = 0.0;
-                        self.block_vector_buffer[i].medoid_index = medoid.medoid_index;
-                        medoid.child_count += 1;
-                    }
+                let sim =
+                    self.pair_similarity(&q, s, i, vector_similarity, enable_scale, non_affine);
+                if sim > self.block_vector_buffer[i].similarity {
+                    self.block_vector_buffer[i].similarity = sim;
+                    self.block_vector_buffer[i].medoid_index = s;
                 }
             }
-
-            self.block_vector_buffer[medoid.medoid_index].medoid_index = medoid.medoid_index;
-            self.block_vector_buffer[medoid.medoid_index].is_medoid = true;
-            medoids.insert(medoid.medoid_index, medoid);
         }
+
+        for m in medoids.values_mut() {
+            m.child_count = 0;
+        }
+        for v in self.block_vector_buffer.iter() {
+            medoids.get_mut(&v.medoid_index).unwrap().child_count += 1;
+        }
+
+        const MAX_REFINE_ITERATIONS: usize = 8;
+        const MIN_REL_IMPROVEMENT: f64 = 1e-3;
+        let mut iteration = 0usize;
 
         let mut best_similarity_sum = self
             .block_vector_buffer
@@ -514,7 +553,7 @@ impl Shard {
             .sum::<isize>();
         let vector_count_block = self.block_vector_buffer.len();
         let vector_step = 1;
-        let mut centroid_map = medoids
+        let mut medoid_map = medoids
             .into_iter()
             .map(|(m, cluster)| {
                 (
@@ -538,7 +577,7 @@ impl Shard {
                 for i in (0..vector_count_block).step_by(vector_step) {
                     let embedding = &self.block_vector_buffer[i].embedding;
                     let medoid_index = self.block_vector_buffer[i].medoid_index;
-                    let centroid = centroid_map.get_mut(&medoid_index).unwrap();
+                    let centroid = medoid_map.get_mut(&medoid_index).unwrap();
                     if self.is_simd {
                         accumulate_simd(&mut centroid.sum_vector, embedding);
                     } else {
@@ -546,7 +585,7 @@ impl Shard {
                     }
                 }
 
-                for centroid in centroid_map.values_mut() {
+                for centroid in medoid_map.values_mut() {
                     let sum_vector = match &self.block_vector_buffer[0].embedding {
                         Embedding::I8(_) => Embedding::I8(
                             centroid
@@ -572,7 +611,7 @@ impl Shard {
                     let scale_norm = None;
                     let similarity = if self.is_simd {
                         similarity_embedding_simd(
-                            &centroid_map[&medoid_index].query_simd,
+                            &medoid_map[&medoid_index].query_simd,
                             &medoid_candidate.embedding,
                             scale_norm,
                             vector_similarity,
@@ -581,7 +620,7 @@ impl Shard {
                         )
                     } else {
                         similarity_embedding(
-                            &centroid_map[&medoid_index].centroid,
+                            &medoid_map[&medoid_index].centroid,
                             &medoid_candidate.embedding,
                             scale_norm,
                             vector_similarity,
@@ -590,8 +629,8 @@ impl Shard {
                         )
                     };
 
-                    if similarity > centroid_map[&medoid_index].best_similarity {
-                        let centroid = centroid_map.get_mut(&medoid_index).unwrap();
+                    if similarity > medoid_map[&medoid_index].best_similarity {
+                        let centroid = medoid_map.get_mut(&medoid_index).unwrap();
                         centroid.medoid_index_new = i;
                         centroid.best_similarity = similarity;
                     }
@@ -600,7 +639,7 @@ impl Shard {
                 for i in 0..vector_count_block {
                     let old_medoid_index = self.block_vector_buffer[i].medoid_index;
                     let new_medoid_index =
-                        centroid_map[&self.block_vector_buffer[i].medoid_index].medoid_index_new;
+                        medoid_map[&self.block_vector_buffer[i].medoid_index].medoid_index_new;
                     if i != new_medoid_index {
                         if old_medoid_index != new_medoid_index {
                             let scale_norm = if enable_scale {
@@ -653,7 +692,7 @@ impl Shard {
                     }
                 }
 
-                centroid_map = centroid_map
+                medoid_map = medoid_map
                     .into_iter()
                     .map(|(_m, cluster)| {
                         (
@@ -684,7 +723,7 @@ impl Shard {
                     best_similarity_sum = similarity_sum;
                 }
 
-                let medoid_keys = centroid_map
+                let medoid_keys = medoid_map
                     .iter()
                     .filter(|c| c.1.has_changed)
                     .map(|c| *c.0)
@@ -710,7 +749,7 @@ impl Shard {
                         };
                         let similarity = if self.is_simd {
                             similarity_embedding_simd(
-                                &centroid_map[medoid_index].query_simd,
+                                &medoid_map[medoid_index].query_simd,
                                 &self.block_vector_buffer[i].embedding,
                                 scale_norm,
                                 vector_similarity,
@@ -728,11 +767,11 @@ impl Shard {
                             )
                         };
                         if similarity > self.block_vector_buffer[i].similarity {
-                            centroid_map
+                            medoid_map
                                 .get_mut(&self.block_vector_buffer[i].medoid_index)
                                 .unwrap()
                                 .child_count -= 1;
-                            centroid_map.get_mut(medoid_index).unwrap().child_count += 1;
+                            medoid_map.get_mut(medoid_index).unwrap().child_count += 1;
                             let vector = &mut self.block_vector_buffer[i];
                             vector.similarity = similarity;
                             vector.medoid_index = *medoid_index;
@@ -747,8 +786,15 @@ impl Shard {
                     .filter(|v| !v.is_medoid)
                     .map(|v| v.similarity as isize)
                     .sum::<isize>();
+                iteration += 1;
                 if similarity_sum > best_similarity_sum {
+                    let rel = (similarity_sum - best_similarity_sum) as f64
+                        / (best_similarity_sum as f64).abs().max(f64::MIN_POSITIVE);
+
                     best_similarity_sum = similarity_sum;
+                    if rel < MIN_REL_IMPROVEMENT || iteration >= MAX_REFINE_ITERATIONS {
+                        break;
+                    }
                 } else {
                     break;
                 }
@@ -766,7 +812,7 @@ impl Shard {
             });
         }
 
-        let mut medoids_vec = centroid_map
+        let mut medoids_vec = medoid_map
             .into_iter()
             .map(|(_m, cluster)| Medoid {
                 medoid_index: cluster.medoid_index,

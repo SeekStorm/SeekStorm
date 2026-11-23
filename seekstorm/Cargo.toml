@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "5.1.0"
+version = "5.2.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -40,38 +40,38 @@ num-format = "0.4.4"
 ahash ={ version = "0.8.12", features = ["serde"]}
 gxhash = { version = "3.5.0", features = ["deterministic"], optional = true }
 symspell_complete_rs = "0.0.5"
-rand = { version = "0.10.3", features = ["chacha"]}
+rand = { version = "0.10.4", features = ["chacha"]}
 futures = "0.3.34"
 num = "0.4.3"
 num-derive = "0.5.1"
 num-traits = "0.2.19"
-regex = "1.13.1"
+regex = "1.13.2"
 lazy_static = "1.5.1"
-url = "2.5.8"
+url = "2.5.9"
 itertools = "0.15.0"
 async-recursion = "1.2.0"
-zstd = "0.14.3"
+zstd = "0.14.4"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
-smallvec = "1.16.5"
+smallvec = "1.16.6"
 memmap2 = "0.9.12"
-regex-syntax = "0.8.11"
+regex-syntax = "0.8.12"
 indexmap = { version = "2.14.2", features = ["serde"]}
 unicode-normalization = "0.1.26"
 finl_unicode = "1.4.0"
 colored = "3.1.1"
-walkdir = "2.5.0"
-pdfium-render = { version ="0.9.5",  features = ["thread_safe"], optional = true}
+walkdir = "2.5.1"
+pdfium-render = { version ="0.9.6",  features = ["thread_safe"], optional = true}
 chrono = "0.4.45"
 utoipa = { version ="6.0.0",  features = ["preserve_order","preserve_path_order","yaml","indexmap"]}
 num_cpus = "1.17.0"
 csv = "1.4.0"
 snap = "1.1.2"
-lz4_flex = "0.14.0"
+lz4_flex = "0.14.2"
 bytemuck = { version = "1.25.2", features = ["derive","extern_crate_alloc"] }
-model2vec-rs = "0.4.0"
+model2vec-rs = "0.5.0"
 chunk = "0.10.2"
-snowball_stemmers_rs = "1.0.1"
+snowball_stemmers_rs = "1.1.0"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }
 tabled = { version = "0.22.0", features = ["ansi"]}
 

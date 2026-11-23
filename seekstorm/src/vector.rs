@@ -1,4 +1,5 @@
 use crate::add_result::{facet_count, is_facet_filter};
+use crate::index::IndexArc;
 use crate::min_heap::MinHeap;
 use crate::search::{
     FacetFilter, QueryFacet, ResultSortIndex, ResultType, SearchResultObject, get_query_facets,
@@ -274,6 +275,8 @@ pub enum Model {
     PotionBase32M,
     /// bge-base-multilingual-v1.5: 256 dimensions, 128M parameters, multilingual, general purpose
     PotionMultilingual128M,
+    /// blink-multilingual-64M: 256 dimensions, 64M parameters, multilingual, general purpose
+    BlinkMultilingual64M,
     /// bge-retrieval-en-v1.5: 512 dimensions, 32.3M parameters, English only, retrieval
     PotionRetrieval32M,
     /// bge-base-en-v1.5: 256 dimensions, 7.5M parameters, English only, general purpose
@@ -535,7 +538,11 @@ impl Shard {
                 doc_id: self.chunks_meta[i].0,
                 field_id: self.chunks_meta[i].1,
                 chunk_id: self.chunks_meta[i].2,
-                scale: 0.0,
+                scale: if self.quantization == Quantization::None {
+                    0.0
+                } else {
+                    1.0
+                },
                 norm: 0.0,
                 zero_point: 0,
                 sum_q: 0,
@@ -1570,4 +1577,76 @@ impl SearchVectorShard for ShardArc {
 
         result_object
     }
+}
+
+/// Return average and maximum vector count per cluster, and total number of clusters, and dead cluster percentage.
+/// Ignore levels that have less than 65_536 documents.
+pub async fn cluster_stats(index_arc: IndexArc) -> (usize, usize, usize, f64) {
+    let index_ref = index_arc.read().await;
+    let shard_vec = index_ref.shard_vec.clone();
+    drop(index_ref);
+
+    let mut vector_count_sum = 0;
+    let mut vector_count_max = 0;
+    let mut cluster_count_sum = 0;
+    let mut dead_cluster_count_sum = 0;
+
+    for shard in shard_vec {
+        let mut offset = 0;
+
+        let shard_ref = shard.read().await;
+        let vector_dimensions = shard_ref.vector_dimensions;
+        let vector_type = match shard_ref.quantization {
+            Quantization::ScalarQuantizationI8 => Precision::I8,
+            Quantization::TurboQuantI8 => Precision::I8,
+            _ => shard_ref.vector_precision,
+        };
+        let vector_size = size_of::<VectorHeader>()
+            + (vector_dimensions
+                * match vector_type {
+                    Precision::F32 => 4,
+                    Precision::I8 => 1,
+                    Precision::None => 0,
+                });
+
+        for level_id in 0..shard_ref.level_index.len() {
+            if level_id >= shard_ref.indexed_doc_count / 65_536 {
+                break;
+            }
+
+            let cluster_number_bytes = &shard_ref.vector_file_mmap[offset..offset + 4];
+            let cluster_number =
+                u32::from_le_bytes(cluster_number_bytes.try_into().unwrap()) as usize;
+            offset += 4;
+
+            cluster_count_sum += cluster_number;
+
+            let mut level_vectors_count = 0;
+            for _cluster_id in 0..cluster_number {
+                let cluster_header_bytes = &shard_ref.vector_file_mmap[offset..offset + 4];
+
+                let child_count = u32::from_le_bytes(cluster_header_bytes.try_into().unwrap());
+
+                offset += 4;
+                level_vectors_count += child_count;
+                vector_count_sum += child_count as usize;
+                if child_count < 10 {
+                    dead_cluster_count_sum += 1;
+                }
+                if child_count as usize > vector_count_max {
+                    vector_count_max = child_count as usize;
+                }
+            }
+            offset += level_vectors_count as usize * vector_size;
+        }
+    }
+
+    let vector_counts_avg = vector_count_sum.checked_div(cluster_count_sum).unwrap_or(0);
+
+    (
+        vector_counts_avg,
+        vector_count_max,
+        cluster_count_sum,
+        dead_cluster_count_sum as f64 / cluster_count_sum as f64,
+    )
 }

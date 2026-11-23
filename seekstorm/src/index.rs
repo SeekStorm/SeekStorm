@@ -2319,6 +2319,14 @@ pub(crate) async fn create_index_root(
                                 *quantization,
                                 VectorSimilarity::Cosine,
                             ),
+                            Model::BlinkMultilingual64M => (
+                                0,
+                                "minishlab/blink-multilingual-64M",
+                                Precision::F32,
+                                chunk_size,
+                                *quantization,
+                                VectorSimilarity::Cosine,
+                            ),
                             Model::PotionMultilingual128M => (
                                 0,
                                 "minishlab/potion-multilingual-128M",
@@ -2390,7 +2398,7 @@ pub(crate) async fn create_index_root(
                         precision,
                         chunk_size,
                         quantization,
-                        VectorSimilarity::Cosine,
+                        vector_similarity,
                     )
                 } else {
                     (

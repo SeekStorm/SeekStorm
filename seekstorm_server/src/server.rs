@@ -15,9 +15,10 @@ use seekstorm::{
     ingest::{
         IngestCsv, IngestJson, IngestPdf, display_index_info, ingest_sift, read_fvecs, read_ivecs,
     },
+    iterator::GetIterator,
     search::{QueryType, ResultType, Search, SearchMode, SearchRequest},
     utils::dir_size,
-    vector::{Embedding, Inference, Model, Quantization},
+    vector::{Embedding, Inference, Model, Quantization, cluster_stats},
     vector_similarity::{AnnMode, VectorSimilarity},
 };
 use sha2::{Digest, Sha256};
@@ -25,9 +26,9 @@ use std::{
     collections::{HashMap, HashSet},
     env::current_exe,
     ffi::OsStr,
-    fs::{self, metadata},
-    io::{self, IsTerminal},
-    path::Path,
+    fs::{self, File, metadata},
+    io::{self, BufRead, BufReader, IsTerminal},
+    path::{Path, PathBuf},
     sync::Arc,
     thread::available_parallelism,
     time::Instant,
@@ -79,6 +80,22 @@ async fn commandline(sender: crossbeam_channel::Sender<String>) {
             break;
         }
     }
+}
+
+#[allow(missing_docs)]
+#[derive(Default, Debug, serde::Deserialize, serde::Serialize, Clone)]
+pub struct QueryObject {
+    pub query: String,
+    pub tags: Vec<String>,
+}
+
+fn data_path(name: &str) -> PathBuf {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.pop();
+    path.join("seekstorm")
+        .join("benches")
+        .join("test_data")
+        .join(name)
 }
 
 pub(crate) async fn initialize(params: HashMap<String, String>) {
@@ -437,7 +454,6 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                     return;
                 }
 
-
                 recv(receiver_commandline) -> message => {
 
                     if let Ok(m) = message {
@@ -462,7 +478,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let topk=10;
                                     let similarity_threshold=None;
                                     let field_filter=Vec::new();
-                                    let search_mode=SearchMode::Vector { similarity_threshold , ann_mode:AnnMode::Nprobe(15)};
+                                    let search_mode=SearchMode::Vector { similarity_threshold , ann_mode:AnnMode::Nprobe(16)};
 
                                     let mut search_time_sum=0;
                                     let mut results_sum=0;
@@ -471,28 +487,20 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     let mut observed_vector_count_sum=0;
                                     let mut recall_count_sum=0;
 
-
                                     let data_path_str=if parameter.len()>1 {
                                         parameter[1]
                                     } else {
                                         r"C:\linux_remote\testset"
                                     };
 
-
                                     if let Ok(ground_truth) = read_ivecs(&Path::new(data_path_str).join("sift_groundtruth.ivecs").to_string_lossy()) {
                                     if let Ok(queries) = read_fvecs(&Path::new(data_path_str).join("sift_query.fvecs").to_string_lossy()) {
-
-
-
-
-                                        if true {
 
                                         let queries_len=queries.len();
 
                                         for (query_idx, query_embedding) in queries.into_iter().enumerate().take(queries_len) {
 
                                             let ground_truth_for_query:IndexMap<usize, usize> = ground_truth[query_idx].iter().take(topk).enumerate().map(|(i, x)| (*x as usize, i)).collect();
-
 
                                             let query_embedding=Embedding::F32(query_embedding);
 
@@ -508,6 +516,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                     query_type_default: QueryType::Intersection,
                                                     result_type: ResultType::Topk,
                                                     field_filter: field_filter.clone(),
+                                                    return_documents: None,
                                                     ..Default::default()
                                                 }
                                             )
@@ -540,13 +549,14 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                         index_arc.read().await.index_config.inference,
                                         index_arc.read().await.vector_similarity,
                                         search_mode,
-                                         (search_time_sum as usize/1000/queries_len).to_formatted_string(&Locale::en), results_sum.to_formatted_string(&Locale::en), result_count_total_sum.to_formatted_string(&Locale::en),
+                                        (search_time_sum as usize/1000/queries_len).to_formatted_string(&Locale::en), results_sum.to_formatted_string(&Locale::en), result_count_total_sum.to_formatted_string(&Locale::en),
                                         (observed_cluster_count_sum as f64) / queries_len as f64 / (indexed_cluster_count as f64) * 100.0,(observed_cluster_count_sum/queries_len).to_formatted_string(&Locale::en) , indexed_cluster_count.to_formatted_string(&Locale::en),
                                         (observed_vector_count_sum as f64) / queries_len as f64 / (indexed_vector_count as f64) * 100.0,(observed_vector_count_sum/queries_len).to_formatted_string(&Locale::en) , indexed_vector_count.to_formatted_string(&Locale::en),
                                         (recall_count_sum as f64) / queries_len as f64 / (topk as f64) * 100.0);
                                         println!();
 
-                                        }
+                                        let cluster_stats=cluster_stats(index_arc.clone()).await;
+                                        println!("Cluster stats: dead clusters (<10 vec/cluster): {:.2}% , avg vectors per cluster: {}, max vectors per cluster: {}, total clusters: {}", cluster_stats.3, cluster_stats.0, cluster_stats.1, cluster_stats.2);
 
                                     } else {
                                         println!("Failed to read query query file");
@@ -556,6 +566,126 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                         println!("Failed to read query ground_truth file");
                                     }
                                 }
+                            }
+                        }
+
+                        "searchwiki" =>
+                        {
+                            println!("searchwiki start");
+                            let index_id=0;
+                            let query_path = data_path("search-benchmark-game-queries.txt");
+                            let result_length = 10usize;
+                            let similarity_threshold=Some(0.0);
+
+                            println!("searchwiki query path: {}\n", query_path.display());
+
+                            let mut query_vec: Vec<String> = Vec::new();
+                            let file = File::open(query_path).unwrap();
+                            let reader = BufReader::new(file);
+
+                            for line in reader.lines() {
+                                let line_string = line.unwrap();
+
+                                if line_string.is_empty() {
+                                    continue;
+                                }
+
+                                let query_object = serde_json::from_str::<QueryObject>(&line_string).unwrap();
+
+                                if !query_object.tags.contains(&"union".to_string()) {
+                                    continue;
+                                };
+
+                                query_vec.push(query_object.query.to_lowercase(),);
+                            }
+
+                            let mut apikey_list_mut = apikey_list_clone.write().await;
+                            let apikey_hash = calculate_hash(&demo_api_key) as u128;
+                            if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) && let Some(index_arc) = apikey_object.index_list.get_mut(&index_id) {
+
+                                    let iterator = index_arc
+                                        .get_iterator(None, 0, 1000, false, true, vec![])
+                                        .await;
+
+                                    for doc in iterator.results.iter() {
+                                        if let Some(doc) = &doc.doc && let Some(title) = doc.get("title") {
+                                                let title_string = serde_json::from_value::<String>(title.clone()).unwrap_or(title.to_string());
+                                                query_vec.push(title_string.to_lowercase());
+                                            }
+
+                                    }
+
+                                    let mut similarity_sum = 0.0;
+                                    let mut result_count_all = 0;
+                                    let mut result_count_ann = 0;
+                                    let mut recall_sum = 0;
+                                    let mut search_time_sum = 0;
+
+                                    let queries_len = query_vec.len();
+                                    let indexed_vector_count=index_arc.read().await.indexed_vector_count().await;
+                                    let indexed_cluster_count=index_arc.read().await.indexed_cluster_count().await;
+                                    let mut observed_cluster_count_sum=0;
+                                    let mut observed_vector_count_sum=0;
+
+                                    for query in query_vec.iter() {
+
+                                        let mut recall_set=HashSet::new();
+
+                                        let result_object_vector = index_arc
+                                        .search(
+                                            SearchRequest {
+                                                query_string: query,
+                                                search_mode:SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::All },
+                                                length:result_length,
+                                                result_type: ResultType::Topk,
+                                                return_documents: None,
+                                                ..Default::default()
+                                            }
+                                        )
+                                        .await;
+
+                                        for result in result_object_vector.results.iter() {
+                                            recall_set.insert(result.doc_id);
+                                        }
+                                        result_count_all += result_object_vector.results.len();
+
+                                         let start_time = Instant::now();
+                                        let result_object_vector = index_arc
+                                        .search(
+                                            SearchRequest {
+                                                query_string: query,
+                                                search_mode:SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Nprobe(53) },
+                                                length:result_length,
+                                                result_type: ResultType::Topk,
+                                                return_documents: None,
+                                                ..Default::default()
+                                            }
+                                        )
+                                        .await;
+                                        let search_time = start_time.elapsed().as_nanos() as i64;
+                                        search_time_sum += search_time;
+
+                                        for result in result_object_vector.results.iter() {
+                                            similarity_sum += result.vector_score as f64;
+
+                                            if recall_set.contains(&result.doc_id) {
+                                                recall_sum += 1;
+                                            }
+                                        }
+                                        result_count_ann += result_object_vector.results.len();
+                                        observed_cluster_count_sum+=result_object_vector.observed_cluster_count;
+                                        observed_vector_count_sum+=result_object_vector.observed_vector_count;
+
+                                    }
+
+                                    println!("similarity_avg: {}, query_count: {}, result_count: {} {}, recall: {}%  latency: {:.2} µs", similarity_sum / result_count_ann as f64, query_vec.len(), result_count_ann, result_count_all, recall_sum as f64 / result_count_all as f64 * 100.0, search_time_sum as f64 /query_vec.len() as f64 / 1000.0);
+
+                                    println!("clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {})",
+                                        (observed_cluster_count_sum as f64) / queries_len as f64 / (indexed_cluster_count as f64) * 100.0,(observed_cluster_count_sum/queries_len).to_formatted_string(&Locale::en) , indexed_cluster_count.to_formatted_string(&Locale::en),
+                                        (observed_vector_count_sum as f64) / queries_len as f64 / (indexed_vector_count as f64) * 100.0,(observed_vector_count_sum/queries_len).to_formatted_string(&Locale::en) , indexed_vector_count.to_formatted_string(&Locale::en),
+                                    );
+                                    let cluster_stats = cluster_stats(index_arc.clone()).await;
+                                    println!("Cluster stats: dead clusters (<10 vec/cluster): {:.2}% , avg vectors per cluster: {}, max vectors per cluster: {}, total clusters: {}", cluster_stats.3, cluster_stats.0, cluster_stats.1, cluster_stats.2);
                             }
                         }
 
@@ -589,6 +719,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                             query_type_default: QueryType::Intersection,
                                             result_type: ResultType::Topk,
                                             field_filter: field_filter.clone(),
+                                            return_documents: None,
                                             ..Default::default()
                                         }
                                     )
@@ -638,6 +769,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                             query_type_default: QueryType::Intersection,
                                             result_type: ResultType::Topk,
                                             field_filter: field_filter.clone(),
+                                            return_documents: None,
                                             ..Default::default()
                                         }
                                     )
@@ -655,8 +787,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                         if recall_set.contains(&result.doc_id) { recall_count+=1; }
                                     }
                                     println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {}%", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.count_total,
-                                    (result_object_vector.observed_cluster_count as f64) / (index_arc.read().await.indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_cluster_count.to_formatted_string(&Locale::en),
-                                    (result_object_vector.observed_vector_count as f64) / (index_arc.read().await.indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_vector_count.to_formatted_string(&Locale::en),
+                                    (result_object_vector.observed_cluster_count as f64) / (indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , indexed_cluster_count.to_formatted_string(&Locale::en),
+                                    (result_object_vector.observed_vector_count as f64) / (indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , indexed_vector_count.to_formatted_string(&Locale::en),
                                     (recall_count as f64) / (recall_set.len() as f64) * 100.0);
                                     println!();
 
@@ -667,11 +799,12 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     .search(
                                         SearchRequest {
                                             query_string: query,
-                                            search_mode:SearchMode::Vector { similarity_threshold  , ann_mode: AnnMode::Nprobe(55) },
+                                            search_mode:SearchMode::Vector { similarity_threshold , ann_mode: AnnMode::Nprobe(55) },
                                             length:len,
                                             query_type_default: QueryType::Intersection,
                                             result_type: ResultType::Topk,
                                             field_filter: field_filter.clone(),
+                                            return_documents: None,
                                             ..Default::default()
                                         }
                                     )
@@ -691,8 +824,8 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                         if recall_set.contains(&result.doc_id) { recall_count+=1; }
                                     }
                                     println!("Search time: {} µs  result count {} result count total: {} clusters observed: {:.2}% ({} of {}) vectors observed: {:.2}% ({} of {}) recall: {}%", (search_time/1000).to_formatted_string(&Locale::en), result_object_vector.results.len(), result_object_vector.count_total,
-                                    (result_object_vector.observed_cluster_count as f64) / (index_arc.read().await.indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_cluster_count.to_formatted_string(&Locale::en),
-                                    (result_object_vector.observed_vector_count as f64) / (index_arc.read().await.indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , index_arc.read().await.indexed_vector_count.to_formatted_string(&Locale::en),
+                                    (result_object_vector.observed_cluster_count as f64) / (indexed_cluster_count as f64) * 100.0,result_object_vector.observed_cluster_count.to_formatted_string(&Locale::en) , indexed_cluster_count.to_formatted_string(&Locale::en),
+                                    (result_object_vector.observed_vector_count as f64) / (indexed_vector_count as f64) * 100.0,result_object_vector.observed_vector_count.to_formatted_string(&Locale::en) , indexed_vector_count.to_formatted_string(&Locale::en),
                                     (recall_count as f64) / (recall_set.len() as f64) * 100.0);
 
 
@@ -768,12 +901,74 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                     index_config,
                                     force_shard_number,
                                     apikey_object,
-                                    true,
+                                    false,
                                 ).await;
                                 let index_id=0;
                                 if let Some(index_arc) = apikey_object.index_list.get_mut(&index_id) {
 
                                     ingest_sift(index_arc, Path::new(&Path::new(data_path_str).join("sift_base.fvecs")), None).await;
+                                }
+                            }
+                        }
+
+                           "ingestwiki" =>
+                        {
+                            let data_path_str=if parameter.len()>1 {
+                                parameter[1]
+                            } else {
+                                WIKIPEDIA_FILENAME
+                            };
+                            let data_path = Path::new(&data_path_str);
+
+                            println!("ingest wiki start");
+                            let mut apikey_list_mut = apikey_list_clone.write().await;
+
+                            let apikey_quota_object=ApikeyQuotaObject {
+                                indices_max: 10,
+                                indices_size_max: 100_000_000_000,
+                                documents_max: 100_000_000,
+                                operations_max: 1_000_000_000,
+                                rate_limit:None,
+                                 ..Default::default()
+                            };
+                            create_apikey_api(
+                                &index_path,
+                                apikey_quota_object,
+                                &demo_api_key,
+                                &mut apikey_list_mut,
+                            );
+
+                            let apikey_hash = calculate_hash(&demo_api_key) as u128;
+                            if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) {
+                                let indexname_schemajson =
+                                       {("wikipedia_demo",r#"
+                                        [{"field":"title","index_lexical":false,"index_vector":true,"boost":10.0},
+                                        {"field":"body","index_lexical":false,"index_vector":true,"longest":true},
+                                        {"field":"url","index_lexical":false,"index_vector":false}]"#,LexicalSimilarity::Bm25fProximity,TokenizerType::UnicodeAlphanumericFolded )}; 
+
+                                 let index_config = IndexConfig {
+                                        name: indexname_schemajson.0.into(),
+                                        inference: Inference::Model2Vec {
+                                            model: Model::PotionBase2M,
+                                            chunk_size: 1000,
+                                            quantization: Quantization::ScalarQuantizationI8,
+                                        },
+                                        clustering: Clustering::Auto,
+                                        ..Default::default()
+                                    };
+                                create_index_api(
+                                    &index_path,
+                                    serde_json::from_str(indexname_schemajson.1).unwrap(),
+                                    Vec::new(),
+                                    index_config,
+                                    force_shard_number,
+                                    apikey_object,
+                                    false,
+                                ).await;
+
+                                let index_id=0;
+                                if let Some(index_arc) = apikey_object.index_list.get_mut(&index_id) {
+                                     index_arc.ingest_json(data_path).await;
                                 }
                             }
                         }
@@ -868,10 +1063,12 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                 dash.get("i").and_then(|value| value.parse::<u64>().ok()).unwrap_or(0)
                                             } else if apikey_object.index_list.is_empty() || !apikey_object.index_list.contains_key(&0) {
                                                     let indexname_schemajson = if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(WIKIPEDIA_FILENAME)
+
                                                     {("wikipedia_demo",r#"
                                                 [{"field":"title","field_type":"Text","store":true,"index_lexical":true,"index_vector":true,"dictionary_source": false, "completion_source": false,"boost":10.0},
                                                 {"field":"body","field_type":"Text","store":true,"index_lexical":true,"index_vector":true,"longest":true,"dictionary_source": false},
                                                 {"field":"url","field_type":"Text","store":true,"index_lexical":false}]"#,LexicalSimilarity::Bm25fProximity,TokenizerType::UnicodeAlphanumericFolded  )}
+
                                                     else if md.is_file() && data_path.display().to_string().to_lowercase().ends_with(MSMARCO_FILENAME)
                                                     {("msmarco_demo", r#"
                                                     [{"field":"url","field_type":"Text","store":false,"index_lexical":false},
@@ -885,15 +1082,17 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                 {"field":"date","field_type":"Timestamp","store":true,"index_lexical":false,"facet":true}]"#,LexicalSimilarity::Bm25fProximity,TokenizerType::UnicodeAlphanumeric )};
 
 
+
                                                     let index_config = IndexConfig {
                                                         name: indexname_schemajson.0.into(),
                                                         lexical_similarity: indexname_schemajson.2,
                                                         tokenizer: indexname_schemajson.3,
                                                         ngram_indexing: NgramSet::NgramFF as u8 ,
                                                         clustering: Clustering::Auto,
-                                                        inference: Inference::Model2Vec { model: Model::PotionBase2M, chunk_size: 1000, quantization: Quantization::TurboQuantI8 },
+                                                        inference: Inference::Model2Vec { model: Model::PotionBase2M, chunk_size: 1000, quantization: Quantization::ScalarQuantizationI8},
                                                         ..Default::default()
                                                     };
+
                                                     create_index_api(
                                                         &index_path,
                                                         serde_json::from_str(indexname_schemajson.1).unwrap(),
@@ -901,7 +1100,7 @@ pub(crate) async fn initialize(params: HashMap<String, String>) {
                                                         index_config,
                                                         force_shard_number,
                                                         apikey_object,
-                                                        true,
+                                                        false,
                                                     ).await
 
                                                 } else {
