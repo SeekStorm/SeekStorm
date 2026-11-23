@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm_server"
-version = "5.2.0"
+version = "5.2.1"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -24,10 +24,10 @@ path = "src/main.rs"
 
 [dependencies]
 # This forces the library to compile WITH gxhash when building the server binary
-seekstorm = { version = "5.2.0", path = "../seekstorm" , features = ["gxhash"], default-features = false} 
+seekstorm = { version = "5.2.1", path = "../seekstorm" , features = ["gxhash"], default-features = false} 
 ahash ={ version = "0.8.12", features = ["serde"]}
 base64 = "0.23.1"
-chrono = "0.4.45"
+jiff = "1.0.2"
 colored = "3.1.1"
 crossbeam-channel = "0.5.17"
 ctrlc = "3.5.3"

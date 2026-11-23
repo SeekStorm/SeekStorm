@@ -319,13 +319,13 @@
 //! use std::sync::LazyLock;
 //! use std::fs;
 //! use std::path::Path;
-//! use chrono::Utc;
+//! use jiff::Timestamp;
 //! pub static BASE_URL: &str = "http://127.0.0.1:80";
 //! pub static DEMO_API_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 //! pub static CLIENT: LazyLock<RestClient> = LazyLock::new(|| RestClient::new());
 //! let index_id=0;
 //! let file_path=Path::new("C:/test.pdf");
-//! let file_date=Utc::now().timestamp();
+//! let file_date = Timestamp::now().as_second();
 //! let document = fs::read(file_path).unwrap();
 //! let result=CLIENT.index_pdf(BASE_URL, DEMO_API_KEY, index_id, file_path, file_date, document).await;
 //! # });

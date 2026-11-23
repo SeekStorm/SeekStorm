@@ -7,9 +7,11 @@ use std::{
     time::{Instant, SystemTime},
 };
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use colored::Colorize;
 use csv::{ReaderBuilder, Terminator};
+use jiff::Timestamp;
+use jiff::civil::DateTime;
+use jiff::tz::TimeZone;
 use num_format::{Locale, ToFormattedString};
 #[cfg(feature = "pdf")]
 use pdfium_render::prelude::{PdfDocumentMetadataTagType, Pdfium};
@@ -101,17 +103,17 @@ impl IndexPdfFile for IndexArc {
             if let Some(pdfium) = pdfium_option.as_ref() {
                 let file_size = file_path.metadata().unwrap().len() as usize;
 
-                let date: DateTime<Utc> = if let Ok(metadata) = metadata(file_path) {
+                let file_date = if let Ok(metadata) = metadata(file_path) {
                     if let Ok(time) = metadata.created() {
-                        time
+                        Timestamp::try_from(time)
+                            .unwrap_or_else(|_| Timestamp::now())
+                            .as_second()
                     } else {
-                        SystemTime::now()
+                        Timestamp::now().as_second()
                     }
                 } else {
-                    SystemTime::now()
-                }
-                .into();
-                let file_date = date.timestamp();
+                    Timestamp::now().as_second()
+                };
 
                 if let Ok(pdf) = pdfium.load_pdf_from_file(file_path, None) {
                     self.index_pdf(
@@ -356,26 +358,22 @@ impl IndexPdf for IndexArc {
                             date_string2.push_str(&date_string[17..19]);
                         }
 
-                        if let Ok(date) = DateTime::parse_from_rfc3339(&date_string2) {
-                            date.timestamp()
-                        } else {
-                            file_date
-                        }
-                    } else if let Ok(date) =
-                        NaiveDateTime::parse_from_str(date.value(), "%a %b %e %H:%M:%S %Y")
-                            .map(|ndt| Utc.from_utc_datetime(&ndt))
+                        date_string2
+                            .parse::<Timestamp>()
+                            .map(|ts| ts.as_second())
+                            .unwrap_or(file_date)
+                    } else if let Ok(ts) = DateTime::strptime("%a %b %e %H:%M:%S %Y", date.value())
+                        .and_then(|dt| TimeZone::UTC.to_timestamp(dt))
                     {
-                        date.timestamp()
-                    } else if let Ok(date) =
-                        NaiveDateTime::parse_from_str(date.value(), "%Y/%m/%d %H:%M:%S")
-                            .map(|ndt| Utc.from_utc_datetime(&ndt))
+                        ts.as_second()
+                    } else if let Ok(ts) = DateTime::strptime("%Y/%m/%d %H:%M:%S", date.value())
+                        .and_then(|dt| TimeZone::UTC.to_timestamp(dt))
                     {
-                        date.timestamp()
-                    } else if let Ok(date) =
-                        NaiveDateTime::parse_from_str(date.value(), "%m/%e/%Y %H:%M:%S")
-                            .map(|ndt| Utc.from_utc_datetime(&ndt))
+                        ts.as_second()
+                    } else if let Ok(ts) = DateTime::strptime("%m/%e/%Y %H:%M:%S", date.value())
+                        .and_then(|dt| TimeZone::UTC.to_timestamp(dt))
                     {
-                        date.timestamp()
+                        ts.as_second()
                     } else {
                         file_date
                     }
@@ -383,7 +381,7 @@ impl IndexPdf for IndexArc {
                     file_date
                 };
 
-            if creation_timestamp > Utc::now().timestamp() || creation_timestamp < 0 {
+            if creation_timestamp > Timestamp::now().as_second() || creation_timestamp < 0 {
                 creation_timestamp = file_date;
             }
 
@@ -396,14 +394,15 @@ impl IndexPdf for IndexArc {
 
             self.index_document(document, file).await;
 
-            let date_time = Utc.timestamp_opt(creation_timestamp, 0).unwrap();
-            println!(
-                "indexed {} {} {} {}",
-                date_time.format("%d/%m/%Y %H:%M"),
-                file_path.display(),
-                text.len().to_formatted_string(&Locale::en),
-                title
-            );
+            if let Ok(ts) = Timestamp::from_second(creation_timestamp) {
+                println!(
+                    "indexed {} {} {} {}",
+                    ts.strftime("%d/%m/%Y %H:%M"),
+                    file_path.display(),
+                    text.len().to_formatted_string(&Locale::en),
+                    title
+                );
+            }
         }
     }
 }
@@ -605,7 +604,7 @@ impl IngestJson for IndexArc {
 
                 let elapsed_time = start_time.elapsed().as_nanos();
 
-                let _date: DateTime<Utc> = DateTime::from(SystemTime::now());
+                let _timestamp = Timestamp::try_from(SystemTime::now());
 
                 let time_label: &'static str = "index time";
                 let time_value = (elapsed_time / 1_000_000_000).to_string()
@@ -662,7 +661,7 @@ pub async fn display_index_info(
         .unwrap()
         .created()
         .unwrap();
-    let dt_now_utc: DateTime<Utc> = file_date.into();
+    let dt_now_utc = Timestamp::try_from(file_date).ok();
 
     let s = if let Some(symspell) = index_ref.symspell_option.as_ref() {
         symspell
@@ -760,7 +759,10 @@ pub async fn display_index_info(
         },
         Info {
             entry: "creation date",
-            value: dt_now_utc.format("%Y-%m-%d %H:%M:%S").to_string(),
+            value: dt_now_utc
+                .as_ref()
+                .map(|ts| ts.strftime("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_else(|| "unknown".to_string()),
         },
         Info {
             entry: time_label,

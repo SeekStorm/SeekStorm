@@ -1260,14 +1260,14 @@ index PDF file bytes
 use seekstorm::index::open_index;
 use std::path::Path;
 use std::fs;
-use chrono::Utc;
+use jiff::Timestamp;
 use seekstorm::ingest::IndexPdfBytes;
 
 let index_path=Path::new("C:/index/");
 let mut index_arc=open_index(index_path).await.unwrap();
 
 //solely used as meta data if it can't be extracted from document bytes
-let file_date=Utc::now().timestamp();
+let file_date = Timestamp::now().as_second();
 let file_path=Path::new("C:/test.pdf");
 
 let document = fs::read(file_path).unwrap();

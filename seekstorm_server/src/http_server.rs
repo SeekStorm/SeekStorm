@@ -13,7 +13,7 @@ use std::str;
 use std::sync::Arc;
 use std::{convert::Infallible, net::SocketAddr};
 
-use chrono::Utc;
+use jiff::Timestamp;
 use rand::TryRng;
 use rand::rngs::SysRng;
 
@@ -164,8 +164,7 @@ pub(crate) async fn rate_limit(
 ) -> bool {
     const GRACE_VIOLATION_COUNT: usize = 10;
 
-    let timestamp_nanos =
-        usize::try_from(Utc::now().timestamp_nanos_opt().unwrap_or(0)).unwrap_or(0);
+    let timestamp_nanos = usize::try_from(Timestamp::now().as_nanosecond()).unwrap_or(0);
 
     let mut apikey_list_mut = apikey_list.write().await;
     if let Some(apikey_object) = apikey_list_mut.get_mut(&apikey_hash) {
@@ -753,7 +752,7 @@ pub(crate) async fn http_request_handler(
                 .get("date")
                 .and_then(|file_date| file_date.to_str().ok())
                 .and_then(|date_str| date_str.parse::<i64>().ok())
-                .unwrap_or_else(|| Utc::now().timestamp());
+                .unwrap_or_else(|| Timestamp::now().as_second());
 
             let file_path = req
                 .headers()

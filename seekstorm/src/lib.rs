@@ -278,9 +278,9 @@
 //! # let mut index_arc=open_index(index_path).await.unwrap();
 //! use std::path::Path;
 //! use std::fs;
-//! use chrono::Utc;
+//! use jiff::Timestamp;
 //! use seekstorm::prelude::*;
-//! let file_date=Utc::now().timestamp();
+//! let file_date = Timestamp::now().as_second();
 //! let file_path=Path::new("C:/test.pdf");
 //! let document = fs::read(file_path).unwrap();
 //! let _ =index_arc.index_pdf_bytes(file_path, file_date, &document).await;
