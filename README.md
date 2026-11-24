@@ -86,7 +86,7 @@ In [production](https://seekstorm.com) since 2020. Open source under the [Apache
 * **TurboQuant** (TQ) and affine **Scalar Quantization** (SQ).
 * **Chunking** that respects **sentence boundaries** and **Unicode segmentation** for multilingual text.
 * **K-Medoid clustering**: PAM (Partition Around Medoids) with actual data points as centers.
-* **Sharded and leveled IVF index**.
+* **Sharded and leveled IVF index**: no data drift &amp; retraining, linear cluster cost, parallelizable.
 * **Approximate Nearest Neighbor Search** (ANNS) in a **Leveled IVF index**.
 * All **field filters** are directly active **during vector search**, not just as post-search filtering step.
 * SIMD (AVX2) acceleration for vector quantization and similarity calculation.
