@@ -508,14 +508,14 @@ See our **blog posts** for more detailed information: [SeekStorm is now Open Sou
 <br>
 
 #### [SIFT1M dataset](http://corpus-texmex.irisa.fr/) 1 million vectors, 128 dimensions, f32 precision, Euclidean  
-- 8-bit Scalar Quantization, nprobe=16 -> recall@10=95%, average latency=188 microseconds  
-- 8-bit Scalar Quantization, nprobe=33 -> recall@10=99%, average latency=302 microseconds  
+- 8-bit Scalar Quantization, nprobe=16 -> recall@10=95%, average latency **188** microseconds  
+- 8-bit Scalar Quantization, nprobe=33 -> recall@10=99%, average latency **302** microseconds  
 
 <br>
 
 #### [GIST1M dataset](http://corpus-texmex.irisa.fr/) 1 million vectors, 960 dimensions, f32 precision, Euclidean  
-- 8-bit Scalar Quantization, nprobe=38 -> recall@10=95%, average latency=3,198 microseconds  
-- 8-bit Scalar Quantization, nprobe=80 -> recall@10=98%, average latency=5,737 microseconds  
+- 8-bit Scalar Quantization, nprobe=38 -> recall@10=95%, average latency **3,198** microseconds  
+- 8-bit Scalar Quantization, nprobe=80 -> recall@10=98%, average latency **5,73**7 microseconds  
 
 
 [Benchmark code](#vector-search-sift1m-dataset)
@@ -529,10 +529,12 @@ But seeing the latency of lexical search and vector search stacked up against ea
 <br>
 <br>
 
-**English Wikipedia**: 5 million documents, 16 million vectors  
-Lexical: 2 fields, top10, BM25, average latency	305 microseconds  
-Vector: 2 fields, nprobe=68 -> recall@10=95%, average latency 2,700 microseconds  
-Vector: 2 fields, nprobe=200 -> recall@10=99%, average latency 6,370 microseconds  
+[English Wikipedia dataset](https://www.dropbox.com/s/wwnfnu441w1ec9p/wiki-articles.json.bz2) 5 million documents, 16 million vectors  
+- Lexical: 2 fields, top10, BM25, average latency	**305** microseconds  
+- Vector: 2 fields, nprobe=68 -> recall@10=95%, average latency **2,700** microseconds  
+- Vector: 2 fields, nprobe=200 -> recall@10=99%, average latency **6,370** microseconds  
+- Ingestion speed: 16 million vectors in **109** seconds  
+
 Using [Model2Vec from MinishLab](https://github.com/MinishLab/model2vec-rs): PotionBase2M, chunks: 1000 byte 
 
 We are using the **English Wikipedia** data (*5 million entries*) and queries (*300 intersection queries*) derived from the **AOL query dataset**, both from [Tantivy’s search-benchmark-game](https://github.com/quickwit-oss/search-benchmark-game/).
