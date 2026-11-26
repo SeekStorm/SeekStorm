@@ -236,8 +236,9 @@ impl Shard {
                     }
                 }
             } else {
+                // `> idx` also avoids the usize underflow for a segment with no blocks yet.
                 for segment in self.segments_index.iter_mut() {
-                    if idx == segment.byte_array_blocks.len() - 1 {
+                    if segment.byte_array_blocks.len() > idx {
                         segment.byte_array_blocks.remove(idx);
                     }
                 }
@@ -248,7 +249,9 @@ impl Shard {
                             && block.block_id as usize == idx
                         {
                             item.1.posting_count -= block.posting_count as u32 + 1;
-                            item.1.blocks.remove(idx);
+                            // `blocks` holds one entry per level where the term occurs;
+                            // the incomplete level is always its last entry.
+                            item.1.blocks.pop();
                         }
                     }
                     self.segments_index[key0]
