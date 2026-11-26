@@ -18,6 +18,12 @@
 //!
 //! The panics happen in spawned tasks, so the test installs a panic hook that
 //! records instead of printing and asserts that nothing was recorded.
+//!
+//! The same test covers the second defect it surfaced: `open_index` restores the
+//! committed document count but not `Shard::block_id`, which `Shard::new` leaves
+//! at 0. The first write after a reopen then commits the restored, incomplete
+//! level as block 0 and the merged postings are mislabeled, which is observable
+//! as a panic in `update_list_max_impact_score`/`get_max_score`.
 
 use seekstorm::prelude::*;
 use serde_json::Value;
@@ -158,6 +164,31 @@ impl Drop for PanicHookGuard {
     }
 }
 
+type RecordedPanics = Arc<Mutex<Vec<String>>>;
+
+/// The commit fan-out spawns one task per shard and only logs the `JoinError`
+/// of a panicking task, so record panics instead of printing them. Drop the
+/// returned guard before asserting: assertions made while the recording hook
+/// is installed would print nothing.
+fn record_panics() -> (RecordedPanics, PanicHookGuard) {
+    let recorded: RecordedPanics = Arc::new(Mutex::new(Vec::new()));
+    let previous_hook = std::panic::take_hook();
+    let sink = Arc::clone(&recorded);
+    std::panic::set_hook(Box::new(move |info| {
+        sink.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(info.to_string());
+    }));
+    (recorded, PanicHookGuard(Some(previous_hook)))
+}
+
+fn recorded_panics(recorded: &RecordedPanics) -> Vec<String> {
+    recorded
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
 #[tokio::test]
 async fn ram_commit_rolls_back_incomplete_level_without_panicking() {
     let started = Instant::now();
@@ -175,21 +206,9 @@ async fn ram_commit_rolls_back_incomplete_level_without_panicking() {
         assert_eq!(guard.index_config.segment_number_bits, 10);
     }
 
-    // The commit fan-out spawns one task per shard and only logs a
-    // `JoinError`, so record panics instead of printing them and assert on
-    // both the recorded panics and the committed state.
-    let panics = Arc::new(Mutex::new(Vec::<String>::new()));
-    let previous_hook = std::panic::take_hook();
-    {
-        let panics = Arc::clone(&panics);
-        std::panic::set_hook(Box::new(move |info| {
-            panics
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .push(info.to_string());
-        }));
-    }
-    let restore_hook = PanicHookGuard(Some(previous_hook));
+    // The commit fan-out spawns one task per shard, so panics are recorded
+    // and asserted on together with the committed state.
+    let (panics, restore_hook) = record_panics();
 
     // The build commit: 65,600 documents leave a full level plus an incomplete
     // one, and the rollback of that incomplete level runs here already.
@@ -216,10 +235,7 @@ async fn ram_commit_rolls_back_incomplete_level_without_panicking() {
     // Restore the default hook before asserting, so the assertion message is
     // the one that is actually printed.
     drop(restore_hook);
-    let recorded = panics
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .clone();
+    let recorded = recorded_panics(&panics);
     assert!(
         recorded.is_empty(),
         "the commit fan-out panicked {} time(s): {recorded:?}",
@@ -248,7 +264,64 @@ async fn ram_commit_rolls_back_incomplete_level_without_panicking() {
     assert_eq!(first_tail, 1, "the first tail term must survive");
     assert_eq!(last_tail, 1, "the last tail term must survive");
 
+    // Reopen with an incomplete last level and write again. `open_index`
+    // restores the committed document count but leaves `Shard::block_id` at the
+    // `Shard::new` default of 0, so without the restore the first write lands
+    // in block 0 and the commit that merges and rolls back the restored
+    // incomplete level mislabels the merged postings: the merged block is
+    // registered for block 1 while its docids belong to block 0, and
+    // `update_list_max_impact_score`/`get_max_score` then read an empty block.
+    let reopened_at = written;
+    let (reopen_panics, restore_hook) = record_panics();
     index.close().await;
+    drop(index);
+    let reopened = open_index(&path).await.expect("index reopens");
+    let restored_committed = committed_documents(&reopened).await;
+    let restored_searchable = committed_count(&reopened, "common").await;
+    let restored_tail = committed_count(&reopened, &format!("tail{BOUNDARY}")).await;
+
+    index_documents(&reopened, written, written + PER_COMMIT).await;
+    written += PER_COMMIT;
+    reopened.commit().await;
+    let after_reopen_commit = committed_documents(&reopened).await;
+    let after_reopen_searchable = committed_count(&reopened, "common").await;
+    let after_reopen_last_tail = committed_count(&reopened, &format!("tail{}", written - 1)).await;
+
+    drop(restore_hook);
+    let recorded = recorded_panics(&reopen_panics);
+    assert!(
+        recorded.is_empty(),
+        "the first write commit after a reopen panicked {} time(s): {recorded:?}",
+        recorded.len()
+    );
+    assert_eq!(
+        restored_committed, reopened_at,
+        "reopen must restore every committed document"
+    );
+    assert_eq!(
+        restored_searchable, reopened_at,
+        "reopen must keep every document searchable"
+    );
+    assert_eq!(
+        restored_tail, 1,
+        "the first tail term must survive a reopen"
+    );
+    assert_eq!(
+        after_reopen_commit,
+        reopened_at + PER_COMMIT,
+        "the first write commit after a reopen must advance the committed count"
+    );
+    assert_eq!(
+        after_reopen_searchable,
+        reopened_at + PER_COMMIT,
+        "the documents written after a reopen must be searchable"
+    );
+    assert_eq!(
+        after_reopen_last_tail, 1,
+        "the last tail term written after a reopen must be searchable"
+    );
+
+    reopened.close().await;
     eprintln!(
         "seekstorm rollback regression: {written} documents in {:?}",
         started.elapsed()

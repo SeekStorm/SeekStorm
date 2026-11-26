@@ -3982,6 +3982,14 @@ pub(crate) async fn open_shard(
                             shard.committed_doc_count = shard.indexed_doc_count;
                             shard.is_last_level_incomplete =
                                 !shard.committed_doc_count.is_multiple_of(ROARING_BLOCK_SIZE);
+                            // `block_id` is the docid block (`docid >> 16`) the next
+                            // document belongs to. `open_index` otherwise leaves the
+                            // `Shard::new` default of 0, so the first write after a
+                            // reopen commits the rolled-back level as block 0 instead of
+                            // the last (incomplete) level: the merged postings get
+                            // mislabeled and `update_list_max_impact_score`/`get_max_score`
+                            // reads an empty block for a segment without block-0 data.
+                            shard.block_id = shard.indexed_doc_count >> 16;
 
                             if shard.is_vector_indexing && !shard.vector_file_mmap.is_empty() {
                                 shard.indexed_vector_count = 0;
