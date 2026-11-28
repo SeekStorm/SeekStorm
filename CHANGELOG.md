@@ -60,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `create_index()` has now a builder pattern. The two parameters `mute` and `force_shard_number` have become optional setters.
   This makes the create_index parameters on par with the CreateIndexRequest pattern (apart from index_path, which is set automatically in the REST API).
 
-## [5.0.0] - 2026-11-04
+## [5.0.0] - 2026-11-11
 
 ### Breaking changes
 
