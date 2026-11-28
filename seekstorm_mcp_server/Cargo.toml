@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm_mcp_server"
-version = "5.2.1"
+version = "5.3.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -18,8 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 base64 = "0.23.1"
-rmcp = { version = "3.11.0", features = ["transport-io"] }
-seekstorm =  { version = "5.2.1", path = "../seekstorm", default-features = false , features = ["zh", "vb", "pdf"] }
+rmcp = { version = "3.12.0", features = ["transport-io"] }
+seekstorm =  { version = "5.3.0", path = "../seekstorm", default-features = false , features = ["zh", "vb", "pdf"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tokio = { version = "1.54.1", features = ["full"] }
@@ -27,7 +27,7 @@ tokio = { version = "1.54.1", features = ["full"] }
 [dev-dependencies]
 tempfile = "3"
 tokio-test = "0.4.6"
-jiff = "1.0.2"
+jiff = "1.0.3"
 
 [lints]
 workspace = true

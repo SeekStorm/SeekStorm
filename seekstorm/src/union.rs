@@ -8,7 +8,7 @@ use crate::{
         PostingListObjectQuery, QueueObject, ROARING_BLOCK_SIZE, Shard,
     },
     intersection::intersection_blockid,
-    search::{FilterSparse, Ranges, ResultType, SearchResultObject},
+    search::{FilterSparse, QueryType, Ranges, ResultType, SearchResultObject},
     single::{single_blockid, single_docid},
     utils::{
         read_f32, read_f64, read_i8, read_i16, read_i32, read_i64, read_u16, read_u32, read_u64,
@@ -41,6 +41,7 @@ pub(crate) async fn union_docid<'a>(
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
     facet_filter: &[FilterSparse],
+    required_terms: usize,
 ) {
     for plo in not_query_list.iter_mut() {
         let query_list_item_mut = plo;
@@ -200,6 +201,10 @@ pub(crate) async fn union_docid<'a>(
     };
 
     if result_type == &ResultType::Count {
+        if required_terms > 0 {
+            return;
+        }
+
         union_count(
             shard,
             result_count,
@@ -273,6 +278,7 @@ pub(crate) async fn union_blockid<'a>(
     result_type: &ResultType,
     field_filter_set: &AHashSet<u16>,
     facet_filter: &[FilterSparse],
+    required_terms: usize,
 ) {
     let item_0 = &query_list[0];
     let enable_inter_query_threading_multi =
@@ -352,6 +358,7 @@ pub(crate) async fn union_blockid<'a>(
                 result_type,
                 field_filter_set,
                 facet_filter,
+                required_terms,
             )
             .await;
 
@@ -842,8 +849,9 @@ pub(crate) async fn union_count<'a>(
                 let byte_index = docid >> 3;
                 let bit_index = docid & 7;
 
-                if bitmap_0[byte_index] & (1 << bit_index) == 0 {
-                    bitmap_0[byte_index] |= 1 << bit_index;
+                let bit_mask = 1 << bit_index;
+                if bitmap_0[byte_index] & bit_mask == 0 {
+                    bitmap_0[byte_index] |= bit_mask;
                     result_count_local += 1;
                 }
             }
@@ -884,8 +892,9 @@ pub(crate) async fn union_count<'a>(
                         let byte_index = docid >> 3;
                         let bit_index = docid & 7;
 
-                        if bitmap_0[byte_index] & (1 << bit_index) == 0 {
-                            bitmap_0[byte_index] |= 1 << bit_index;
+                        let bit_mask = 1 << bit_index;
+                        if bitmap_0[byte_index] & bit_mask == 0 {
+                            bitmap_0[byte_index] |= bit_mask;
                             result_count_local += 1;
                         }
                     }
@@ -906,8 +915,9 @@ pub(crate) async fn union_count<'a>(
                         read_u16(&plo.byte_array[plo.compressed_doc_id_range..], i * 2) as usize;
                     let byte_index = docid >> 3;
                     let bit_index = docid & 7;
-                    if bitmap_0[byte_index] & (1 << bit_index) != 0 {
-                        bitmap_0[byte_index] &= !(1 << bit_index);
+                    let bit_mask = 1 << bit_index;
+                    if bitmap_0[byte_index] & bit_mask != 0 {
+                        bitmap_0[byte_index] &= !bit_mask;
                         result_count_local -= 1;
                     }
                 }
@@ -931,8 +941,9 @@ pub(crate) async fn union_count<'a>(
 
                         let byte_index = docid >> 3;
                         let bit_index = docid & 7;
-                        if bitmap_0[byte_index] & (1 << bit_index) != 0 {
-                            bitmap_0[byte_index] &= !(1 << bit_index);
+                        let bit_mask = 1 << bit_index;
+                        if bitmap_0[byte_index] & bit_mask != 0 {
+                            bitmap_0[byte_index] &= !bit_mask;
                             result_count_local -= 1;
                         }
                     }
@@ -1218,23 +1229,28 @@ pub(crate) async fn union_docid_2<'a>(
     )
     .await;
 
-    let mut result_count_local = if filtered {
+    let result_count_global = result_count_arc.load(Ordering::Relaxed);
+    let result_count_local = if filtered {
         count
     } else {
-        (query_list[0].posting_count + query_list[1].posting_count) as usize
+        if query_list[0].op == QueryType::Intersection {
+            query_list[0].posting_count as usize
+        } else if query_list[1].op == QueryType::Intersection {
+            query_list[1].posting_count as usize
+        } else {
+            (query_list[0].posting_count + query_list[1].posting_count) as usize
+                - result_count_global
+        }
     };
-    let result_count_global = result_count_arc.load(Ordering::Relaxed);
-    if result_count_local > result_count_global {
-        result_count_local -= result_count_global
-    }
 
     if result_type == &ResultType::Count {
         result_count_arc.store(result_count_local, Ordering::Relaxed);
         return;
     }
 
-    if (search_result.topk_candidates.current_heap_size < top_k)
-        || (query_list[0].max_list_score > search_result.topk_candidates._elements[0].score)
+    if query_list[1].op != QueryType::Intersection
+        && ((search_result.topk_candidates.current_heap_size < top_k)
+            || (query_list[0].max_list_score > search_result.topk_candidates._elements[0].score))
     {
         search_result.topk_candidates.pin_heap();
 
@@ -1254,8 +1270,9 @@ pub(crate) async fn union_docid_2<'a>(
         .await;
     }
 
-    if (search_result.topk_candidates.current_heap_size < top_k)
-        || (query_list[1].max_list_score > search_result.topk_candidates._elements[0].score)
+    if query_list[0].op != QueryType::Intersection
+        && ((search_result.topk_candidates.current_heap_size < top_k)
+            || (query_list[1].max_list_score > search_result.topk_candidates._elements[0].score))
     {
         search_result.topk_candidates.pin_heap();
 
@@ -1296,6 +1313,7 @@ pub(crate) async fn union_docid_3<'a>(
     recursion_count: usize,
     query_term_count: usize,
     empty_streak: usize,
+    required_terms: usize,
 ) {
     let queue_object = query_queue.remove(0);
 
@@ -1321,6 +1339,7 @@ pub(crate) async fn union_docid_3<'a>(
                 &ResultType::Topk,
                 field_filter_set,
                 facet_filter,
+                required_terms,
             )
             .await;
             for plo in query_list.iter_mut() {
@@ -1372,6 +1391,16 @@ pub(crate) async fn union_docid_3<'a>(
                     } else {
                         [&query_list[0..ii], &query_list[ii + 1..query_list.len()]].concat()
                     };
+
+                    if required_terms > 0
+                        && query_list
+                            .iter()
+                            .filter(|plo| plo.op == QueryType::Intersection)
+                            .count()
+                            < required_terms
+                    {
+                        continue;
+                    }
 
                     let mut max_score = 0.0;
                     for term in list.iter() {
@@ -1451,6 +1480,7 @@ pub(crate) async fn union_docid_3<'a>(
                     recursion_count + 1,
                     query_term_count,
                     streak,
+                    required_terms,
                 )
                 .await;
             } else {
@@ -1485,6 +1515,7 @@ pub(crate) async fn union_docid_3<'a>(
                         &ResultType::Topk,
                         field_filter_set,
                         facet_filter,
+                        required_terms,
                     )
                     .await;
                 }
@@ -1510,6 +1541,7 @@ pub(crate) async fn union_docid_3<'a>(
             &ResultType::Count,
             field_filter_set,
             facet_filter,
+            required_terms,
         )
         .await;
     }

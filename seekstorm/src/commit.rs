@@ -231,15 +231,14 @@ impl Shard {
                     unsafe { Mmap::map(&self.index_file).expect("Unable to create Mmap") };
 
                 for segment in self.segments_index.iter_mut() {
-                    if idx == segment.byte_array_blocks_pointer.len() - 1 {
-                        segment.byte_array_blocks_pointer.remove(idx);
+                    if segment.byte_array_blocks_pointer.len() > idx {
+                        segment.byte_array_blocks_pointer.pop();
                     }
                 }
             } else {
-                // `> idx` also avoids the usize underflow for a segment with no blocks yet.
                 for segment in self.segments_index.iter_mut() {
                     if segment.byte_array_blocks.len() > idx {
-                        segment.byte_array_blocks.remove(idx);
+                        segment.byte_array_blocks.pop();
                     }
                 }
 
@@ -249,8 +248,6 @@ impl Shard {
                             && block.block_id as usize == idx
                         {
                             item.1.posting_count -= block.posting_count as u32 + 1;
-                            // `blocks` holds one entry per level where the term occurs;
-                            // the incomplete level is always its last entry.
                             item.1.blocks.pop();
                         }
                     }

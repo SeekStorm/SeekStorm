@@ -135,6 +135,7 @@ pub(crate) async fn tokenizer(
     indexed_field_id: usize,
     indexed_field_number: usize,
 ) {
+    let query_type_default = query_type.clone();
     let (max_completion_entries, completion_len) = if is_query {
         (0, 0)
     } else {
@@ -535,6 +536,8 @@ pub(crate) async fn tokenizer(
     let mut term_len_2 = 0;
 
     let mut non_unique_terms_raw = Vec::new();
+    let mut intersection_op_count = 0;
+    let mut union_op_count = 0;
 
     for term_string in non_unique_terms_line.iter_mut() {
         if is_query {
@@ -544,15 +547,11 @@ pub(crate) async fn tokenizer(
                 query_type.clone()
             };
             if term_string.starts_with('+') {
-                if query_type != &QueryType::Phrase {
-                    *query_type = QueryType::Intersection;
-                }
                 query_type_term = QueryType::Intersection;
+                intersection_op_count += 1;
                 *term_string = &term_string[1..];
             } else if term_string.starts_with('|') {
-                if query_type != &QueryType::Phrase {
-                    *query_type = QueryType::Union;
-                }
+                union_op_count += 1;
                 query_type_term = QueryType::Union;
                 *term_string = &term_string[1..];
             } else if term_string.starts_with('-') {
@@ -903,6 +902,12 @@ pub(crate) async fn tokenizer(
 
     if is_query {
         let len = non_unique_terms_raw.len();
+
+        if query_type_default == QueryType::Union && intersection_op_count == len {
+            *query_type = QueryType::Intersection;
+        } else if query_type_default == QueryType::Intersection && union_op_count > 0 {
+            *query_type = QueryType::Union;
+        }
 
         let mut term_0;
         let mut term_frequent_0;

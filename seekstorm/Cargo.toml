@@ -1,6 +1,6 @@
 [package]
 name = "seekstorm"
-version = "5.2.1"
+version = "5.3.0"
 authors = ["Wolf Garbe <wolf.garbe@seekstorm.com>"]
 license = "Apache-2.0"
 categories = ["database-implementations", "data-structures"]
@@ -50,7 +50,7 @@ lazy_static = "1.5.1"
 url = "2.5.9"
 itertools = "0.15.0"
 async-recursion = "1.2.0"
-zstd = "0.14.4"
+zstd = "0.14.5"
 rayon = "1.12.0"
 aho-corasick = "1.1.5"
 smallvec = "1.16.6"
@@ -69,7 +69,7 @@ csv = "1.4.0"
 snap = "1.1.2"
 lz4_flex = "0.14.2"
 bytemuck = { version = "1.25.2", features = ["derive","extern_crate_alloc"] }
-model2vec-rs = "0.5.0"
+model2vec-rs = "0.5.1"
 chunk = "0.10.2"
 snowball_stemmers_rs = "1.1.0"
 half = { version = "2.7.1", features = ["bytemuck","serde"] }

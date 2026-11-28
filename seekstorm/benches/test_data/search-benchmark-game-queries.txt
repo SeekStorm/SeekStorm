@@ -901,3 +901,62 @@
 {"query": "\"to be or not to be\"", "tags": ["phrase", "phrase:num_tokens_>3"]}
 {"query": "to be or not to be", "tags": ["union", "union:num_tokens_>3"]}
 {"query": "a search engine is an information retrieval software system designed to help find information stored on one or more computer systems", "tags": ["union", "union:num_tokens_>3"]}
+{"query": "+climate policy", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "remote +work", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "+data privacy", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "electric +vehicles", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "+global markets", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "urban +planning", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "+public transit", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "school +safety", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "+consumer rights", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "medical +devices", "tags": ["intersection_union", "global", "intersection_union:num_tokens_2"]}
+{"query": "+financial reporting standards", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "wildfire +risk maps", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+mental health resources", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "public +records request", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+water quality report", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "digital +marketing strategy", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+housing market trends", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "airport +security rules", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+electric grid stability", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "solar +panel rebates", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+disaster relief funds", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "college +admissions criteria", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+insurance claim process", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "home +insurance quotes", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+credit card rewards", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "small +business grants", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+data center cooling", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "search +engine ranking", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+remote learning tools", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "traffic +accident reports", "tags": ["intersection_union", "global", "intersection_union:num_tokens_3"]}
+{"query": "+open source software licenses", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "national +park visitor fees", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "+health care cost trends", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "city +council meeting agenda", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "+renewable energy policy goals", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "federal +tax filing deadline", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "+airport security screening rules", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "local +election ballot measures", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "+climate change impact report", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "customer +service phone number", "tags": ["intersection_union", "global", "intersection_union:num_tokens_>3"]}
+{"query": "+python -snake -monty", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+python -snake", "tags": ["negated", "global", "negated:num_tokens_2"]}
+{"query": "+jaguar -car -football", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+jaguar -car", "tags": ["negated", "global", "negated:num_tokens_2"]}
+{"query": "+mercury -planet -element", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+mercury -planet", "tags": ["negated", "global", "negated:num_tokens_2"]}
+{"query": "+java -coffee -island", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+java -coffee", "tags": ["negated", "global", "negated:num_tokens_2"]}
+{"query": "+saturn -planet -car", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+mustang -car -horse", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+amazon -river -rainforest", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+apple -fruit -tree", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+delta -airlines -river", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+jordan -country -basketball", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+orion -constellation -spacecraft", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+bass -fish -guitar", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+eclipse -lunar -solar", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+springfield -illinois -missouri", "tags": ["negated", "global", "negated:num_tokens_3"]}
+{"query": "+puma -cat -shoes", "tags": ["negated", "global", "negated:num_tokens_3"]}

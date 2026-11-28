@@ -7,7 +7,6 @@ use memmap2::{Mmap, MmapMut, MmapOptions};
 use model2vec_rs::model::StaticModel;
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
-
 use search::{QueryType, Search};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -404,8 +403,8 @@ impl fmt::Display for LexicalSimilarity {
 /// - All Unicode alphanumeric chars are recognized as token.
 /// - Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
 /// - Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
-/// - Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
-/// - Tokenizing might be slower due to folding and apostroph processing.
+/// - Apostrophe handling prevents that short term parts preceding or following the apostrophe get indexed (e.g. "s" in "someone's").
+/// - Tokenizing might be slower due to folding and apostrophe processing.
 ///
 /// UnicodeAlphanumericZH
 /// - Implements Chinese word segmentation to segment continuous Chinese text into tokens for indexing and search.
@@ -423,8 +422,8 @@ pub enum TokenizerType {
     /// All Unicode alphanumeric chars are recognized as token.
     /// Allows '+' '-' '|' '#' in middle or end of a token: c++, c#, block-max.
     /// Diacritics, accents, zalgo text, umlaut, bold, italic, full-width UTF-8 characters are converted into its basic representation.
-    /// Apostroph handling prevents that short term parts preceding or following the apostroph get indexed (e.g. "s" in "someone's").
-    /// Tokenizing might be slower due to folding and apostroph processing.
+    /// Apostrophe handling prevents that short term parts preceding or following the apostrophe get indexed (e.g. "s" in "someone's").
+    /// Tokenizing might be slower due to folding and apostrophe processing.
     UnicodeAlphanumericFolded = 2,
     /// Tokens are separated by whitespace. Mainly for benchmark compatibility.
     Whitespace = 3,
@@ -535,6 +534,8 @@ pub enum StemmerType {
     Ukrainian = 37,
     /// Yiddish stemmer
     Yiddish = 38,
+    /// Early Modern English stemmer
+    EarlyModernEnglish = 39,
 }
 
 impl fmt::Display for StemmerType {
@@ -579,6 +580,7 @@ impl fmt::Display for StemmerType {
             StemmerType::Turkish => write!(f, "Turkish"),
             StemmerType::Ukrainian => write!(f, "Ukrainian"),
             StemmerType::Yiddish => write!(f, "Yiddish"),
+            StemmerType::EarlyModernEnglish => write!(f, "EarlyModernEnglish"),
         }
     }
 }
@@ -724,6 +726,7 @@ pub(crate) struct PostingListObjectQuery<'a> {
     pub field_vec_ngram2: SmallVec<[(u16, usize); 2]>,
     pub field_vec_ngram3: SmallVec<[(u16, usize); 2]>,
     pub bm25_flag: bool,
+    pub op: QueryType,
 }
 
 pub(crate) static DUMMY_VEC: Vec<BlockObjectIndex> = Vec::new();
@@ -779,6 +782,7 @@ impl Default for PostingListObjectQuery<'_> {
             bm25_flag: true,
             intersect: 0,
             ulong_pos: 0,
+            op: QueryType::Union,
         }
     }
 }
@@ -2351,6 +2355,14 @@ pub(crate) async fn create_index_root(
                                 *quantization,
                                 VectorSimilarity::Cosine,
                             ),
+                            Model::BlinkCode16M => (
+                                0,
+                                "minishlab/blink-code-16M",
+                                Precision::F32,
+                                chunk_size,
+                                *quantization,
+                                VectorSimilarity::Cosine,
+                            ),
                         }
                     }
                     Inference::Model2VecCustom {
@@ -2883,6 +2895,9 @@ pub(crate) fn create_shard(
                 StemmerType::Turkish => Some(Stemmer::create(Algorithm::Turkish)),
                 StemmerType::Ukrainian => Some(Stemmer::create(Algorithm::Ukrainian)),
                 StemmerType::Yiddish => Some(Stemmer::create(Algorithm::Yiddish)),
+                StemmerType::EarlyModernEnglish => {
+                    Some(Stemmer::create(Algorithm::EarlyModernEnglish))
+                }
                 _ => None,
             };
 
@@ -3982,13 +3997,7 @@ pub(crate) async fn open_shard(
                             shard.committed_doc_count = shard.indexed_doc_count;
                             shard.is_last_level_incomplete =
                                 !shard.committed_doc_count.is_multiple_of(ROARING_BLOCK_SIZE);
-                            // `block_id` is the docid block (`docid >> 16`) the next
-                            // document belongs to. `open_index` otherwise leaves the
-                            // `Shard::new` default of 0, so the first write after a
-                            // reopen commits the rolled-back level as block 0 instead of
-                            // the last (incomplete) level: the merged postings get
-                            // mislabeled and `update_list_max_impact_score`/`get_max_score`
-                            // reads an empty block for a segment without block-0 data.
+
                             shard.block_id = shard.indexed_doc_count >> 16;
 
                             if shard.is_vector_indexing && !shard.vector_file_mmap.is_empty() {

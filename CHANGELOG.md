@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-11-28
+
+### Added
+
+- Support for **mixed queries**, containing intersection (AND, MUST, conjunction, required, mandatory) **and** union (OR, SHOULD, disjunction, optional): e.g. '+climate policy'.  
+
+- blink-code-16M, a fast static embedding model for code retrieval by Minish, supersedes potion-code-16M-v2.
+
+### Updated
+
+- Updated [queries](seekstorm\benches\test_data\search-benchmark-game-queries.txt) for `cargo bench`, now including negated and mixed intersection_union queries.
+
+### Fixed
+
+- Fix panicking rollback of an incomplete level (RAM access type). PR #89 by @kitalia
+
 ## [5.2.1] - 2026-11-23
 
 ### Changed
@@ -32,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Prelude** added as convenient re-exports for the most common SeekStorm types and traits: `use seekstorm::prelude::*;`.
 - An additional query operator is recognized within the `query_string`: `|` (OR,  disjunction,  union). Previously only the query operators `+` `-` `""` had been recognized.
   The `|` query operator within the `query_string` will overwrite any previously set `query_type_default: QueryType::Intersection`.
-- blink-8M, a fast English static embedding model by Minish, fully supersedes potion-base-8m, being the same size but better on every task.
+- blink-8M, a fast English static embedding model by Minish, fully supersedes potion-base-8M, being the same size but better on every task.
 
 ### Changed
 
@@ -44,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `create_index()` has now a builder pattern. The two parameters `mute` and `force_shard_number` have become optional setters.
   This makes the create_index parameters on par with the CreateIndexRequest pattern (apart from index_path, which is set automatically in the REST API).
 
-## [5.0.0] - 2026-11-11
+## [5.0.0] - 2026-11-04
 
 ### Breaking changes
 

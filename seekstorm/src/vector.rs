@@ -269,7 +269,9 @@ impl fmt::Display for Quantization {
 /// Predefined model type for embeddings.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub enum Model {
-    /// nomic-ai/CodeRankEmbed, 16M parameters, 256 dimensions, English only, code retrieval.
+    /// minishlab/blink-code-16M: 256 dimensions, 16M parameters, English only, code retrieval.
+    BlinkCode16M,
+    /// nomic-ai/CodeRankEmbed, 256 dimensions, 16M parameters,  English only, code retrieval.
     PotionCode16MV2,
     /// bge-base-en-v1.5: 512 dimensions, 32.3M parameters, English only, general purpose
     PotionBase32M,
@@ -633,7 +635,6 @@ impl Shard {
                                         embedding = quantize_f32_to_i8(fvecs);
                                         (1.0, 0.0, 0, 0)
                                     }
-
                                     (
                                         VectorSimilarity::Dot,
                                         Quantization::ScalarQuantizationI8,

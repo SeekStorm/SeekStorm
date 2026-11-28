@@ -158,7 +158,13 @@ pub struct DocumentOption {
 #[derive(Deserialize, Serialize, Clone, ToSchema, Debug)]
 #[serde(default)]
 pub struct SearchRequest<'a> {
-    /// Query string, search operators `+` `|` `-` `""` are recognized.
+    /// Query string
+    ///
+    /// The following query operators are recognized and overwrite the `query_type_default` setting:
+    /// - **|** (Union, OR, disjunction, SHOULD, optional),
+    /// - **+** (Intersection, AND, conjunction, MUST, required, mandatory),
+    /// - **""** (Phrase, exact match),
+    /// - **-** (Not, MUST_NOT, exclude),
     #[serde(alias = "query")]
     pub query_string: &'a str,
     /// Optional query vector: If None, then the query vector is derived from the query string using the specified model.
@@ -232,7 +238,8 @@ pub struct SearchRequest<'a> {
     #[schema(example = json!([{"field": "date", "order": "Ascending", "base": "None" }]))]
     pub result_sort: Vec<ResultSort>,
     /// Specify default query type: (default=Union).
-    /// This can be overwritten by search operators within the query string (`+` `-` `""`).
+    /// Set `query_type_default=QueryType::Intersection` for typical web search engine input box behavior.
+    /// The `query_type_default` setting can be overwritten by query operators within the query string (`+` `-` `""`).
     /// The interpretation of operator chars within the query string (set `query_type=QueryType::Union`) allows to specify advanced search operations via a simple search box.
     /// | `query_type_default` | query string      | meaning              |
     /// |----------------------|-------------------|----------------------|
@@ -419,18 +426,18 @@ impl<'a> SearchRequest<'a> {
 }
 
 /// Specifies the default QueryType: The following query types are supported:
-/// - **Union** (OR, disjunction),
-/// - **Intersection** (AND, conjunction),
+/// - **Union** (|, OR, disjunction, SHOULD),
+/// - **Intersection** (+, AND, conjunction, MUST),
 /// - **Phrase** (""),
-/// - **Not** (-).
+/// - **Not** (-, MUST_NOT).
 ///
 /// The default QueryType is superseded if the query parser detects that a different query type is specified within the query string (+ - "").
 #[derive(Default, PartialEq, Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum QueryType {
-    /// Union (OR, disjunction)
+    /// Union (|, OR, disjunction, SHOULD)
     #[default]
     Union = 0,
-    /// Intersection (AND, conjunction)
+    /// Intersection (+, AND, conjunction, MUST)
     Intersection = 1,
     /// Phrase ("")
     Phrase = 2,
@@ -3752,6 +3759,7 @@ impl SearchLexicalShard for ShardArc {
                                         idf_ngram2,
                                         idf_ngram3,
                                         ngram_type: non_unique_term.ngram_type.clone(),
+                                        op: non_unique_term.op.clone(),
                                         ..Default::default()
                                     };
                                     term_index_unique = value_new.term_index_unique;
@@ -3885,6 +3893,7 @@ impl SearchLexicalShard for ShardArc {
                             result_object.results.truncate(length);
                         }
                     }
+
                     if !search_result.query_facets.is_empty() && result_type != ResultType::Topk {
                         let mut facets: AHashMap<String, Facet> = AHashMap::new();
                         for facet in search_result.query_facets.iter() {
@@ -3930,65 +3939,217 @@ impl SearchLexicalShard for ShardArc {
             } else if query_type_mut == QueryType::Union {
                 search_result.skip_facet_count = true;
                 if result_type == ResultType::Count && query_list_len != 2 {
-                    union_blockid(
-                        &shard_ref,
-                        &mut non_unique_query_list,
-                        &mut query_list,
-                        &mut not_query_list,
-                        &result_count_arc,
-                        &mut search_result,
-                        offset + length,
-                        &result_type,
-                        &field_filter_set,
-                        &facet_filter_sparse,
-                    )
-                    .await;
+                    let required_terms = query_list
+                        .iter()
+                        .filter(|plo| plo.op == QueryType::Intersection)
+                        .count();
+                    if required_terms == 0 {
+                        union_blockid(
+                            &shard_ref,
+                            &mut non_unique_query_list,
+                            &mut query_list,
+                            &mut not_query_list,
+                            &result_count_arc,
+                            &mut search_result,
+                            offset + length,
+                            &result_type,
+                            &field_filter_set,
+                            &facet_filter_sparse,
+                            0,
+                        )
+                        .await;
+                    } else {
+                        let mut query_list_required_terms = query_list
+                            .into_iter()
+                            .filter(|plo| plo.op == QueryType::Intersection)
+                            .collect::<Vec<_>>();
+                        if query_list_required_terms.len() == 1
+                            && field_filter_set.is_empty()
+                            && facet_filter_sparse.is_empty()
+                            && shard_ref.delete_hashset.is_empty()
+                        {
+                            result_count_arc.fetch_add(
+                                query_list_required_terms[0].posting_count as usize,
+                                Ordering::Relaxed,
+                            );
+                        } else if query_list_required_terms.len() == 1 {
+                            single_blockid(
+                                &shard_ref,
+                                &mut non_unique_query_list,
+                                &mut query_list_required_terms,
+                                &mut not_query_list,
+                                &result_count_arc,
+                                &mut search_result,
+                                offset + length,
+                                &ResultType::Count,
+                                &field_filter_set,
+                                &facet_filter_sparse,
+                                &mut matching_blocks,
+                            )
+                            .await;
+                        } else {
+                            intersection_blockid(
+                                &shard_ref,
+                                &mut non_unique_query_list,
+                                &mut query_list_required_terms,
+                                &mut not_query_list,
+                                &result_count_arc,
+                                &mut search_result,
+                                offset + length,
+                                &ResultType::Count,
+                                &field_filter_set,
+                                &facet_filter_sparse,
+                                &mut matching_blocks,
+                                false,
+                                query_term_count,
+                            )
+                            .await;
+                        }
+                    }
                 } else if SPEEDUP_FLAG
                     && query_list_len == 2
                     && search_result.query_facets.is_empty()
                     && facet_filter_sparse.is_empty()
                     && search_result.topk_candidates.result_sort.is_empty()
+                    && shard_ref.delete_hashset.is_empty()
                 {
-                    union_docid_2(
-                        &shard_ref,
-                        &mut non_unique_query_list,
-                        &mut query_list,
-                        &mut not_query_list,
-                        &result_count_arc,
-                        &mut search_result,
-                        offset + length,
-                        &result_type,
-                        &field_filter_set,
-                        &facet_filter_sparse,
-                        &mut matching_blocks,
-                        query_term_count,
-                    )
-                    .await;
+                    if result_type == ResultType::Count
+                        && query_list
+                            .iter()
+                            .filter(|plo| plo.op == QueryType::Intersection)
+                            .count()
+                            == 1
+                    {
+                        let query_list_required_terms = query_list
+                            .into_iter()
+                            .filter(|plo| plo.op == QueryType::Intersection)
+                            .collect::<Vec<_>>();
+                        result_count_arc.fetch_add(
+                            query_list_required_terms[0].posting_count as usize,
+                            Ordering::Relaxed,
+                        );
+                    } else {
+                        union_docid_2(
+                            &shard_ref,
+                            &mut non_unique_query_list,
+                            &mut query_list,
+                            &mut not_query_list,
+                            &result_count_arc,
+                            &mut search_result,
+                            offset + length,
+                            &result_type,
+                            &field_filter_set,
+                            &facet_filter_sparse,
+                            &mut matching_blocks,
+                            query_term_count,
+                        )
+                        .await;
+                    }
                 } else if SPEEDUP_FLAG
                     && search_result.topk_candidates.result_sort.is_empty()
                     && query_list_len <= 10
                 {
-                    union_docid_3(
-                        &shard_ref,
-                        &mut non_unique_query_list,
-                        &mut Vec::from([QueueObject {
-                            query_list: query_list.clone(),
-                            query_index: 0,
-                            max_score: f32::MAX,
-                        }]),
-                        &mut not_query_list,
-                        &result_count_arc,
-                        &mut search_result,
-                        offset + length,
-                        &result_type,
-                        &field_filter_set,
-                        &facet_filter_sparse,
-                        &mut matching_blocks,
-                        0,
-                        query_term_count,
-                        0,
-                    )
-                    .await;
+                    let required_terms = query_list
+                        .iter()
+                        .filter(|plo| plo.op == QueryType::Intersection)
+                        .count();
+                    let mut query_queue = Vec::from([QueueObject {
+                        query_list: query_list.clone(),
+                        query_index: 0,
+                        max_score: f32::MAX,
+                    }]);
+                    if required_terms == 0 {
+                        union_docid_3(
+                            &shard_ref,
+                            &mut non_unique_query_list,
+                            &mut query_queue,
+                            &mut not_query_list,
+                            &result_count_arc,
+                            &mut search_result,
+                            offset + length,
+                            &result_type,
+                            &field_filter_set,
+                            &facet_filter_sparse,
+                            &mut matching_blocks,
+                            0,
+                            query_term_count,
+                            0,
+                            required_terms,
+                        )
+                        .await;
+                    } else {
+                        if result_type != ResultType::Count {
+                            union_docid_3(
+                                &shard_ref,
+                                &mut non_unique_query_list,
+                                &mut query_queue,
+                                &mut not_query_list,
+                                &result_count_arc,
+                                &mut search_result,
+                                offset + length,
+                                &ResultType::Topk,
+                                &field_filter_set,
+                                &facet_filter_sparse,
+                                &mut matching_blocks,
+                                0,
+                                query_term_count,
+                                0,
+                                required_terms,
+                            )
+                            .await;
+                        }
+
+                        if result_type != ResultType::Topk {
+                            result_count_arc.store(0, Ordering::Relaxed);
+                            let mut query_list_required_terms = query_list
+                                .into_iter()
+                                .filter(|plo| plo.op == QueryType::Intersection)
+                                .collect::<Vec<_>>();
+                            if query_list_required_terms.len() == 1 {
+                                if field_filter_set.is_empty()
+                                    && facet_filter_sparse.is_empty()
+                                    && shard_ref.delete_hashset.is_empty()
+                                {
+                                    result_count_arc.fetch_add(
+                                        query_list_required_terms[0].posting_count as usize,
+                                        Ordering::Relaxed,
+                                    );
+                                } else {
+                                    single_blockid(
+                                        &shard_ref,
+                                        &mut non_unique_query_list,
+                                        &mut query_list_required_terms,
+                                        &mut not_query_list,
+                                        &result_count_arc,
+                                        &mut search_result,
+                                        offset + length,
+                                        &ResultType::Count,
+                                        &field_filter_set,
+                                        &facet_filter_sparse,
+                                        &mut matching_blocks,
+                                    )
+                                    .await;
+                                }
+                            } else {
+                                intersection_blockid(
+                                    &shard_ref,
+                                    &mut non_unique_query_list,
+                                    &mut query_list_required_terms,
+                                    &mut not_query_list,
+                                    &result_count_arc,
+                                    &mut search_result,
+                                    offset + length,
+                                    &ResultType::Count,
+                                    &field_filter_set,
+                                    &facet_filter_sparse,
+                                    &mut matching_blocks,
+                                    false,
+                                    query_term_count,
+                                )
+                                .await;
+                            }
+                        }
+                    }
                 } else {
                     union_blockid(
                         &shard_ref,
@@ -4001,6 +4162,7 @@ impl SearchLexicalShard for ShardArc {
                         &result_type,
                         &field_filter_set,
                         &facet_filter_sparse,
+                        0,
                     )
                     .await;
                 }
